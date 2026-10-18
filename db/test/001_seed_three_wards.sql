@@ -4,24 +4,35 @@
 -- an empty database after all migrations and views, then check the values in
 -- db/test/EXPECTED.md. Every figure there was computed by hand first.
 --
---   JHB-001  not contestable (MK lost ground against 2021), candidate confirmed
---   JHB-002  contestable, NO candidate, never deployed -> Recruit / URGENT
---   JHB-003  contestable, candidate confirmed, strong delivery record -> Contest
+--   JHB-001  rival held its share, candidate confirmed        -> Hold
+--   JHB-002  rival lost share, NO candidate, never deployed    -> Recruit / URGENT
+--   JHB-003  rival lost share heavily, candidate confirmed     -> Contest
+--
+-- JHB-002 demonstrates why the legacy swing_index was replaced: its raw
+-- swing is exactly 0 (4000 in 2021, 4000 in 2024) while the rival's SHARE
+-- of those voting fell by more than five points. The raw count said nothing
+-- had changed.
+--
+-- An earlier draft of this fixture gave JHB-003 t2021_anc = 4000, which made
+-- its raw swing look strong (+5000) while the rival's share had in fact
+-- RISEN from 0.29 to 0.48. The raw measure called that ward a target. The
+-- share measure correctly called it Hold. That is the whole argument for
+-- the change, and it is why these three wards are worth keeping.
 
 INSERT INTO app_user (user_id, email, display_name, role, password_hash)
 VALUES ('u1','t@example.com','Test Treasurer','treasurer','x');
 
 INSERT INTO ward (ward_id, municipality, zone, registered_voters,
-  t2021_anc, t2024_mkp, t2024_anc, t2024_turnout,
+  t2021_anc, t2024_mkp, t2024_anc, t2021_turnout, t2024_turnout,
   peak_turnout_lge_pct, peak_turnout_all_pct, candidate_status,
   m1_weekday, m2_weekend, m3_last_actual, m4_transport_required, m5_confidence)
 VALUES
  ('JHB-001','City of Johannesburg','Zone 1', 20000,
-   6000, 3000, 5000, 45.00, 58.00, 66.00, 'Confirmed', 30, 18,   12, 20, 3),
+   6000, 3000, 5000, 52.00, 45.00, 58.00, 66.00, 'Confirmed', 30, 18,   12, 20, 3),
  ('JHB-002','City of Johannesburg','Zone 2', 15000,
-   2000, 4000, 3000, 40.00, 55.00, 62.00, 'None',      20, 10, NULL, 15, 2),
+   4000, 4000, 3000, 48.00, 40.00, 55.00, 62.00, 'None',      20, 10, NULL, 15, 2),
  ('JHB-003','City of Ekurhuleni','Zone 3',   25000,
-   4000, 9000, 6000, 50.00, 60.00, 70.00, 'Confirmed', 40, 25,   36, 30, 5);
+   8000, 9000, 6000, 55.00, 50.00, 60.00, 70.00, 'Confirmed', 40, 25,   36, 30, 5);
 
 INSERT INTO location (location_id, kind, name, ward_id) VALUES
   ('JHB-001','ward','Ward JHB-001','JHB-001'),

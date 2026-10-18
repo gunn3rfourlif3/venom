@@ -20,9 +20,18 @@ CREATE MATERIALIZED VIEW mv_campaign_extract AS
 SELECT
   e.ward_id,
   e.swing_index,
-  e.swing_share,
+  e.rival_decline_share,
   e.pool_owner,
   e.peak_basis,
+
+  c.registered_voters,
+  c.our_pool_share,
+  c.pool_size_2024,
+  c.t2021_turnout,
+  c.t2024_turnout,
+  c.headroom,
+  c.activation_gap,
+  c.peak_turnout_pct,
   e.a_potential_votes,
   e.l_eroding_votes,
   e.l_abstention_votes,
@@ -38,8 +47,10 @@ SELECT
   p.is_contestable,
   p.candidate_status,
   p.recommended_box,
+  p.box_priority,
   p.priority_score,
   p.priority_rank,
+  p.score_rank,
   p.gap_flag,
 
   r.reliability_ratio,
@@ -59,6 +70,7 @@ SELECT
 
   now()                               AS as_of
 FROM v_ward_eo e
+LEFT JOIN v_ward_computed c    ON c.ward_id = e.ward_id
 LEFT JOIN v_priority_rank p    ON p.ward_id = e.ward_id
 LEFT JOIN v_ward_reliability r ON r.ward_id = e.ward_id
 LEFT JOIN (

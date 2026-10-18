@@ -53,10 +53,23 @@ SELECT
   m.name                                                AS municipality,
   'Zone ' || chr(65 + (g % 6))                          AS zone,
   (8000 + floor(random() * 24000))::int                 AS reg,
-  -- local government turnout: historically far below national
+  -- Turnout at the LAST local government election. The baseline every
+  -- local shortfall is measured against.
   round((29 + random() * 14)::numeric, 2)               AS lge_turnout,
-  -- 2024 national turnout for the same ward: structurally higher
+  -- Peak across SEVERAL past local elections, so it sits above any one of
+  -- them. Setting it equal to the last turnout made activation_gap zero
+  -- for every ward, which is how this got caught.
+  round((random() * 12)::numeric, 2)                    AS lge_peak_uplift,
+  -- 2024 national turnout: structurally higher than any local figure
   round((49 + random() * 16)::numeric, 2)               AS npe_turnout,
+  -- The rival's share of those who voted, at the last local election.
+  round((0.42 + random() * 0.22)::numeric, 4)           AS rival_share_2021,
+  -- Change in that share by 2024, centred on zero: in a realistic province
+  -- the rival gains ground in some wards and loses it in others. An earlier
+  -- draft made every ward move the same way, which tells you nothing.
+  round((-0.10 + random() * 0.20)::numeric, 4)          AS rival_decline,
+  -- our share of the 2024 vote: modest in Gauteng, and widely varying
+  round((0.08 + random() * 0.22)::numeric, 4)           AS our_share_2024,
   random()                                              AS r1,
   random()                                              AS r2,
   random()                                              AS r3,
@@ -65,21 +78,23 @@ FROM seed_munis m, generate_series(1, m.wards) g;
 
 INSERT INTO ward (
   ward_id, municipality, zone, province, registered_voters,
-  t2021_anc, t2024_mkp, t2024_anc, t2024_turnout,
+  t2021_anc, t2024_mkp, t2024_anc, t2021_turnout, t2024_turnout,
   peak_turnout_lge_pct, peak_turnout_all_pct, candidate_status,
   m1_weekday, m2_weekend, m3_last_actual, m4_transport_required, m5_confidence,
   source, source_fetched_at)
 SELECT
   ward_id, municipality, zone, 'Gauteng', reg,
-  -- 2021 ANC ward vote: a share of those who voted in a low-turnout local poll
-  floor(reg * (lge_turnout / 100.0) * (0.30 + r1 * 0.25))::int,
-  -- 2024: pool split between us and the rival. Gauteng is not KZN, so our
-  -- share of the pool is modest and varies widely by ward.
-  floor(reg * (npe_turnout / 100.0) * 0.46 * (0.10 + r2 * 0.35))::int,
-  floor(reg * (npe_turnout / 100.0) * 0.46 * (0.65 - r2 * 0.30))::int,
-  npe_turnout,
+  -- rival votes at the last local election, from its share of that turnout
+  floor(reg * (lge_turnout / 100.0) * rival_share_2021)::int,
+  -- our 2024 national vote
+  floor(reg * (npe_turnout / 100.0) * our_share_2024)::int,
+  -- rival's 2024 national vote, from its share after the change
+  floor(reg * (npe_turnout / 100.0)
+            * GREATEST(0.05, rival_share_2021 - rival_decline))::int,
   lge_turnout,
-  GREATEST(lge_turnout, npe_turnout),
+  npe_turnout,
+  lge_turnout + lge_peak_uplift,
+  GREATEST(lge_turnout + lge_peak_uplift, npe_turnout),
   CASE WHEN r3 < 0.52 THEN 'Confirmed'
        WHEN r3 < 0.78 THEN 'Pending'
        ELSE 'None' END,

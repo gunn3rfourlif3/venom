@@ -22,14 +22,16 @@ basis AS (
   SELECT
     w.ward_id,
     w.swing_index,
-    w.swing_share,
+    w.rival_decline_share,
     w.pool_owner,
     w.peak_basis,
     -- A: potential votes if everything lands
     w.registered_voters * (w.peak_turnout_pct/100.0) * w.our_pool_share  AS a_raw,
-    -- abstention against that potential
+    -- Abstention against that potential, measured from the last LOCAL
+    -- turnout. Using the national turnout here understated abstention,
+    -- because national turnout is structurally higher than local.
     w.registered_voters * (w.peak_turnout_pct/100.0) * w.our_pool_share
-      * (1 - w.t2024_turnout/100.0)                                      AS abstention_raw,
+      * (1 - w.t2021_turnout/100.0)                                      AS abstention_raw,
     -- leakage from those who did turn out, at the configured rate
     w.registered_voters * (w.t2024_turnout/100.0) * cp.leakage_factor    AS leakage_raw
   FROM v_ward_computed w
@@ -38,7 +40,7 @@ basis AS (
 SELECT
   b.ward_id,
   b.swing_index,
-  b.swing_share,
+  b.rival_decline_share,
   b.pool_owner,
   b.peak_basis,
 

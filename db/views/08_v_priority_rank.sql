@@ -21,7 +21,7 @@ WITH base AS (
     w.zone,
     w.municipality,
     w.swing_index,
-    w.swing_share,
+    w.rival_decline_share,
     w.headroom,
     w.pool_owner,
     w.candidate_status,
@@ -37,7 +37,7 @@ WITH base AS (
 normalised AS (
   SELECT
     b.*,
-    PERCENT_RANK() OVER (ORDER BY b.swing_share)                    AS n_swing,
+    PERCENT_RANK() OVER (ORDER BY COALESCE(b.rival_decline_share, 0)) AS n_swing,
     PERCENT_RANK() OVER (ORDER BY b.headroom)                       AS n_headroom,
     PERCENT_RANK() OVER (ORDER BY COALESCE(b.reliability_ratio, 0)) AS n_reliability
   FROM base b
@@ -54,12 +54,33 @@ scored AS (
       WHEN n.is_contestable AND n.candidate_status IN ('None','Pending')  THEN 'Recruit'
       WHEN n.candidate_status = 'Confirmed'                               THEN 'Hold'
       ELSE 'Abandon'
-    END                                                              AS recommended_box
+    END                                                              AS recommended_box,
+
+    -- Order of operational urgency. The score alone buried the boxes that
+    -- matter: on 523 wards, rank 1 was an Abandon ward, the only Contest
+    -- ward sat at 81 and both URGENT wards at 205 and 242. Where
+    -- displacement is negative almost everywhere its percentile is noise,
+    -- so headroom and reliability decided the order and neither has
+    -- anything to do with contestability.
+    --   1 Recruit  ground has come loose and there is no candidate
+    --   2 Contest  contestable with a candidate in place
+    --   3 Hold     holding what we have
+    --   4 Abandon  not contestable, no candidate
+    CASE
+      WHEN n.is_contestable AND n.candidate_status IN ('None','Pending')  THEN 1
+      WHEN n.is_contestable AND n.candidate_status = 'Confirmed'          THEN 2
+      WHEN n.candidate_status = 'Confirmed'                               THEN 3
+      ELSE 4
+    END                                                              AS box_priority
   FROM normalised n
   CROSS JOIN control_panel cp
 )
 SELECT
   *,
-  ROW_NUMBER() OVER (ORDER BY priority_score DESC, ward_id)          AS priority_rank,
+  -- Box first, score within the box.
+  ROW_NUMBER() OVER (ORDER BY box_priority, priority_score DESC, ward_id)
+                                                                     AS priority_rank,
+  -- The score's own ordering, kept so the two can be compared.
+  ROW_NUMBER() OVER (ORDER BY priority_score DESC, ward_id)          AS score_rank,
   CASE WHEN recommended_box = 'Recruit' THEN 'URGENT' ELSE NULL END  AS gap_flag
 FROM scored;

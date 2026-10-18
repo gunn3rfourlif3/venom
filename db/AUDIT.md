@@ -96,6 +96,57 @@ turnout drops sharply between the two, so `swing_index` likely runs generous.
 
 ---
 
+## Fixed after seeding (three basis errors of one family)
+
+Loading 523 wards exposed three faults that reading the SQL had not. All
+three were the same mistake: a figure measured against the wrong baseline.
+
+**`activation_gap` could not return a non-zero number.** `peak_turnout_all_pct`
+equalled `t2024_turnout` in 523 of 523 wards, so the subtraction was *x* − *x*;
+on the LGE basis `peak_lge` was below `t2024_turnout` in 523 of 523, so it
+floored to zero. Root cause: the model had no column for the last **local**
+turnout, and `t2024_turnout` is a national figure. Added `ward.t2021_turnout`
+(migration 012) and rebased `activation_gap`, `headroom` and the abstention
+term in Window 7 on it. `headroom` had the same defect and feeds 30% of the
+priority score.
+
+**`swing_index` compared two different elections.** It subtracted 2021 local
+vote counts from 2024 national ones — different turnout, different ballot,
+different contest. Replaced for decision-making by `rival_decline_share`: the
+rival's share of those who voted in 2021, less its share in 2024. Shares are
+comparable where raw counts are not, and it measures the displacement
+available rather than our gain somewhere else. `swing_index` is still
+exposed, documented as legacy, and nothing decides on it.
+
+**The ranking buried what the boxes flagged.** Rank 1 was an Abandon ward,
+the only Contest ward sat at 81, and both URGENT wards at 205 and 242. Where
+displacement is negative almost everywhere, its percentile is noise, so
+headroom and reliability decided the order. `v_priority_rank` now orders by
+`box_priority` first (Recruit, Contest, Hold, Abandon) and score within the
+box. `score_rank` preserves the score-only ordering for comparison.
+
+This also closed the earlier open item about null reliability sitting at
+percentile zero: it still does, but it can no longer bury an URGENT ward,
+because the box decides the order.
+
+## Open: the leakage term is on the wrong base
+
+`v_ward_eo` computes leakage as `registered_voters × t2024_turnout × leakage_factor`
+— ten per cent of **everyone** who voted in 2024, charged against us. It
+should be ten per cent of **our** vote.
+
+On the 523-ward dataset the consequence is not subtle: average leakage is
+1156 votes against an average A of 2221, 59% of our own potential, and
+**430 of 523 wards return a negative `eo_est_votes`**. A negative expected
+outcome in votes is not a result, it is a broken formula.
+
+The fix is to scale the term by our share — multiplying by `our_pool_share`
+takes the average from 1156 to roughly 300 and the average EO from −347 to
+about +500. It is a one-line change, but it moves the headline number the
+whole model reports, so it has not been made. **This needs a decision.**
+
+---
+
 ## Verification
 
 ```

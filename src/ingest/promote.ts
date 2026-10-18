@@ -65,6 +65,7 @@ interface WardAccumulator {
   registeredVoters: number | null;
   registeredVotersYear: number;
   t2021Anc: number | null;
+  t2021Turnout: number | null;
   t2024Mkp: number | null;
   t2024Anc: number | null;
   t2024Turnout: number | null;
@@ -80,7 +81,8 @@ function ensure(map: Map<string, WardAccumulator>, wardId: string): WardAccumula
     acc = {
       wardId, municipalityId: null, municipality: null, provinceId: null,
       registeredVoters: null, registeredVotersYear: -1,
-      t2021Anc: null, t2024Mkp: null, t2024Anc: null, t2024Turnout: null,
+      t2021Anc: null, t2021Turnout: null,
+      t2024Mkp: null, t2024Anc: null, t2024Turnout: null,
       peakLge: null, peakAll: null, sourceUrl: null, fetchedAt: null,
     };
     map.set(wardId, acc);
@@ -136,6 +138,8 @@ export async function buildWardRows(): Promise<WardAccumulator[]> {
     }
 
     if (year === 2021) {
+      // the local baseline every turnout shortfall is measured against
+      acc.t2021Turnout = result.PercVoterTurnout ?? null;
       let total = 0;
       for (const party of result.PartyBallotResults ?? []) {
         const hit = matches(party, rival);
@@ -219,15 +223,16 @@ export async function promoteWards(): Promise<{ wards: number }> {
       await client.query(
         `INSERT INTO ward (
            ward_id, municipality, province, registered_voters,
-           t2021_anc, t2024_mkp, t2024_anc, t2024_turnout,
+           t2021_anc, t2021_turnout, t2024_mkp, t2024_anc, t2024_turnout,
            peak_turnout_lge_pct, peak_turnout_all_pct,
            source, source_fetched_at, source_url)
-         VALUES ($1,$2,$3,COALESCE($4,0),$5,$6,$7,$8,$9,$10,'iec',$11,$12)
+         VALUES ($1,$2,$3,COALESCE($4,0),$5,$6,$7,$8,$9,$10,$11,'iec',$12,$13)
          ON CONFLICT (ward_id) DO UPDATE SET
            municipality         = COALESCE(EXCLUDED.municipality, ward.municipality),
            province             = COALESCE(EXCLUDED.province, ward.province),
            registered_voters    = COALESCE(NULLIF(EXCLUDED.registered_voters,0), ward.registered_voters),
            t2021_anc            = COALESCE(EXCLUDED.t2021_anc, ward.t2021_anc),
+           t2021_turnout        = COALESCE(EXCLUDED.t2021_turnout, ward.t2021_turnout),
            t2024_mkp            = COALESCE(EXCLUDED.t2024_mkp, ward.t2024_mkp),
            t2024_anc            = COALESCE(EXCLUDED.t2024_anc, ward.t2024_anc),
            t2024_turnout        = COALESCE(EXCLUDED.t2024_turnout, ward.t2024_turnout),
@@ -238,7 +243,7 @@ export async function promoteWards(): Promise<{ wards: number }> {
            source_url           = EXCLUDED.source_url`,
         [
           w.wardId, w.municipality, config.scope.province, w.registeredVoters,
-          w.t2021Anc, w.t2024Mkp, w.t2024Anc, w.t2024Turnout,
+          w.t2021Anc, w.t2021Turnout, w.t2024Mkp, w.t2024Anc, w.t2024Turnout,
           w.peakLge, w.peakAll, w.fetchedAt, w.sourceUrl,
         ],
       );
