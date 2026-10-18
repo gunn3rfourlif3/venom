@@ -1,9 +1,8 @@
--- WINDOW 3 — v_ward_shortage  [INCOMPLETE — paste truncated]
+-- WINDOW 3 — v_ward_shortage
 -- Input:  v_ward_computed, v_ward_reliability, station, asset_holding
 -- Output: the liability side of the ledger — what each ward owes
 --
--- Fragment as received. Missing: the tail of the SELECT list and the
--- entire FROM / JOIN clause. Do not run.
+-- Three liability lines. Each one is a workstream.
 
 CREATE VIEW v_ward_shortage AS
 WITH station_agg AS (
@@ -38,5 +37,11 @@ SELECT
        THEN 1 ELSE 0 END                                   AS presence_shortage,
 
   -- evidence for the audit
-  COALESCE(s.stations_total,0)
--- <<< TRUNCATED HERE >>>
+  COALESCE(s.stations_total,0)                             AS stations_total,
+  COALESCE(s.stations_covered,0)                           AS stations_covered,
+  COALESCE(s.pledges_total,0)                              AS pledges_total
+
+FROM v_ward_computed w
+LEFT JOIN v_ward_reliability r ON r.ward_id = w.ward_id
+LEFT JOIN station_agg s        ON s.ward_id = w.ward_id
+LEFT JOIN asset_agg a          ON a.ward_id = w.ward_id;
