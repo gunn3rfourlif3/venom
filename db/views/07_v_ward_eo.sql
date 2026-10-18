@@ -11,7 +11,7 @@ WITH booth AS (
   SELECT ward_id,
          SUM(our_people)        AS people_at_booths,
          SUM(pledges)           AS pledges_total,
-         COUNT(*) FILTER (WHERE contested_flag = 'COVERED')
+         COUNT(*) FILTER (WHERE coverage_flag = 'COVERED')
                                 AS stations_covered
   FROM v_booth_status GROUP BY ward_id
 )
@@ -54,9 +54,11 @@ SELECT
   COALESCE(b.pledges_total, 0)                              AS pledges_secured,
   COALESCE(b.stations_covered, 0)                           AS stations_covered,
 
-  -- placeholder for the booth count
-  NULL::integer                                             AS eo_act_votes
+  -- the IEC booth count, loaded after the election.
+  -- Lives in its own table because a view cannot be written to.
+  i.eo_act_votes
 
 FROM v_ward_computed w
 LEFT JOIN v_ward_shortage s ON s.ward_id = w.ward_id
-LEFT JOIN booth b           ON b.ward_id = w.ward_id;
+LEFT JOIN booth b           ON b.ward_id = w.ward_id
+LEFT JOIN iec_result i      ON i.ward_id = w.ward_id;

@@ -12,6 +12,11 @@ SELECT
   zone,
   registered_voters,
 
+  -- pass-throughs required by Windows 3, 7 and 8
+  candidate_status,
+  peak_turnout_pct,
+  t2024_turnout,
+
   -- pool arithmetic
   (t2024_mkp + t2024_anc)                          AS pool_size_2024,
   t2024_mkp - t2024_anc                            AS pool_split,
@@ -27,14 +32,20 @@ SELECT
   registered_voters * (1 - t2024_turnout/100.0)    AS headroom,
 
   -- activation ceiling
-  peak_turnout_pct - t2024_turnout                 AS activation_gap,
+  -- floored at zero: a ward already at or past its historic peak has no
+  -- activation room. The signed value is peak_turnout_pct - t2024_turnout,
+  -- both of which are passed through above.
+  GREATEST(0, peak_turnout_pct - t2024_turnout)    AS activation_gap,
 
   -- classification
   CASE WHEN t2024_mkp > t2024_anc THEN 'OURS' ELSE 'THEIRS' END AS pool_owner,
 
-  -- cost
+  -- cost, on the CLAIMED capacity basis (m1_weekday).
+  -- Named explicitly because this is not a planning figure: it understates
+  -- cost in exactly the zones that over-claim. For a planning figure,
+  -- divide by v_ward_reliability.m1_discounted.
   CASE WHEN m1_weekday > 0
        THEN (m5_transport_required * 150)::numeric / m1_weekday
-       ELSE NULL END                               AS cost_per_body
+       ELSE NULL END                               AS cost_per_body_claimed
 
 FROM ward;

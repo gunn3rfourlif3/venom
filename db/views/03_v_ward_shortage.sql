@@ -28,7 +28,7 @@ SELECT
        THEN 1 ELSE 0 END                                   AS candidate_shortage,
 
   -- liability 2: people needed vs people present
-  GREATEST(0, COALESCE(w.m1_discounted,0)
+  GREATEST(0, COALESCE(r.m1_discounted,0)
              - COALESCE(a.people_available,0))             AS people_shortage,
 
   -- liability 3: swing ward with no station covered

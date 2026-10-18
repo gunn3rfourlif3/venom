@@ -42,13 +42,17 @@ collapse takes minutes. The verification is the work.
 
 ## Status
 
-Committed as written in the spec. **Nothing runs yet:**
+Target dialect is **PostgreSQL**.
 
-- no base table DDL, so there is nothing underneath the views
-- four downstream column references do not exist on `v_ward_computed`
-- target dialect unresolved (written for PostgreSQL; XAMPP ships MySQL)
+The compile-blocking column references and the silent-wrong-answer defects
+are fixed. **Still does not run:** there is no base table DDL, so there is
+nothing underneath the views. Only `iec_result` has a migration.
 
-See `db/AUDIT.md` for the full list.
+Outstanding by decision, not defect: `control_panel` is never joined and the
+rate constants stay hardcoded; the priority score mixes units across its
+three terms; Window 5 discards the SPEND_FIRST / SPEND_SECOND ordering.
+
+See `db/AUDIT.md`.
 
 ## Scope boundary
 
