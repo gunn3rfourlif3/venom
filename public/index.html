@@ -8,6 +8,23 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app.css">
+<script>
+/* Stamped before the stylesheet paints, so the register never flashes the
+   wrong theme. Dark is the default; 'system' is an explicit choice, not the
+   fallback. Inline and tiny on purpose - a separate file would arrive after
+   first paint and the flash is exactly what it is here to prevent. */
+(function () {
+  try {
+    var saved = localStorage.getItem('venom-theme') || 'dark';
+    var resolved = saved === 'system'
+      ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+      : saved;
+    document.documentElement.setAttribute('data-theme', resolved);
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
+</script>
 </head>
 <body>
 
@@ -32,12 +49,23 @@
       <button data-view="wards" class="is-current">Wards</button>
       <button data-view="sentiment">Sentiment</button>
       <button data-view="decisions">Decisions</button>
+      <button data-view="viewshed">Viewshed</button>
       <button data-view="float">Float</button>
       <button data-view="health">Sources</button>
     </nav>
+    <form class="search" id="search" role="search" autocomplete="off">
+      <input id="search-input" type="search" placeholder="Search wards, documents, decisions"
+             aria-label="Search" aria-expanded="false" aria-controls="search-results"
+             role="combobox" aria-autocomplete="list">
+      <kbd class="search-key" aria-hidden="true">/</kbd>
+      <div class="search-results" id="search-results" role="listbox" hidden></div>
+    </form>
     <span class="live" id="live" title="Live connection">
       <span class="live-dot"></span><span id="live-text">connecting</span>
     </span>
+    <button class="theme" id="theme" title="Theme" aria-label="Theme: dark">
+      <span id="theme-text">Dark</span>
+    </button>
     <span class="who" id="who"></span>
     <button class="signout" id="signout">Sign out</button>
   </header>
@@ -150,6 +178,27 @@
 
   <main class="pane pane-single" id="view-float" hidden>
     <section class="panel-body"><div id="float-list"></div></section>
+  </main>
+
+  <main class="pane pane-single" id="view-viewshed" hidden>
+    <section class="panel-body">
+      <h2 class="viz-title">Viewshed projection</h2>
+      <p class="viz-sub">Public cameras in central London, projected over real
+         elevation. London stands in for Johannesburg until a Gauteng feed is
+         published &mdash; the geometry is the point, not the city.</p>
+      <p class="provenance" id="viewshed-note"></p>
+      <div class="vs-stats" id="viewshed-counts"></div>
+      <div class="vs-canvas" id="viewshed-canvas"
+           aria-label="3D projection of camera fields of view over terrain" role="img"></div>
+      <div class="vs-controls">
+        <label for="vs-exag">Vertical exaggeration</label>
+        <input type="range" id="vs-exag" min="1" max="14" step="1" value="6">
+        <output id="vs-exag-out">×6</output>
+        <span class="vs-attrib">Powered by TfL Open Data &middot;
+          camera and map data &copy; OpenStreetMap contributors (ODbL) &middot;
+          elevation from public terrarium tiles</span>
+      </div>
+    </section>
   </main>
 
   <main class="pane pane-single" id="view-health" hidden>

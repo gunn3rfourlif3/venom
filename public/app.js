@@ -643,17 +643,178 @@ async function loadHealth() {
 
 /* ------------------------------------------------------------ views */
 
-document.querySelector('.views').addEventListener('click', (e) => {
-  const btn = e.target.closest('button[data-view]'); if (!btn) return;
-  const view = btn.dataset.view;
-  document.querySelectorAll('.views button').forEach((b) => b.classList.toggle('is-current', b === btn));
-  for (const name of ['wards', 'sentiment', 'decisions', 'float', 'health']) {
-    $(`view-${name}`).hidden = name !== view;
-  }
+const VIEWS = ['wards', 'sentiment', 'decisions', 'viewshed', 'float', 'health'];
+
+function showView(view) {
+  document.querySelectorAll('.views button').forEach((b) =>
+    b.classList.toggle('is-current', b.dataset.view === view));
+  for (const name of VIEWS) $(`view-${name}`).hidden = name !== view;
+
+  // The projection holds a WebGL context and an animation loop; leaving it
+  // running behind a hidden pane burns a core for nothing.
+  if (view !== 'viewshed') window.VenomViewshed?.hide();
+
   if (view === 'sentiment') loadSentiment();
   if (view === 'decisions') loadDecisions();
   if (view === 'float') loadFloat();
   if (view === 'health') loadHealth();
+  if (view === 'viewshed') loadViewshed();
+}
+
+document.querySelector('.views').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-view]'); if (!btn) return;
+  showView(btn.dataset.view);
+});
+
+/* -------------------------------------------------------- viewshed */
+
+let viewshedModule = null;
+async function loadViewshed() {
+  // Loaded on demand: three.js is far larger than the rest of this app put
+  // together, and most sessions never open this screen.
+  if (!viewshedModule) viewshedModule = await import('/viewshed.js');
+  await viewshedModule.show();
+}
+
+$('vs-exag').addEventListener('input', (e) => {
+  $('vs-exag-out').textContent = `×${e.target.value}`;
+});
+$('vs-exag').addEventListener('change', (e) => {
+  viewshedModule?.setExaggeration(Number(e.target.value));
+});
+
+/* ----------------------------------------------------------- theme */
+
+const THEMES = ['dark', 'light', 'system'];
+const THEME_LABEL = { dark: 'Dark', light: 'Light', system: 'System' };
+
+function resolveTheme(choice) {
+  if (choice !== 'system') return choice;
+  return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function applyTheme(choice) {
+  document.documentElement.setAttribute('data-theme', resolveTheme(choice));
+  $('theme-text').textContent = THEME_LABEL[choice];
+  $('theme').setAttribute('aria-label', `Theme: ${THEME_LABEL[choice]}`);
+  try { localStorage.setItem('venom-theme', choice); } catch { /* private window */ }
+}
+
+let themeChoice = 'dark';
+try { themeChoice = localStorage.getItem('venom-theme') || 'dark'; } catch { /* ignore */ }
+if (!THEMES.includes(themeChoice)) themeChoice = 'dark';
+applyTheme(themeChoice);
+
+$('theme').addEventListener('click', () => {
+  themeChoice = THEMES[(THEMES.indexOf(themeChoice) + 1) % THEMES.length];
+  applyTheme(themeChoice);
+  // Charts read their colours from tokens at draw time, so anything already
+  // on screen has to be redrawn rather than recoloured.
+  if (!$('view-sentiment').hidden) loadSentiment();
+  if (!$('view-viewshed').hidden) viewshedModule?.show();
+});
+
+matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+  if (themeChoice === 'system') applyTheme('system');
+});
+
+/* ---------------------------------------------------------- search */
+
+const SEARCH_KIND = { ward: 'Ward', document: 'Document', decision: 'Decision' };
+
+let searchTimer = null;
+let searchRows = [];
+let searchActive = -1;
+
+function closeSearch() {
+  $('search-results').hidden = true;
+  $('search-input').setAttribute('aria-expanded', 'false');
+  searchActive = -1;
+}
+
+function renderSearch(rows) {
+  searchRows = rows;
+  searchActive = -1;
+  const box = $('search-results');
+  if (rows.length === 0) {
+    box.innerHTML = '<p class="search-empty">Nothing matches.</p>';
+  } else {
+    box.innerHTML = rows.map((r, i) => `
+      <button class="search-hit" role="option" id="search-hit-${i}" data-index="${i}"
+              aria-selected="false">
+        <span class="search-kind">${esc(SEARCH_KIND[r.kind] ?? r.kind)}</span>
+        <span class="search-title">${esc(r.title)}</span>
+        <span class="search-sub">${esc(r.subtitle ?? '')}</span>
+      </button>`).join('');
+  }
+  box.hidden = false;
+  $('search-input').setAttribute('aria-expanded', 'true');
+}
+
+function moveSearch(delta) {
+  if (searchRows.length === 0) return;
+  searchActive = (searchActive + delta + searchRows.length) % searchRows.length;
+  document.querySelectorAll('.search-hit').forEach((el, i) => {
+    const on = i === searchActive;
+    el.classList.toggle('is-active', on);
+    el.setAttribute('aria-selected', String(on));
+    if (on) el.scrollIntoView({ block: 'nearest' });
+  });
+  $('search-input').setAttribute('aria-activedescendant',
+    searchActive >= 0 ? `search-hit-${searchActive}` : '');
+}
+
+async function openHit(row) {
+  closeSearch();
+  $('search-input').value = '';
+  if (row.kind === 'ward') { showView('wards'); await openDossier(row.id); }
+  if (row.kind === 'decision') showView('decisions');
+  if (row.kind === 'document') showView('decisions');
+}
+
+$('search-input').addEventListener('input', (e) => {
+  const q = e.target.value.trim();
+  clearTimeout(searchTimer);
+  if (q.length < 2) { closeSearch(); return; }
+  // Debounced: a query per keystroke would run the ward scan on every letter.
+  searchTimer = setTimeout(async () => {
+    try {
+      const { data } = await api(`/api/search?q=${encodeURIComponent(q)}&limit=20`);
+      renderSearch(data);
+    } catch { closeSearch(); }
+  }, 180);
+});
+
+$('search').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const row = searchRows[searchActive >= 0 ? searchActive : 0];
+  if (row) openHit(row);
+});
+
+$('search-results').addEventListener('click', (e) => {
+  const hit = e.target.closest('.search-hit');
+  if (hit) openHit(searchRows[Number(hit.dataset.index)]);
+});
+
+$('search-input').addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); moveSearch(1); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); moveSearch(-1); }
+  if (e.key === 'Escape') { closeSearch(); e.target.blur(); }
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#search')) closeSearch();
+});
+
+// '/' focuses search, the convention everywhere text is searched.
+document.addEventListener('keydown', (e) => {
+  const typing = /^(input|textarea|select)$/i.test(e.target.tagName) || e.target.isContentEditable;
+  if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey) {
+    e.preventDefault(); $('search-input').focus();
+  }
+  if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault(); $('search-input').focus();
+  }
 });
 
 /* ------------------------------------------------------------- live */

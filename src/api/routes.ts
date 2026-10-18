@@ -1,4 +1,5 @@
 import { pool } from '../db.js';
+import { terrainGrid } from '../sources/terrain.js';
 import {
   HttpError, json, readJson, intParam, wardIdParam, enumParam, type Ctx,
 } from './http.js';
@@ -234,8 +235,73 @@ async function getIngestHealth(ctx: Ctx): Promise<void> {
   });
 }
 
+async function getSearch(ctx: Ctx): Promise<void> {
+  const q = (ctx.url.searchParams.get('q') ?? '').trim();
+  // Two characters matches most of the ledger and tells the user nothing.
+  if (q.length < 2) {
+    json(ctx.res, 200, { as_of: await asOf(), data: [] });
+    return;
+  }
+  const limit = intParam(ctx.url, 'limit', 20, 1, 50);
+  const result = await pool.query(
+    'SELECT kind, id, title, subtitle, dated, rank FROM search_everything($1, $2)',
+    [q, limit]);
+  json(ctx.res, 200, await envelope(result.rows));
+}
+
+/** Cameras for the viewshed, within a bounding box.
+ *
+ *  Served from our own cache, never proxied live: Overpass asks that its
+ *  public endpoint be left to human-operated tools, and a screen that
+ *  re-queries it on every pan would be exactly what they are asking people
+ *  not to build. */
+async function getCameras(ctx: Ctx): Promise<void> {
+  const num = (k: string, fallback: number) => {
+    const raw = ctx.url.searchParams.get(k);
+    const parsed = raw === null ? NaN : Number(raw);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const south = num('south', 51.495), north = num('north', 51.525);
+  const west = num('west', -0.145), east = num('east', -0.095);
+  const limit = intParam(ctx.url, 'limit', 400, 1, 2000);
+
+  const result = await pool.query(
+    `SELECT camera_id, source_id, external_id, name, lat, lon,
+            bearing_deg, bearing_basis, fov_deg, range_m, mount_height_m,
+            camera_type, estimated
+       FROM camera
+      WHERE lat BETWEEN $1 AND $2 AND lon BETWEEN $3 AND $4
+      ORDER BY bearing_deg IS NULL, camera_id
+      LIMIT $5`,
+    [south, north, west, east, limit]);
+
+  json(ctx.res, 200, {
+    as_of: await asOf(),
+    data: result.rows,
+    bbox: { south, north, west, east },
+  });
+}
+
+async function getTerrain(ctx: Ctx): Promise<void> {
+  const num = (k: string, fallback: number) => {
+    const raw = ctx.url.searchParams.get(k);
+    const parsed = raw === null ? NaN : Number(raw);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const bbox = {
+    south: num('south', 51.495), north: num('north', 51.525),
+    west: num('west', -0.145), east: num('east', -0.095),
+  };
+  if (bbox.north <= bbox.south || bbox.east <= bbox.west) {
+    throw new HttpError(400, 'north must exceed south and east must exceed west');
+  }
+  // Capped: the mesh is size^2 vertices and the grid is sent as JSON.
+  const size = intParam(ctx.url, 'size', 128, 32, 192);
+  json(ctx.res, 200, { as_of: await asOf(), data: await terrainGrid(bbox, size) });
+}
+
 export const routes = {
   postLogin, postLogout, getMe, getWards, getWard, getTargets,
   getCampaign, getFloat, getDecisions, getDocuments, getIngestHealth,
-  getSentiment, authenticate,
+  getSentiment, getSearch, getCameras, getTerrain, authenticate,
 };

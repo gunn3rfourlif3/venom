@@ -48,6 +48,9 @@ const table: Route[] = [
   { method: 'GET',  pattern: /^\/api\/documents$/,    handler: routes.getDocuments },
   { method: 'GET',  pattern: /^\/api\/sentiment$/,     handler: routes.getSentiment },
   { method: 'GET',  pattern: /^\/api\/ingest-health$/, handler: routes.getIngestHealth },
+  { method: 'GET',  pattern: /^\/api\/search$/,        handler: routes.getSearch },
+  { method: 'GET',  pattern: /^\/api\/cameras$/,       handler: routes.getCameras },
+  { method: 'GET',  pattern: /^\/api\/terrain$/,       handler: routes.getTerrain },
 
   { method: 'GET',  pattern: /^\/api\/live$/,
     handler: async (ctx) => { hub.subscribe(ctx.res); } },
