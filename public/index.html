@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Venom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<div id="signin" class="signin" hidden>
+  <form class="signin-card" id="signin-form">
+    <h1 class="wordmark">Venom</h1>
+    <p class="signin-note">Ward ledger for the 2026 municipal elections, Gauteng.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+    <p class="signin-error" id="signin-error" role="alert" hidden></p>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header class="topbar">
+    <span class="wordmark">Venom</span>
+    <span class="scope">Gauteng, 2026 municipal elections</span>
+    <nav class="views">
+      <button data-view="wards" class="is-current">Wards</button>
+      <button data-view="decisions">Decisions</button>
+      <button data-view="float">Float</button>
+      <button data-view="health">Sources</button>
+    </nav>
+    <span class="live" id="live" title="Live connection">
+      <span class="live-dot"></span><span id="live-text">connecting</span>
+    </span>
+    <span class="who" id="who"></span>
+    <button class="signout" id="signout">Sign out</button>
+  </header>
+
+  <!-- The balance sheet. Three figures on one rule, not three cards:
+       the model produces one statement, not three metrics. -->
+  <section class="statement" id="statement" aria-label="Campaign balance sheet">
+    <div class="figure">
+      <span class="figure-value" id="fig-a">&mdash;</span>
+      <span class="figure-label">Potential votes</span>
+    </div>
+    <div class="figure">
+      <span class="figure-value" id="fig-l">&mdash;</span>
+      <span class="figure-label">Eroding</span>
+    </div>
+    <div class="figure figure-result">
+      <span class="figure-value" id="fig-eo">&mdash;</span>
+      <span class="figure-label">Expected outcome</span>
+    </div>
+    <dl class="statement-meta" id="statement-meta"></dl>
+  </section>
+
+  <main class="pane" id="view-wards">
+    <aside class="filters" aria-label="Filters">
+      <div class="filter-group">
+        <h2>Box</h2>
+        <div class="chips" id="filter-box"></div>
+      </div>
+      <div class="filter-group">
+        <h2>Target</h2>
+        <div class="chips" id="filter-class"></div>
+      </div>
+      <div class="filter-group">
+        <h2>Municipality</h2>
+        <select id="filter-munic"><option value="">All</option></select>
+      </div>
+      <p class="filter-count" id="filter-count"></p>
+    </aside>
+
+    <section class="ledger-wrap">
+      <div class="ledger-head" role="row">
+        <span class="col-mark" aria-hidden="true"></span>
+        <span class="col-rank">#</span>
+        <span class="col-ward">Ward</span>
+        <span class="col-munic">Municipality</span>
+        <span class="col-box">Box</span>
+        <span class="col-press">Pressure</span>
+        <span class="col-num">Rival decline</span>
+        <span class="col-num">Expected</span>
+      </div>
+      <div id="ledger" class="ledger"></div>
+      <p class="empty" id="ledger-empty" hidden>No wards match these filters.</p>
+    </section>
+  </main>
+
+  <main class="pane pane-single" id="view-decisions" hidden>
+    <section class="panel-body">
+      <div class="search-row">
+        <input id="decision-q" type="search" placeholder="Search decisions and rationale">
+      </div>
+      <div id="decision-list"></div>
+    </section>
+  </main>
+
+  <main class="pane pane-single" id="view-float" hidden>
+    <section class="panel-body"><div id="float-list"></div></section>
+  </main>
+
+  <main class="pane pane-single" id="view-health" hidden>
+    <section class="panel-body"><div id="health-list"></div></section>
+  </main>
+
+  <aside class="dossier" id="dossier" hidden aria-label="Ward dossier">
+    <button class="dossier-close" id="dossier-close" aria-label="Close dossier">Close</button>
+    <div id="dossier-body"></div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+</div>
+
+<script src="/app.js" type="module"></script>
+</body>
+</html>

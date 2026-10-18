@@ -226,6 +226,42 @@ and makes the client read back through the same query it used on load.
 Pushing values is the usual reason a dashboard drifts out of sync with its
 database and nobody can say why.
 
+## Dashboard
+
+`public/`, served by the API at `/`. No build step, no framework, no
+dependency: three files, and the project's runtime dependency count stays
+at one.
+
+The interface is a **ledger, not a dashboard**. The model's whole vocabulary
+is accounting — potential, eroding, expected, liabilities, shrinkage, float
+— so the screen is a statement with marked lines rather than a grid of
+cards. Three figures sit on one shared rule because the model produces one
+statement, not three metrics.
+
+Boldness is spent in exactly one place: a ward flagged `URGENT` carries a
+solid ink block in the left margin, the way a flagged entry is marked in a
+physical ledger. No accent colour is spent on it. Everything else — the
+box, the pressure band — is quiet and semantic.
+
+Clicking a line opens the ward dossier: arithmetic, ledger, capacity,
+liabilities, pressure, grievances, decisions and documents, read live from
+the views rather than the extract.
+
+Null renders as an em dash, never as zero. `eo_act_votes` is null until the
+declaration and `reliability_ratio` is null for a zone that has never
+deployed; zero and unknown mean opposite things in this model and the
+interface must not collapse them.
+
+### One bug worth recording
+
+`.signin` and `.pane` both set `display: grid`, which silently overrides the
+`hidden` attribute — the user agent applies `hidden` as `display: none`, and
+any author rule setting `display` on the same element beats it. The result:
+the sign-in form stayed painted over the signed-in app, and every view
+stacked on every other. The DOM reported everything correct, API calls all
+returned 200, and nothing appeared in the console. It was only visible in a
+screenshot. `[hidden] { display: none !important; }` fixes it.
+
 ## Scope boundary
 
 No voter-level data: no person table, no contact history, no canvassing queue.

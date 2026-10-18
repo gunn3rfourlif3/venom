@@ -15,6 +15,7 @@ import { HttpError, json, type Ctx } from './http.js';
 import { routes } from './routes.js';
 import { purgeExpiredSessions } from './auth.js';
 import { LiveHub } from './live.js';
+import { serveStatic } from './static.js';
 import { wardIdParam } from './http.js';
 
 const PORT = Number(process.env.API_PORT ?? 8080);
@@ -56,6 +57,9 @@ const server = createServer(async (req, res) => {
   const ctx: Ctx = { req, res, url };
 
   try {
+    // the dashboard first; anything under /api/ falls through to the router
+    if (req.method === 'GET' && await serveStatic(url.pathname, res)) return;
+
     const route = table.find(
       (r) => r.method === req.method && r.pattern.test(url.pathname));
     if (!route) throw new HttpError(404, 'No such endpoint');
@@ -79,7 +83,7 @@ async function main(): Promise<void> {
   await hub.start();
   setInterval(() => { void purgeExpiredSessions().catch(() => {}); }, 3600_000);
   server.listen(PORT, () => {
-    console.log(`venom api listening on :${PORT}`);
+    console.log(`venom listening on :${PORT} — dashboard at /`);
   });
 }
 
