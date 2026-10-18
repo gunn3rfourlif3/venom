@@ -219,8 +219,19 @@ async function getSentiment(ctx: Ctx): Promise<void> {
 }
 
 async function getIngestHealth(ctx: Ctx): Promise<void> {
-  const result = await pool.query('SELECT * FROM v_ingest_health ORDER BY source');
-  json(ctx.res, 200, await envelope(result.rows));
+  const [register, ingest] = await Promise.all([
+    // Ordered so the live feeds come first and the closed door comes last:
+    // the screen should open on what is working, not on what never will.
+    pool.query(
+      `SELECT * FROM v_source_register
+        ORDER BY array_position(
+          ARRAY['Live','Failing','Never run','Not connected','Closed'], status), label`),
+    pool.query('SELECT * FROM v_ingest_health ORDER BY source'),
+  ]);
+  json(ctx.res, 200, {
+    as_of: await asOf(),
+    data: { register: register.rows, ingest: ingest.rows },
+  });
 }
 
 export const routes = {

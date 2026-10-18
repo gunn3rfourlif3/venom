@@ -197,6 +197,62 @@ button, input, select { font: inherit; color: inherit; }
 .figure-value.is-negative { color: var(--theirs); }
 .figure-label { font-size: var(--step--1); color: var(--ink-3); letter-spacing: .005em; }
 
+/* A figure not yet entered reads as a ruled blank, which is what a ledger
+   does, rather than a spinner borrowed from somewhere else. The sweep is the
+   only moving thing on the screen, so it stays slow and low-contrast. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.rule-skeleton {
+  display: block;
+  width: 2.6ch;
+  height: calc(var(--figure) * .5);
+  border-bottom: 2px solid var(--rule);
+  position: relative;
+  overflow: hidden;
+}
+.figure-result .rule-skeleton { width: 2.1ch; }
+/* The travelling segment is sized by width, not scaleX, so the percentages in
+   the keyframes are percentages OF THE SEGMENT. Scaling instead makes them
+   percentages of the full track, which parks the segment off-screen for most
+   of the cycle — the first version was blank about two thirds of the time. */
+.rule-skeleton::after {
+  content: ''; position: absolute; left: 0; bottom: 0; width: 42%; height: 2px;
+  background: var(--ink-3);
+  animation: rule-fill 1.5s ease-in-out infinite;
+}
+@keyframes rule-fill {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(238%); }
+}
+
+/* Sits on the statement's own bottom rule rather than adding a new band. */
+.statement-progress {
+  grid-column: 1 / -1;
+  height: 2px;
+  margin: 22px 0 -22px;
+  background: var(--rule-hair);
+  overflow: hidden;
+  position: relative;
+}
+.statement-progress::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 28%;
+  background: var(--flag);
+  animation: sweep 1.5s ease-in-out infinite;
+}
+@keyframes sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(357%); }
+}
+.statement:not(.is-loading) .statement-progress { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rule-skeleton::after, .statement-progress::after {
+    animation: none; transform: none; width: 100%; background: var(--rule);
+  }
+}
+
 .statement-meta {
   grid-column: 1 / -1;
   margin: 26px 0 0;
@@ -493,3 +549,47 @@ button, input, select { font: inherit; color: inherit; }
 
 .cell, .seg, .dot { cursor: default; }
 .cell:hover, .seg:hover { stroke: var(--ink); stroke-width: 1.5; }
+
+/* ------------------------------------------------- the source register */
+
+/* Bordered cards rather than a 1px-gap grid over a coloured backing: with
+   eight sources in a three-column grid the backing shows through the ninth
+   cell and reads as a broken card. */
+.source-register {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 14px;
+  margin-bottom: 34px;
+}
+.source {
+  background: var(--surface);
+  border: 1px solid var(--rule-hair);
+  padding: 15px 17px;
+  display: grid; gap: 7px; align-content: start;
+}
+.source .meta { margin: 0; font-size: var(--step--1); color: var(--ink-3); }
+/* A closed source is recorded, not offered: it recedes but stays readable. */
+.source.is-closed { background: var(--surface-2); }
+.source-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.source-head h3 { margin: 0; font-size: var(--step-0); font-weight: 600; }
+.source-status {
+  font-size: var(--step--1); letter-spacing: .02em; text-transform: lowercase;
+  white-space: nowrap; padding-left: 13px; position: relative;
+}
+/* An ink block in the margin, the same mark the ledger uses for urgent. */
+.source-status::before {
+  content: ''; position: absolute; left: 0; top: .42em;
+  width: 7px; height: 7px; border-radius: 1px; background: var(--ink-3);
+}
+.status-live::before          { background: var(--ours); }
+.status-failing::before       { background: var(--theirs); }
+.status-closed::before        { background: transparent; border: 1px solid var(--ink-3); }
+.status-not-connected::before { background: var(--rule); }
+.source-access { margin: 0; font-size: var(--step--1); color: var(--ink-2); }
+.source-notes  { margin: 0; font-size: var(--step--1); color: var(--ink-3); line-height: 1.5; }
+.source-error  {
+  margin: 0; font-size: var(--step--1); color: var(--theirs);
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  overflow-wrap: anywhere;
+}
+.source .meta a { color: var(--ink-2); }

@@ -69,9 +69,34 @@ $('signout').addEventListener('click', async () => {
 
 /* -------------------------------------------------------- statement */
 
+/** The statement is behind a real wait: the ledger fetches two thousand rows
+ *  alongside it, so the figures land a couple of seconds after the frame does.
+ *  The loader runs on first load only — once figures are on screen a later
+ *  refresh replaces them in place, and re-skeletoning would read as a fault. */
+function statementSettled() {
+  const s = $('statement');
+  s.classList.remove('is-loading');
+  s.setAttribute('aria-busy', 'false');
+}
+
 async function loadStatement() {
-  const { data, as_of } = await api('/api/campaign');
-  if (!data) return;
+  let data, as_of;
+  try {
+    ({ data, as_of } = await api('/api/campaign'));
+  } catch (error) {
+    statementSettled();
+    for (const id of ['fig-a', 'fig-l', 'fig-eo']) $(id).textContent = NO_VALUE;
+    $('statement-meta').innerHTML =
+      `<div><dt>Statement</dt><dd>could not be read: ${esc(error.message)}</dd></div>`;
+    return;
+  }
+  statementSettled();
+  if (!data) {
+    for (const id of ['fig-a', 'fig-l', 'fig-eo']) $(id).textContent = NO_VALUE;
+    $('statement-meta').innerHTML =
+      '<div><dt>Statement</dt><dd>nothing ingested yet</dd></div>';
+    return;
+  }
   $('fig-a').textContent = num(data.a_total_votes);
   $('fig-l').textContent = num(data.l_total_votes);
   const eo = $('fig-eo');
@@ -572,16 +597,48 @@ async function loadFloat() {
   }
 }
 
+const ACCESS_NOTE = {
+  OPEN: 'public endpoint, no credential',
+  KEYED: 'free, but needs a registered client',
+  METERED: 'billed per item returned',
+  LICENSED: 'manual download under licence',
+  CLOSED: 'not available to us',
+};
+
 async function loadHealth() {
   const { data } = await api('/api/ingest-health');
-  $('health-list').innerHTML = data.length ? data.map((s) => `
+  const register = data.register ?? [];
+  const ingest = data.ingest ?? [];
+
+  // The register first: what Venom may read, and why. Half of these entries
+  // exist to record a door that is shut, which is worth a line on screen so
+  // nobody goes looking for it twice.
+  $('source-register').innerHTML = register.map((s) => `
+    <article class="source ${s.status === 'Closed' ? 'is-closed' : ''}">
+      <div class="source-head">
+        <h3>${esc(s.label)}</h3>
+        <span class="source-status status-${esc(s.status.replace(/\s+/g, '-').toLowerCase())}">${esc(s.status)}</span>
+      </div>
+      <p class="source-access">${esc(s.access)} &mdash; ${esc(ACCESS_NOTE[s.access] ?? '')}${
+        s.kind === 'SOCIAL' ? ' &middot; aggregate only, no posts stored' : ''}</p>
+      <p class="source-notes">${esc(s.notes)}</p>
+      <p class="meta">${
+        s.last_ok_at ? `Last succeeded ${new Date(s.last_ok_at).toLocaleString('en-ZA')}` : 'Never succeeded'
+      }${s.last_items_kept != null ? ` &middot; ${num(s.last_items_kept)} kept` : ''
+      }${Number(s.cost_usd_30d) > 0 ? ` &middot; $${Number(s.cost_usd_30d).toFixed(2)} in 30 days` : ''
+      }${s.failures ? ` &middot; ${s.failures} failed run${s.failures === 1 ? '' : 's'}` : ''}</p>
+      ${s.last_error ? `<p class="source-error">${esc(s.last_error)}</p>` : ''}
+      ${s.terms_url ? `<p class="meta"><a href="${esc(s.terms_url)}" target="_blank" rel="noopener">Terms</a></p>` : ''}
+    </article>`).join('');
+
+  $('health-list').innerHTML = ingest.length ? ingest.map((s) => `
     <article class="card-line">
       <h3>${esc(s.source)}</h3>
       <p class="meta">Last fetched ${s.last_fetch_at ? new Date(s.last_fetch_at).toLocaleString('en-ZA') : 'never'},
         last promoted ${s.last_promote_at ? new Date(s.last_promote_at).toLocaleString('en-ZA') : 'never'},
         ${s.errors_total} error${s.errors_total === 1 ? '' : 's'}, ${s.pending} pending</p>
     </article>`).join('')
-    : '<p class="empty">Nothing has been ingested yet. Run the baseline fetch once IEC credentials are issued.</p>';
+    : '<p class="empty">No election data ingested yet. Run the baseline fetch once IEC credentials are issued.</p>';
 }
 
 /* ------------------------------------------------------------ views */

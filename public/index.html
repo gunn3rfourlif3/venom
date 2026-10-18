@@ -44,18 +44,24 @@
 
   <!-- The balance sheet. Three figures on one rule, not three cards:
        the model produces one statement, not three metrics. -->
-  <section class="statement" id="statement" aria-label="Campaign balance sheet">
+  <section class="statement is-loading" id="statement" aria-label="Campaign balance sheet"
+           aria-busy="true">
     <div class="figure">
-      <span class="figure-value" id="fig-a">&mdash;</span>
+      <span class="figure-value" id="fig-a"><i class="rule-skeleton" aria-hidden="true"></i></span>
       <span class="figure-label">Potential votes</span>
     </div>
     <div class="figure">
-      <span class="figure-value" id="fig-l">&mdash;</span>
+      <span class="figure-value" id="fig-l"><i class="rule-skeleton" aria-hidden="true"></i></span>
       <span class="figure-label">Eroding</span>
     </div>
     <div class="figure figure-result">
-      <span class="figure-value" id="fig-eo">&mdash;</span>
+      <span class="figure-value" id="fig-eo"><i class="rule-skeleton" aria-hidden="true"></i></span>
       <span class="figure-label">Expected outcome</span>
+    </div>
+    <!-- Indeterminate by design: the server does not report progress, and a bar
+         that invents a percentage is lying about what it knows. -->
+    <div class="statement-progress" id="statement-progress" role="status">
+      <span class="sr-only">Reading the ledger</span>
     </div>
     <dl class="statement-meta" id="statement-meta"></dl>
   </section>
@@ -147,7 +153,16 @@
   </main>
 
   <main class="pane pane-single" id="view-health" hidden>
-    <section class="panel-body"><div id="health-list"></div></section>
+    <section class="panel-body">
+      <h2 class="viz-title">What Venom may read</h2>
+      <p class="viz-sub">Every source, its access level and when it last worked.
+         Closed means there is no route in, not that it is switched off.</p>
+      <div id="source-register" class="source-register"></div>
+
+      <h2 class="viz-title">Election data ingestion</h2>
+      <p class="viz-sub">IEC fetch and promotion runs.</p>
+      <div id="health-list"></div>
+    </section>
   </main>
 
   <aside class="dossier" id="dossier" hidden aria-label="Ward dossier">
