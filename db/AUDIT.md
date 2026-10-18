@@ -170,13 +170,50 @@ whole model reports, so it has not been made. **This needs a decision.**
 
 ---
 
+## The schema silently fell behind the code
+
+Every setup instruction in this project was a `psql` command. `psql` is not
+on the PATH of the machine Venom is developed on - Postgres runs in a
+container and the client was never installed beside it - so those commands
+did nothing but print "the term 'psql' is not recognized". The migrations
+after 017 were never applied, the code shipped ahead of the database, and
+the first symptom was a foreign key failing inside an unrelated ingest run:
+`relation "source_run" does not exist`.
+
+Two faults, both in the instructions rather than the code. The commands also
+used `%DATABASE_URL%`, which is cmd.exe syntax; PowerShell needs
+`$env:DATABASE_URL`, and expands the former to a literal string.
+
+The fix is to stop depending on a client that is not there. `npm run migrate`
+applies `db/migrations`, then `db/views`, then `db/extract`, each file in its
+own transaction, tracked by name and content hash in `schema_migration`.
+Node and `pg` are already dependencies and already reach the database.
+
+It reconciles a database built before tracking existed: a file whose first
+statement fails because the object is already there is recorded as `present`
+rather than `applied`, and the run continues. That is an inference from one
+error, so the run does not stop there - it reads back every relation the SQL
+claims to create and fails if any is missing. On a database where
+`issue_signal` had been dropped, that check named the table and the three
+views that cascaded with it.
+
+Verified on PostgreSQL 16 on 2026-10-19: 40 files applied to an empty
+database (59 objects verified), a second run a no-op, and a hand-built
+database correctly reconciled.
+
+---
+
 ## Verification
 
 ```
-psql -d venom -f db/migrations/*.sql   # in order
-psql -d venom -f db/views/*.sql        # in order
-psql -d venom -f db/extract/mv_campaign_extract.sql
-psql -d venom -f db/test/001_seed_three_wards.sql
+npm run migrate            # schema, idempotent, verifies itself
+npm run migrate -- --dry-run
+```
+
+Then the seeds, which are deliberate and are not run by the migrator:
+
+```
+db/test/001_seed_three_wards.sql
 ```
 
 Then check every figure against `db/test/EXPECTED.md`. All of them were

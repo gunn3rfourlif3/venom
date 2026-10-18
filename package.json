@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "migrate": "node --env-file=.env dist/cli/migrate.js",
     "ingest:baseline": "node --env-file=.env dist/cli/ingest-baseline.js",
     "promote": "node --env-file=.env dist/cli/promote.js",
     "verify:promotion": "node --env-file=.env dist/cli/verify-promotion.js",
