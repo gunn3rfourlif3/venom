@@ -9,6 +9,12 @@ pg.types.setTypeParser(20, (v: string) => (v === null ? null : Number(v)));
 
 export const pool = new pg.Pool({ connectionString: config.db.connectionString });
 
+pool.on('error', (error) => {
+  // A pool client can fail while idle (database restarted, network cut).
+  // Without a handler the process exits on an unhandled 'error' event.
+  console.error('postgres pool error:', error.message);
+});
+
 export async function withTransaction<T>(
   fn: (client: pg.PoolClient) => Promise<T>,
 ): Promise<T> {
