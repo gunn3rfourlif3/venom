@@ -30,6 +30,25 @@ they are all correct they collapse into a single analytical layer.
 | 10 | `v_float_balance`         | `float_ledger`, `app_user`                    |
 |    | `mv_campaign_extract`     | 7, 8, 2, 6, 4                                 |
 
+## Seed data
+
+`db/test/002_seed_gauteng_demo.sql` loads 523 wards across the nine real
+Gauteng municipalities, with stations, assets, deployments and a float
+ledger, so the views and the dashboard have something to run against before
+IEC credentials are issued.
+
+**Every figure in it is invented.** No vote count, turnout or registration
+number in that file came from the IEC or any real election; only the
+municipality names and the approximate ward counts are real, so the dataset
+is a realistic size. Every ward and station row is stamped
+`source = 'SYNTHETIC'`, the script refuses to run if real IEC data is
+present, and nothing from it may be presented as a result or a forecast for
+any actual ward. Remove it when real data lands:
+
+```
+DELETE FROM ward WHERE source = 'SYNTHETIC';
+```
+
 ## Setup
 
 ```
