@@ -28,6 +28,11 @@ they are all correct they collapse into a single analytical layer.
 | 8  | `v_priority_rank`         | 1, 2, 3, `control_panel`                      |
 | 9  | `v_campaign_eo`           | 7, 4                                          |
 | 10 | `v_float_balance`         | `float_ledger`, `app_user`                    |
+| 11 | `v_ward_pressure`         | `ward_issue`, `service_outage`, `control_panel`|
+| 12 | `v_ward_target`           | 1, 11, 8                                      |
+| 13 | `v_decision_log`          | `decision`, `decision_evidence`               |
+| 14 | `v_document_register`     | `document`, `document_ward`                   |
+| 15 | `v_ward_dossier`          | everything                                    |
 |    | `mv_campaign_extract`     | 7, 8, 2, 6, 4                                 |
 
 ## Seed data
@@ -113,6 +118,50 @@ especially needs calibrating against the real baseline once it loads.
 Start with `v_ward_computed` and `v_ward_reliability`. Everything downstream
 is arithmetic on those two. If they are right on three wards whose ground
 truth you know, the rest is mechanical — which is what `db/test/` is for.
+
+## Grievance and the repository
+
+**Structured grievance** (`ward_issue`, `service_outage`) records what is
+going wrong in a ward now. The rest of Venom measures the past and the
+present inventory; neither says whether anything is moving, and in a
+municipal election what moves turnout is service delivery.
+
+`v_ward_target` crosses contestability with live pressure, which is the
+thing neither signal gives alone:
+
+| Class | Meaning |
+|---|---|
+| ACT NOW | Ground has come loose and something is happening on it |
+| WATCH | Contestable, but nothing driving it right now |
+| PRESSURE ONLY | The arithmetic writes the ward off, but it is under real pressure |
+| QUIET | Neither |
+
+PRESSURE ONLY is the row worth reading twice: 2021 and 2024 results cannot
+see a grievance that started last month.
+
+This is deliberately **not a sentiment score**. Ward-level social sentiment
+is thin and badly geolocated, and a score built on it would look
+quantitative while being noise. `pressure_index` is an ordinal — comparable
+between wards at a point in time, not a rate or a probability.
+
+**The repository** (`document`, `decision`, `decision_evidence`) holds what
+the campaign knows and what it decided. A decision carries its rationale,
+its evidence, and `model_state`: what the model said at the moment the call
+was made, held inline so it stays readable after the views are rewritten.
+`v_decision_log.unevidenced_flag` catches decisions with nothing attached —
+not necessarily wrong, but unreviewable six weeks later.
+
+### Issues, never people
+
+This layer tracks grievances about **services**, never records about
+**persons**. No names, contact details, identity numbers, or attributed
+quotes; public sources only, never private groups. The schema enforces the
+cheap part — a 13-digit run or a phone number in an issue summary is
+rejected, and a document declaring personal data must carry a retention
+date — and `v_document_register.retention_status` surfaces what is overdue.
+The rest is discipline. Crossing this line turns campaign analytics into
+profiling, with the POPIA exposure that follows, and breaks the same
+no-individual-records boundary the whole design rests on.
 
 ## Scope boundary
 
