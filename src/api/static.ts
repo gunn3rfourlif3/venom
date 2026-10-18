@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { extname, join, normalize, resolve } from 'node:path';
+import { extname, isAbsolute, join, normalize, relative, resolve } from 'node:path';
 import type { ServerResponse } from 'node:http';
 
 const ROOT = resolve(process.env.PUBLIC_DIR ?? 'public');
@@ -28,8 +28,15 @@ export async function serveStatic(pathname: string, res: ServerResponse): Promis
   if (pathname.startsWith('/api/')) return false;
 
   const requested = pathname === '/' ? '/index.html' : pathname;
-  const candidate = resolve(join(ROOT, normalize(requested)));
-  if (candidate !== ROOT && !candidate.startsWith(ROOT + '/')) return false;
+  const candidate = resolve(join(ROOT, normalize(decodeURIComponent(requested))));
+
+  // Containment check via path.relative, NOT a string prefix. Comparing
+  // against `ROOT + '/'` hardcodes the POSIX separator, so on Windows -
+  // where the separator is a backslash - every legitimate file was
+  // rejected and fell through to the API router as "No such endpoint".
+  // It worked on Linux and could never have worked on Windows.
+  const rel = relative(ROOT, candidate);
+  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) return false;
 
   let size: number;
   try {
