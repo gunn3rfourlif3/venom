@@ -167,12 +167,32 @@
 
   <main class="pane" id="view-wards" hidden>
     <aside class="filters" aria-label="Filters">
+      <!-- What to do in a ward comes from two questions and nothing else.
+           Showing the grid that produces the answer is more use than a
+           glossary entry, because it also shows why a ward moved. -->
       <div class="filter-group">
-        <h2>Box</h2>
+        <h2>What to do</h2>
+        <p class="filter-note">Each ward falls into one of four, from two
+           questions: can we win it, and do we have a candidate?</p>
+        <table class="matrix">
+          <thead>
+            <tr><td></td><th scope="col">Candidate</th><th scope="col">None yet</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Winnable</th>
+                <td><button class="chip" data-box="Contest">Contest</button></td>
+                <td><button class="chip" data-box="Recruit">Recruit</button></td></tr>
+            <tr><th scope="row">Not winnable</th>
+                <td><button class="chip" data-box="Hold">Hold</button></td>
+                <td><button class="chip" data-box="Abandon">Abandon</button></td></tr>
+          </tbody>
+        </table>
         <div class="chips" id="filter-box"></div>
       </div>
       <div class="filter-group">
-        <h2>Target</h2>
+        <h2>Priority</h2>
+        <p class="filter-note">How soon it needs attention, from grievance
+           pressure and how close the ward is.</p>
         <div class="chips" id="filter-class"></div>
       </div>
       <div class="filter-group">
@@ -183,15 +203,22 @@
     </aside>
 
     <section class="ledger-wrap">
+      <div class="page-head page-head-tight">
+        <h1>Wards</h1>
+        <p>Every ward in Gauteng, ordered by what needs doing first. Click a
+           row for the full picture of that ward.</p>
+      </div>
+      <!-- Each column says what it means on hover and under its own title:
+           a header that only a model author understands is not a header. -->
       <div class="ledger-head" role="row">
         <span class="col-mark" aria-hidden="true"></span>
-        <span class="col-rank">#</span>
+        <span class="col-rank" title="Order of attention, best first">#</span>
         <span class="col-ward">Ward</span>
         <span class="col-munic">Municipality</span>
-        <span class="col-box">Box</span>
-        <span class="col-press">Pressure</span>
-        <span class="col-num">Rival decline</span>
-        <span class="col-num">Expected</span>
+        <span class="col-box" title="The recommended play, from the grid on the left">What to do</span>
+        <span class="col-press" title="Open service-delivery complaints in this ward recently">Complaints</span>
+        <span class="col-num" title="How far the rival's share fell between 2021 and 2024">Rival decline</span>
+        <span class="col-num" title="Votes we expect here, after leakage">Expected votes</span>
       </div>
       <div id="ledger" class="ledger"></div>
       <p class="empty" id="ledger-empty" hidden>No wards match these filters.</p>

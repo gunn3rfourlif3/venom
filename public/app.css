@@ -977,3 +977,68 @@ button, input, select { font: inherit; color: inherit; }
    are counting. */
 .qbar-label { line-height: 1.25; }
 .qbar-sub { display: block; font-size: var(--step--1); color: var(--ink-3); }
+
+/* ================================================ empty, explained */
+
+/* A screen with nothing on it still has to answer "why" and "what now".
+   Showing zeros under a banner that implies a feed is attached is worse
+   than showing nothing, because it reads as a real reading of zero. */
+.nothing {
+  display: grid; gap: 9px; justify-items: start;
+  padding: 22px 24px; max-width: 46rem;
+  background: var(--surface-2);
+  border: 1px solid var(--rule-hair); border-radius: var(--r-panel);
+}
+.nothing h3 { margin: 0; font-size: var(--step-1); font-weight: 600; }
+.nothing p { margin: 0; font-size: var(--step-0); color: var(--ink-3); line-height: 1.55; }
+.nothing-cmd {
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  font-size: var(--step-0); color: var(--ink);
+  background: var(--paper); border: 1px solid var(--rule);
+  border-radius: var(--r-control); padding: 6px 11px;
+}
+/* With nothing to draw, the chart furniture is noise — but .viz is the
+   container the empty notice itself sits in, so hiding that hid the whole
+   screen. Only the figures go. */
+#view-sentiment.is-empty .viz-figure,
+#view-sentiment.is-empty .viz-legend,
+#view-sentiment.is-empty .viz-table,
+#view-sentiment.is-empty .kpi-row { display: none; }
+#view-sentiment.is-empty .provenance {
+  background: none; border: 0; padding: 0; margin: 0;
+}
+
+/* ------------------------------------------- the what-to-do matrix */
+
+.matrix { border-collapse: collapse; width: 100%; margin: 9px 0 6px; }
+.matrix th, .matrix td { padding: 2px; }
+.matrix thead th {
+  font-size: var(--step--1); font-weight: 400; color: var(--ink-3);
+  text-align: center; padding-bottom: 5px;
+}
+.matrix tbody th {
+  font-size: var(--step--1); font-weight: 400; color: var(--ink-3);
+  text-align: right; padding-right: 7px; white-space: nowrap;
+}
+.matrix .chip { width: 100%; justify-content: space-between; }
+.filter-note {
+  margin: 0 0 2px; font-size: var(--step--1); color: var(--ink-3);
+  line-height: 1.45;
+}
+.filter-note.is-chosen {
+  color: var(--ink-2); border-left: 2px solid var(--ours);
+  padding-left: 9px; margin-top: 7px;
+}
+.page-head-tight { padding: 18px 0 14px; }
+
+/* The filter column now carries the 2x2 that explains what to do, which
+   needs a row label and two cells — 14rem left the second column of the
+   grid underneath the ledger. */
+/* :not(.pane-single) matters. This rule sits after .pane-single in the
+   sheet, so an unscoped .pane here silently re-gave every single-column
+   screen a 19rem sidebar it has no filters to put in. */
+.pane:not(.pane-single) { grid-template-columns: 19rem minmax(0, 1fr); }
+.filters { padding: 22px 20px; gap: 22px; }
+@media (max-width: 1180px) {
+  .pane:not(.pane-single) { grid-template-columns: minmax(0, 1fr); }
+}

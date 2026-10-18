@@ -95,18 +95,51 @@ function countBy(key, value) {
     : state.targets.get(w.ward_id)?.target_class === value)).length;
 }
 
-function renderChips() {
-  const boxes = ['Recruit', 'Contest', 'Hold', 'Abandon'];
-  const classes = ['ACT NOW', 'WATCH', 'PRESSURE ONLY', 'QUIET'];
-  const chip = (label, n, on) =>
-    `<button class="chip${on ? ' is-on' : ''}" data-value="${esc(label)}">` +
-    `${esc(sentence(label))}<span class="chip-n">${n}</span></button>`;
+/* What each of the four means, in the words of the person using it rather
+   than the words of the view that computes it. These are not restatements of
+   the rule - the rule is the 2x2 above them - they are the instruction. */
+const BOX_MEANING = {
+  Recruit:  'Winnable, and nobody is standing. Find a candidate first.',
+  Contest:  'Winnable, candidate in place. Put people and money here.',
+  Hold:     'Not winnable, but we hold it. Defend, do not invest.',
+  Abandon:  'Not winnable and nobody standing. Spend the day elsewhere.',
+};
 
-  $('filter-box').innerHTML = boxes
-    .map((b) => chip(b, countBy('box', b), state.filters.box === b)).join('');
-  $('filter-class').innerHTML = classes
-    .map((c) => chip(c, countBy('cls', c), state.filters.cls === c)).join('');
+const CLASS_MEANING = {
+  'ACT NOW': 'Close, and complaints are rising.',
+  'WATCH': 'Close, but quiet for now.',
+  'PRESSURE ONLY': 'Complaints are rising, but the ward is not close.',
+  'QUIET': 'Neither close nor complaining.',
+};
+
+function renderChips() {
+  const classes = ['ACT NOW', 'WATCH', 'PRESSURE ONLY', 'QUIET'];
+
+  // The 2x2 cells are the filter. A chip row beside the grid would be the
+  // same four buttons twice, and the grid is the half that explains itself.
+  for (const [box, meaning] of Object.entries(BOX_MEANING)) {
+    const cell = document.querySelector(`.matrix .chip[data-box="${box}"]`);
+    if (!cell) continue;
+    const n = countBy('box', box);
+    cell.classList.toggle('is-on', state.filters.box === box);
+    cell.title = meaning;
+    cell.innerHTML = `${esc(box)}<span class="chip-n">${n}</span>`;
+  }
+  $('filter-box').innerHTML = state.filters.box
+    ? `<p class="filter-note is-chosen">${esc(BOX_MEANING[state.filters.box])}</p>`
+    : '';
+
+  $('filter-class').innerHTML = classes.map((c) =>
+    `<button class="chip${state.filters.cls === c ? ' is-on' : ''}" data-value="${esc(c)}"
+       title="${esc(CLASS_MEANING[c] ?? '')}">${esc(sentence(c))}<span class="chip-n">${countBy('cls', c)}</span></button>`).join('');
 }
+
+document.querySelector('.matrix').addEventListener('click', (e) => {
+  const cell = e.target.closest('.chip[data-box]'); if (!cell) return;
+  const v = cell.dataset.box;
+  state.filters.box = state.filters.box === v ? null : v;
+  renderChips(); renderLedger();
+});
 
 function visibleWards() {
   return state.wards.filter((w) => {
@@ -140,7 +173,7 @@ function renderLedger() {
         <span class="munic">${esc(w.municipality)}</span>
         <span class="box box-${esc(w.recommended_box)}">${esc(w.recommended_box)}</span>
         <span class="press press-${esc(band)}">${esc(band.toLowerCase())}</span>
-        <span class="num${declineNeg ? ' is-negative' : ''}${w.rival_decline_share === null ? ' is-null' : ''}">${dec(w.rival_decline_share, 3)}</span>
+        <span class="num${declineNeg ? ' is-negative' : ''}${w.rival_decline_share === null ? ' is-null' : ''}">${pct(w.rival_decline_share, 1)}</span>
         <span class="num${eoNeg ? ' is-negative' : ''}">${num(w.eo_est_votes)}</span>
       </button>`;
   }).join('');
@@ -221,7 +254,7 @@ async function openDossier(wardId) {
       ['Our share of the pool', pct(d.our_pool_share)],
       ['Rival share 2021', pct(d.rival_share_2021)],
       ['Rival share 2024', pct(d.rival_share_2024)],
-      ['Rival decline', dec(d.rival_decline_share, 3)],
+      ['Rival decline', pct(d.rival_decline_share, 1)],
       ['Headroom', num(d.headroom)],
       ['Activation gap', `${dec(d.activation_gap)} points`],
     ])}
@@ -491,11 +524,42 @@ function renderSentimentTable(area) {
       <td class="n">${dec(r.confidence)}</td></tr>`).join('')}</tbody></table>`;
 }
 
+/** An empty screen that says nothing is a bug, not a state. Each one names
+ *  what is missing, why, and the command that fills it. */
+function emptyState(title, why, command) {
+  return `<div class="nothing">
+      <h3>${esc(title)}</h3>
+      <p>${esc(why)}</p>
+      ${command ? `<code class="nothing-cmd">${esc(command)}</code>` : ''}
+    </div>`;
+}
+
 async function loadSentiment() {
   const { data } = await api('/api/sentiment');
   const s = data.summary;
 
-  $('sent-provenance').innerHTML = s && s.synthetic
+  // Nothing at all in the table is a different situation from a connected
+  // feed reading zero, and the screen used to show the same thing for both:
+  // a row of zeros under a banner implying a feed was already attached.
+  const hasSignal = Number(s?.signals ?? 0) > 0;
+  $('view-sentiment').classList.toggle('is-empty', !hasSignal);
+
+  if (!hasSignal) {
+    $('sent-provenance').innerHTML = emptyState(
+      'No sentiment signal loaded',
+      'The tables exist but hold no rows. npm run migrate builds the schema '
+      + 'and deliberately does not insert invented data, so the demonstration '
+      + 'signal has to be loaded on purpose. Run this from the project folder:',
+      'npm run seed');
+    $('sent-kpis').innerHTML = '';
+    for (const id of ['sent-heatmap', 'sent-bands', 'sent-trend', 'sent-table',
+                      'sent-heatmap-legend', 'sent-bands-legend']) {
+      const el = $(id); if (el) el.innerHTML = '';
+    }
+    return;
+  }
+
+  $('sent-provenance').innerHTML = s.synthetic
     ? '<b>Synthetic data.</b> No sentiment feed is connected yet. Every figure on this screen was generated for development and describes no real area. Nothing here may be read as what anyone actually thinks.'
     : `Signals from a connected feed. Average classifier confidence ${dec(s?.confidence)}. A sentiment figure is only as good as the feed behind it.`;
 
@@ -680,7 +744,10 @@ async function loadOverview() {
       <span class="pill">${esc(w.recommended_box ?? '—')}</span>
       <span class="rank-num">${num(w.eo_est_votes)}</span>
     </button>`).join('')
-    : '<p class="empty">No ward is marked act-now under the current settings.</p>';
+    : emptyState('Nothing marked act-now',
+        'No ward is both close enough to win and under rising complaint '
+        + 'pressure, on the current thresholds. Those live in the control panel.',
+        null);
 
   // Pressure by issue
   const issues = data.issues.slice(0, ISSUE_MAX_BARS);
@@ -694,7 +761,9 @@ async function loadOverview() {
         style="width:${((Number(i.mentions) / issueMax) * 100).toFixed(1)}%"></span></span>
       <span class="qbar-num">${num(i.mentions)}</span>
     </div>`).join('')
-    : '<p class="empty">No sentiment signal in the window.</p>';
+    : emptyState('No sentiment signal',
+        'The schema is built but no signal has been loaded. The demonstration '
+        + 'data is loaded on purpose, not by the migrator:', 'npm run seed');
 
   // Municipal finance, newest audited year
   const muni = data.municipal.slice(0, 8);
@@ -707,7 +776,10 @@ async function loadOverview() {
         style="width:${((Number(m.value) / muniMax) * 100).toFixed(1)}%"></span></span>
       <span class="qbar-num">R${(Number(m.value) / 1e9).toFixed(1)}bn</span>
     </div>`).join('')
-    : '<p class="empty">Run <code>npm run sources:official</code> to load Treasury figures.</p>';
+    : emptyState('No Treasury figures yet',
+        'Municipal Money is open and needs no credentials. This pulls the '
+        + 'Gauteng municipality list and their audited service revenue:',
+        'npm run sources:official -- 2023 2024');
 
   // Sources
   const live = data.sources.filter((s) => s.status === 'Live').length;
