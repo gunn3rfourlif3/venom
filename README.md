@@ -1,60 +1,73 @@
 # Venom
 
-Ward-level campaign analytics. Raw tables → computed views → one materialised
-extract that the dashboard reads from.
+Ward-level campaign analytics for **Gauteng, 2026 municipal elections**.
+Raw tables → computed views → one materialised extract the dashboard reads.
 
 Ten views. Each is a window you can open, read and test independently. When
 they are all correct they collapse into a single analytical layer.
 
 ## Layout
 
-    db/migrations/   base table DDL — not yet written
+    db/migrations/   base table DDL, in order
     db/views/        the ten windows, numbered in dependency order
     db/extract/      the materialised extract the dashboard reads
-    db/AUDIT.md      defects found against the spec
+    db/test/         three-ward fixture and its hand-computed expected values
+    db/AUDIT.md      what was found, what was fixed, what is open by decision
 
 ## The ten windows
 
-| #  | View                      | Reads                                              |
-|----|---------------------------|----------------------------------------------------|
-| 1  | `v_ward_computed`         | `ward`                                              |
-| 2  | `v_ward_reliability`      | `ward`, `call_log`                                  |
-| 3  | `v_ward_shortage`         | 1, 2, `station`, `asset_holding`                    |
-| 4  | `v_asset_available`       | `asset_holding`, `liquidatable`                     |
-| 5  | `v_deployment_feasibility`| `deployment`, 2, 4                                  |
-| 6  | `v_booth_status`          | `station`                                           |
-| 7  | `v_ward_eo`               | 1, 3, 6                                             |
-| 8  | `v_priority_rank`         | 1, 2, 3, `control_panel`                            |
-| 9  | `v_campaign_eo`           | 7, 4                                                |
-| 10 | `v_float_balance`         | `float_ledger`                                      |
-|    | `mv_campaign_extract`     | 7, 8, 2, 6, 4                                       |
+| #  | View                      | Reads                                        |
+|----|---------------------------|----------------------------------------------|
+| 1  | `v_ward_computed`         | `ward`, `control_panel`                       |
+| 2  | `v_ward_reliability`      | `ward`, `control_panel`                       |
+| 3  | `v_ward_shortage`         | 1, 2, `station`, `asset_holding`, `location`  |
+| 4  | `v_asset_available`       | `asset_holding`, `liquidatable`, `location`   |
+| 5  | `v_deployment_feasibility`| `deployment`, 2, 4, `control_panel`           |
+| 6  | `v_booth_status`          | `station`                                     |
+| 7  | `v_ward_eo`               | 1, 3, 6, `iec_result`, `control_panel`        |
+| 8  | `v_priority_rank`         | 1, 2, 3, `control_panel`                      |
+| 9  | `v_campaign_eo`           | 7, 4                                          |
+| 10 | `v_float_balance`         | `float_ledger`, `app_user`                    |
+|    | `mv_campaign_extract`     | 7, 8, 2, 6, 4                                 |
 
-## Build order
+## Setup
 
-Start with `v_ward_computed` and `v_ward_reliability`. Those two are the
-foundation; everything downstream depends on their numbers being right. If
-those two return correct results on three test wards, the rest is mechanical.
+```
+createdb venom
+for f in db/migrations/*.sql db/views/*.sql db/extract/*.sql; do
+  psql -d venom -v ON_ERROR_STOP=1 -f "$f"
+done
+psql -d venom -f db/test/001_seed_three_wards.sql   # optional fixture
+```
 
-Views are inspectable — each can be queried in isolation, tested with a single
-ward, and debugged without touching the rest. The materialised view is fast but
-opaque. Build the views, verify each against a known ward, then collapse. The
-collapse takes minutes. The verification is the work.
+PostgreSQL 16. The stack uses materialised views, `FILTER` aggregates and
+`LISTEN`/`NOTIFY`; none of these exist in MySQL, so XAMPP's database is not a
+target.
 
 ## Status
 
-Target dialect is **PostgreSQL**.
+The schema and all ten views are written, run clean, and are verified against
+a three-ward fixture with hand-computed expected values in `db/test/`.
 
-The compile-blocking column references and the silent-wrong-answer defects
-are fixed. **Still does not run:** there is no base table DDL, so there is
-nothing underneath the views. Only `iec_result` has a migration.
+**Not built yet:** ingestion (IEC API client and promotion), the two
+authenticated write forms, the API, and the dashboard. There is no real data
+in the system — the fixture is synthetic.
 
-Outstanding by decision, not defect: `control_panel` is never joined and the
-rate constants stay hardcoded; the priority score mixes units across its
-three terms; Window 5 discards the SPEND_FIRST / SPEND_SECOND ordering.
+Nothing is tuned to Gauteng yet. `control_panel.swing_threshold_share`
+especially needs calibrating against the real baseline once it loads.
 
-See `db/AUDIT.md`.
+## Build order
+
+Start with `v_ward_computed` and `v_ward_reliability`. Everything downstream
+is arithmetic on those two. If they are right on three wards whose ground
+truth you know, the rest is mechanical — which is what `db/test/` is for.
 
 ## Scope boundary
 
-No donor-to-amount reconciliation. No receipt structure. No named shrinkage
-line. `v_float_balance` reports issued, accounted, and the gap.
+No voter-level data: no person table, no contact history, no canvassing queue.
+Supporter identification is a separate system with its own consent
+obligations.
+
+No donor reconciliation. `v_float_balance` reports issued, accounted, and the
+gap. It is an internal control and does not discharge party funding
+disclosure obligations.

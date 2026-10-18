@@ -1,5 +1,5 @@
 -- WINDOW 4 — v_asset_available
--- Input:  asset_holding, liquidatable
+-- Input:  asset_holding, liquidatable, location
 -- Output: what exists to deploy, in the order it should be spent
 --
 -- SPEND_FIRST is the liquidatables — free or near-free assets.
@@ -8,26 +8,30 @@
 
 CREATE VIEW v_asset_available AS
 SELECT
-  'HOLDING'                       AS source,
-  ward_id                         AS location,
-  asset_type,
-  SUM(quantity)                   AS quantity,
-  NULL::numeric                   AS est_value,
-  'SPEND_SECOND'                  AS spend_order
-FROM asset_holding
-WHERE status = 'Available'
-GROUP BY ward_id, asset_type
+  'HOLDING'                        AS source,
+  ah.location_id                   AS location,
+  l.kind                           AS location_kind,
+  ah.asset_type,
+  SUM(ah.quantity)                 AS quantity,
+  NULL::numeric                    AS est_value,
+  'SPEND_SECOND'                   AS spend_order
+FROM asset_holding ah
+JOIN location l ON l.location_id = ah.location_id
+WHERE ah.status = 'Available'
+GROUP BY ah.location_id, l.kind, ah.asset_type
 
 UNION ALL
 
 SELECT
-  'LIQUIDATABLE'                   AS source,
-  strategic_destination            AS location,
-  resource_type                    AS asset_type,
-  SUM(quantity)                    AS quantity,
-  SUM(assessed_value - fetch_cost) AS est_value,
-  'SPEND_FIRST'                    AS spend_order
-FROM liquidatable
-WHERE status <> 'Deployed'
-  AND assessed_value > fetch_cost
-GROUP BY strategic_destination, resource_type;
+  'LIQUIDATABLE'                             AS source,
+  lq.strategic_destination                   AS location,
+  l.kind                                     AS location_kind,
+  lq.resource_type                           AS asset_type,
+  SUM(lq.quantity)                           AS quantity,
+  SUM(lq.assessed_value - lq.fetch_cost)     AS est_value,
+  'SPEND_FIRST'                              AS spend_order
+FROM liquidatable lq
+JOIN location l ON l.location_id = lq.strategic_destination
+WHERE lq.status NOT IN ('Deployed', 'Written off')
+  AND lq.assessed_value > lq.fetch_cost
+GROUP BY lq.strategic_destination, l.kind, lq.resource_type;
