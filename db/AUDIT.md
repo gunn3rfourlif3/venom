@@ -129,7 +129,30 @@ This also closed the earlier open item about null reliability sitting at
 percentile zero: it still does, but it can no longer bury an URGENT ward,
 because the box decides the order.
 
-## Open: the leakage term is on the wrong base
+## Resolved: the leakage term is now selectable
+
+Was: `registered_voters × t2024_turnout × leakage_factor` — ten per cent of
+**everyone** who voted in the ward, the rival's voters included, charged
+against us. Average leakage 1156 against an average A of 2221, and **430 of
+523 wards returned a negative `eo_est_votes`**.
+
+Three readings are now computed and exposed, with
+`control_panel.leakage_basis` choosing which one `eo_est_votes` follows:
+
+| basis | charges | avg leakage | negative wards | campaign EO |
+|---|---|---|---|---|
+| `ALL` | every vote cast in the ward | 1156 | 430 | −181,651 |
+| `POOL_SHARE` | our share of that drift | 301 | 0 | +265,259 |
+| `OWN_VOTE` *(default)* | our own 2024 voters | 220 | 0 | +307,949 |
+
+`ALL` is retained only so the three can be compared; it is the original and
+it produces arithmetic that cannot mean anything, since a ward cannot lose
+votes it was never going to get. `l_leakage_all`, `l_leakage_pool_share`
+and `l_leakage_own_vote` are all carried through `v_ward_eo`,
+`v_campaign_eo` and the extract, so switching the setting is an informed
+choice rather than a leap.
+
+## Superseded note: the leakage term was on the wrong base
 
 `v_ward_eo` computes leakage as `registered_voters × t2024_turnout × leakage_factor`
 — ten per cent of **everyone** who voted in 2024, charged against us. It

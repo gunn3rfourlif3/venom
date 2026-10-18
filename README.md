@@ -163,6 +163,23 @@ The rest is discipline. Crossing this line turns campaign analytics into
 profiling, with the POPIA exposure that follows, and breaks the same
 no-individual-records boundary the whole design rests on.
 
+## Tunables
+
+Everything adjustable lives in `control_panel`, one row. Nothing is
+hardcoded in a view.
+
+Two of them are *bases* rather than numbers — the model carries both or all
+three readings and the setting chooses which drives the arithmetic, so the
+alternatives stay visible beside the active one:
+
+- **`peak_basis`** — `LGE` (default) or `ALL`. Which past elections set the
+  turnout ceiling. `ALL` includes national turnout, which a municipal
+  election will not reach.
+- **`leakage_basis`** — `OWN_VOTE` (default), `POOL_SHARE` or `ALL`. What
+  the leakage term is charged against. `ALL` charges ten per cent of every
+  vote cast in the ward, the rival's included; on the seeded province it
+  drives 430 of 523 wards to a negative EO and is kept only for comparison.
+
 ## API
 
 Read-only HTTP, Node 20, no web framework. Sessions are server-side so

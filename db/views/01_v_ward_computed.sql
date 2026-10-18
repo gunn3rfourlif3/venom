@@ -32,6 +32,11 @@ SELECT
        THEN w.peak_turnout_lge_pct
        ELSE w.peak_turnout_all_pct END               AS peak_turnout_pct,
 
+  -- raw party counts, passed through for the leakage bases and the dashboard
+  w.t2021_anc,
+  w.t2024_mkp,
+  w.t2024_anc,
+
   -- pool arithmetic
   (w.t2024_mkp + w.t2024_anc)                        AS pool_size_2024,
   w.t2024_mkp - w.t2024_anc                          AS pool_split,

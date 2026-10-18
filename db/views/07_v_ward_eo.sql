@@ -32,8 +32,25 @@ basis AS (
     -- because national turnout is structurally higher than local.
     w.registered_voters * (w.peak_turnout_pct/100.0) * w.our_pool_share
       * (1 - w.t2021_turnout/100.0)                                      AS abstention_raw,
-    -- leakage from those who did turn out, at the configured rate
-    w.registered_voters * (w.t2024_turnout/100.0) * cp.leakage_factor    AS leakage_raw
+    -- THREE READINGS OF LEAKAGE, all computed so they can be compared.
+    -- control_panel.leakage_basis selects which one eo_est_votes follows.
+    --   ALL         ten per cent of EVERY vote cast in the ward. The
+    --               original, and wrong: it charges the rival's voters
+    --               against us. Kept for comparison; gives a negative EO
+    --               in most wards.
+    --   POOL_SHARE  our share of that whole-electorate drift.
+    --   OWN_VOTE    ten per cent of the people who actually voted for us.
+    w.registered_voters * (w.t2024_turnout/100.0) * cp.leakage_factor    AS leak_all,
+    w.registered_voters * (w.t2024_turnout/100.0) * cp.leakage_factor
+      * w.our_pool_share                                                 AS leak_pool_share,
+    w.t2024_mkp * cp.leakage_factor                                      AS leak_own_vote,
+    cp.leakage_basis,
+    CASE cp.leakage_basis
+      WHEN 'ALL'        THEN w.registered_voters * (w.t2024_turnout/100.0) * cp.leakage_factor
+      WHEN 'POOL_SHARE' THEN w.registered_voters * (w.t2024_turnout/100.0) * cp.leakage_factor
+                             * w.our_pool_share
+      ELSE                   w.t2024_mkp * cp.leakage_factor
+    END                                                                  AS leakage_raw
   FROM v_ward_computed w
   CROSS JOIN control_panel cp
 )
@@ -52,6 +69,13 @@ SELECT
   -- different remedies, and a single total hides which one is biting
   ROUND(b.abstention_raw)                                   AS l_abstention_votes,
   ROUND(b.leakage_raw)                                      AS l_leakage_votes,
+
+  -- all three bases exposed, so switching the setting is an informed choice
+  -- rather than a leap, and so a dashboard can show the spread
+  b.leakage_basis,
+  ROUND(b.leak_all)                                         AS l_leakage_all,
+  ROUND(b.leak_pool_share)                                  AS l_leakage_pool_share,
+  ROUND(b.leak_own_vote)                                    AS l_leakage_own_vote,
 
   -- liability lines for the workstreams
   s.candidate_shortage,

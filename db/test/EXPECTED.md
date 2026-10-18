@@ -69,20 +69,23 @@ failure mode the view exists to surface.
 
 ## Window 7 — v_ward_eo (LGE peak basis)
 
-| ward | A | abstention | leakage | L | EO est |
-|---|---|---|---|---|---|
-| JHB-001 | 4350 | 2088 | 900 | 2988 | 1362 |
-| JHB-002 | 4714 | 2451 | 600 | 3051 | 1663 |
-| JHB-003 | 9000 | 4050 | 1250 | 5300 | 3700 |
+All three leakage bases are computed; `control_panel.leakage_basis` selects
+which one `eo_est_votes` follows. Default is OWN_VOTE.
+
+| ward | A | abstention | leak ALL | leak POOL_SHARE | leak OWN_VOTE | L | EO est |
+|---|---|---|---|---|---|---|---|
+| JHB-001 | 4350 | 2088 | 900 | 338 | **300** | 2388 | 1962 |
+| JHB-002 | 4714 | 2451 | 600 | 343 | **400** | 2851 | 1863 |
+| JHB-003 | 9000 | 4050 | 1250 | 750 | **900** | 4950 | 4050 |
 
 Worked example, JHB-001: A = 20000 × 0.58 × 0.375 = 4350. Abstention =
 4350 × (1 − 0.52) = 2088, measured from the last **local** turnout.
-Leakage = 20000 × 0.45 × 0.10 = 900. EO = 4350 − 2988 = 1362.
+Leakage on OWN_VOTE = 3000 × 0.10 = 300. EO = 4350 − 2388 = 1962.
 
-**The leakage term is on the wrong base** — see `db/AUDIT.md`. It charges
-us 10% of everyone who voted in 2024, not 10% of our own vote. It does not
-distort these three wards badly, but across the 523-ward dataset it drives
-430 of them to a negative EO.
+The same ward on ALL would be charged 20000 × 0.45 × 0.10 = 900 — three
+times as much, and most of it the rival's voters. Across the 523-ward
+dataset ALL drives 430 wards to a negative EO; the other two bases drive
+none. See `db/AUDIT.md`.
 
 ## Window 8 — v_priority_rank
 
@@ -102,8 +105,11 @@ the only Contest ward sat at 81.
 
 ## Window 9 — v_campaign_eo
 
-A 18064 · L 11339 · EO est 6725 · wards 3 · declared 0 · no candidate 1 ·
-people gap 8 · liquidatable T-shirts 300 · surplus 550.
+On OWN_VOTE: A 18064 · L 10189 · EO est 7875 · wards 3 · declared 0 ·
+no candidate 1 · people gap 8 · liquidatable T-shirts 300 · surplus 550.
+
+Leakage totals across the three bases: ALL 2750 · POOL_SHARE 1431 ·
+OWN_VOTE 1600.
 
 `calibration_error` is null because nothing is declared. Correct.
 
