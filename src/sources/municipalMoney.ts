@@ -182,8 +182,95 @@ export class MunicipalMoneyClient {
       }));
   }
 
+  /** Unauthorised, irregular, and fruitless and wasteful expenditure.
+   *
+   *  Three lines straight out of the audited annual financial statements.
+   *  For Johannesburg in 2024 they run to billions, and unlike a sentiment
+   *  score these are not an estimate of anything - they are what the
+   *  Auditor-General signed off. No amount_type dimension on this cube;
+   *  it is audited figures only, which is the whole point of it. */
+  async uifw(demarcationCode: string, financialYear: number): Promise<IncExpRow[]> {
+    const body = await this.get('/cubes/uifwexp/aggregate', {
+      aggregates: 'amount.sum',
+      cut: MunicipalMoneyClient.cut({
+        'demarcation.code': demarcationCode,
+        'financial_year_end.year': financialYear,
+      }),
+      drilldown: 'item.code|item.label',
+      page_size: '50',
+    });
+    const cells = (body as { cells?: Array<Record<string, unknown>> }).cells ?? [];
+    return cells
+      .filter((c) => c['amount.sum'] != null)
+      .map((c) => ({
+        demarcation_code: demarcationCode,
+        item_code: String(c['item.code']),
+        item_label: String(c['item.label'] ?? ''),
+        financial_year: financialYear,
+        amount: Number(c['amount.sum']),
+      }));
+  }
+
+  /** What was spent keeping existing infrastructure working.
+   *
+   *  The figure behind every pothole and burst pipe argument, and the one
+   *  that pairs with a refuse or water complaint more directly than revenue
+   *  does: revenue says what was billed, this says what was repaired. */
+  async repairsAndMaintenance(
+    demarcationCode: string, financialYear: number, amountType: string = AUDITED_ACTUAL,
+  ): Promise<number | null> {
+    const body = await this.get('/cubes/repmaint_v2/aggregate', {
+      aggregates: 'amount.sum',
+      cut: MunicipalMoneyClient.cut({
+        'demarcation.code': demarcationCode,
+        'financial_year_end.year': financialYear,
+        'amount_type.code': amountType,
+      }),
+      page_size: '1',
+    });
+    const summary = (body as { summary?: Record<string, unknown> }).summary;
+    const total = summary?.['amount.sum'];
+    return total == null ? null : Number(total);
+  }
+
+  /** The Auditor-General's opinion, and a link to the report itself. */
+  async auditOpinion(
+    demarcationCode: string, financialYear: number,
+  ): Promise<{ code: string; label: string; reportUrl: string | null } | null> {
+    const body = await this.get('/cubes/audit_opinions/facts', {
+      cut: MunicipalMoneyClient.cut({
+        'demarcation.code': demarcationCode,
+        'financial_year_end.year': financialYear,
+      }),
+      fields: 'opinion.code,opinion.label,opinion.report_url',
+      page_size: '1',
+    });
+    const row = ((body as { data?: Array<Record<string, unknown>> }).data ?? [])[0];
+    if (!row || row['opinion.code'] == null) return null;
+    return {
+      code: String(row['opinion.code']),
+      label: String(row['opinion.label'] ?? ''),
+      reportUrl: row['opinion.report_url'] == null ? null : String(row['opinion.report_url']),
+    };
+  }
+
   /** The URL a figure came from, recorded as provenance beside it. */
   static factsUrl(cube: string, demarcationCode: string, year: number): string {
     return `${BASE}/cubes/${cube}/aggregate?cut=demarcation.code:"${demarcationCode}"|financial_year_end.year:${year}`;
   }
 }
+
+/* Audit opinions are words, and service_fact stores numbers. Rather than add
+ * a text column for one source, the opinion is stored as its severity rank
+ * with the publisher's own wording kept verbatim beside it - so the dashboard
+ * can sort and colour by severity while still showing exactly what the
+ * Auditor-General said. An unrecognised code is skipped rather than guessed
+ * at: inventing a rank for an opinion we do not know is worse than a gap. */
+export const AUDIT_SEVERITY: Record<string, number> = {
+  unqualified: 0,            // clean
+  financially_unqualified: 1, // unqualified with findings
+  qualified: 2,
+  adverse: 3,
+  disclaimer: 4,
+  outstanding: 5,            // never submitted, which is its own answer
+};

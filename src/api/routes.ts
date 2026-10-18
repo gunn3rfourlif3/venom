@@ -1,5 +1,6 @@
 import { pool } from '../db.js';
 import { terrainGrid } from '../sources/terrain.js';
+import { FIELDS, readPanel, writePanel } from './controlPanel.js';
 import {
   HttpError, json, readJson, intParam, wardIdParam, enumParam, type Ctx,
 } from './http.js';
@@ -300,8 +301,87 @@ async function getTerrain(ctx: Ctx): Promise<void> {
   json(ctx.res, 200, { as_of: await asOf(), data: await terrainGrid(bbox, size) });
 }
 
+async function getControlPanel(ctx: Ctx): Promise<void> {
+  json(ctx.res, 200, {
+    as_of: await asOf(),
+    data: { fields: FIELDS, values: await readPanel() },
+  });
+}
+
+async function putControlPanel(ctx: Ctx): Promise<void> {
+  // These parameters move the headline number. Reading them is open to any
+  // signed-in account; changing them is not.
+  requireRole(ctx, 'admin');
+
+  const patch = await readJson<Record<string, unknown>>(ctx.req);
+  const { row, problems } = await writePanel(patch, ctx.userId ?? 'unknown');
+  if (problems.length > 0) { json(ctx.res, 422, { problems }); return; }
+
+  // The extract is computed from these numbers, so it is stale the moment
+  // they change. Refreshed here rather than left for someone to remember.
+  await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_campaign_extract');
+  json(ctx.res, 200, { as_of: await asOf(), data: row });
+}
+
+/** Everything the overview needs, in one round trip.
+ *
+ *  Six queries rather than six fetches: the screen is the first thing seen
+ *  after signing in and it should arrive whole rather than assembling itself
+ *  panel by panel. */
+async function getOverview(ctx: Ctx): Promise<void> {
+  const [campaign, act, issues, sources, sentiment, municipal] = await Promise.all([
+    pool.query('SELECT * FROM v_campaign_eo'),
+    // target_class and pressure_band are computed in v_ward_target, not
+    // carried on the extract, so the two are joined rather than guessed at.
+    pool.query(
+      `SELECT t.ward_id, t.municipality, t.recommended_box, t.target_class,
+              t.pressure_band, x.eo_est_votes, x.score_rank
+         FROM v_ward_target t
+         JOIN mv_campaign_extract x USING (ward_id)
+        WHERE t.target_class = 'ACT NOW'
+        ORDER BY x.score_rank NULLS LAST
+        LIMIT 8`),
+    pool.query(
+      `SELECT category::text AS category, sum(mentions)::int AS mentions,
+              round(avg(net_sentiment), 3)::float AS net
+         FROM issue_signal
+        WHERE observed_on > current_date - (
+                SELECT sentiment_window_days FROM control_panel WHERE id)
+        GROUP BY category ORDER BY mentions DESC`),
+    pool.query(
+      `SELECT source_id, label, status, last_ok_at, kind::text AS kind
+         FROM v_source_register
+        ORDER BY array_position(
+          ARRAY['Failing','Live','Never run','Not connected','Closed'], status), label`),
+    pool.query(
+      `SELECT count(DISTINCT ward_id)::int AS wards,
+              sum(mentions)::int AS mentions,
+              bool_and(source = 'SYNTHETIC') AS synthetic
+         FROM issue_signal`),
+    pool.query(
+      `SELECT m.name AS municipality, f.category::text AS category, f.value, f.financial_year
+         FROM service_fact f JOIN municipality m USING (demarcation_code)
+        WHERE f.metric LIKE 'service_charge_revenue.%'
+          AND f.financial_year = (SELECT max(financial_year) FROM service_fact)
+        ORDER BY f.value DESC`),
+  ]);
+
+  json(ctx.res, 200, {
+    as_of: await asOf(),
+    data: {
+      campaign: campaign.rows[0] ?? null,
+      act_now: act.rows,
+      issues: issues.rows,
+      sources: sources.rows,
+      sentiment: sentiment.rows[0] ?? null,
+      municipal: municipal.rows,
+    },
+  });
+}
+
 export const routes = {
   postLogin, postLogout, getMe, getWards, getWard, getTargets,
   getCampaign, getFloat, getDecisions, getDocuments, getIngestHealth,
-  getSentiment, getSearch, getCameras, getTerrain, authenticate,
+  getSentiment, getSearch, getCameras, getTerrain,
+  getControlPanel, putControlPanel, getOverview, authenticate,
 };

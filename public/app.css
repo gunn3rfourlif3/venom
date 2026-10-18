@@ -1,11 +1,20 @@
-/* Venom — ward ledger.
-   A statement, not a dashboard: lines in a ledger rather than a grid of
-   cards. Boldness is spent in exactly one place, the solid mark in the
-   left margin of an urgent line.
+/* Venom — ward campaign analytics.
+   One instrument, read at a glance. A left rail to move through it, panels
+   on a near-black field, and a single accent that always means the same
+   thing: ours.
 
-   The register is a precision instrument — restraint, fine rules, generous
-   air, confident numerals. Nothing is decorated; weight and spacing carry
-   the hierarchy. */
+   TWO THINGS CARRY THE IDENTITY and everything else stays quiet behind them.
+   The first is the numerals — a serif face for every quantity of votes or
+   people, sans for all other text. A serif figure on near-black is the one
+   thing here that does not look like every other analytics product, and it
+   suits a count of people better than a UI face does.
+   The second is the margin flag: a solid mark in the left margin of a line
+   that needs acting on. It is the only place a heavy mark is spent.
+
+   Colour carries meaning, never decoration. The accent is the campaign's own
+   green and appears on exactly four things: the current view, our side of a
+   quantity, a gain, and the primary action in a form. Nothing else is
+   allowed to be green, so green always answers the same question. */
 
 /* THEME. Dark is the base and light is the override, not the other way
    round. The register was designed dark and that is how it should arrive;
@@ -20,20 +29,23 @@
 :root {
   color-scheme: dark;
 
-  --paper:      #0d161d;
-  --surface:    #121d26;
-  --surface-2:  #16222c;
-  --ink:        #e7eef3;
-  --ink-2:      #9fb1be;
-  --ink-3:      #6e8292;
-  --rule:       #2a3b48;
-  --rule-hair:  #1d2c37;
-  --ours:       #4fb89b;
-  --theirs:     #e08b78;
-  --flag:       #e7eef3;
+  /* Blue-black rather than neutral near-black: it is where Venom already
+     was, and it keeps the accent reading as green rather than as lime on
+     charcoal. Every value measured against the two surfaces it sits on. */
+  --paper:      #080e13;   /* the field everything sits on */
+  --surface:    #0f1821;   /* a panel */
+  --surface-2:  #15212c;   /* nested, hover, input wells */
+  --ink:        #e9f0f5;   /* 16.9 : 1 */
+  --ink-2:      #9db0bd;   /*  8.7 : 1 */
+  --ink-3:      #718699;   /*  5.2 : 1 — still real text, not decoration */
+  --rule:       #223240;
+  --rule-hair:  #17232e;
+  --ours:       #43d9a3;   /* 10.8 : 1 — the accent, and it only means ours */
+  --theirs:     #e8927c;
+  --flag:       #e9f0f5;
   --focus:      #6aa9e0;
-  --lift:       0 1px 2px rgba(0, 0, 0, .35);
-  --lift-panel: -1px 0 0 var(--rule), -24px 0 48px rgba(0, 0, 0, .45);
+  --lift:       0 1px 2px rgba(0, 0, 0, .4);
+  --lift-panel: -1px 0 0 var(--rule), -24px 0 48px rgba(0, 0, 0, .5);
 
   --step--1: 0.75rem;
   --step-0:  0.8125rem;
@@ -42,25 +54,30 @@
   --step-3:  1.375rem;
   --figure:  clamp(2.75rem, 5.6vw, 4.25rem);
 
-  --gut: 24px;
+  --gut: 28px;
+  --rail: 208px;
+  /* One radius for panels, a tighter one for controls inside them. Two
+     values, not one on everything: the nesting is the hierarchy. */
+  --r-panel: 10px;
+  --r-control: 5px;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --paper:      #e9edf0;
+  --paper:      #eceff2;
   --surface:    #ffffff;
-  --surface-2:  #f4f7f9;
-  --ink:        #0f1d28;
-  --ink-2:      #47596a;
-  --ink-3:      #7c8d9b;
-  --rule:       #cbd5dc;
-  --rule-hair:  #e2e8ed;
-  --ours:       #1a6553;
-  --theirs:     #8f3527;
-  --flag:       #0f1d28;
+  --surface-2:  #f3f6f8;
+  --ink:        #0b1620;
+  --ink-2:      #44576a;
+  --ink-3:      #6b7f90;
+  --rule:       #cfd8df;
+  --rule-hair:  #e4eaee;
+  --ours:       #0f6b52;
+  --theirs:     #a33c22;
+  --flag:       #0b1620;
   --focus:      #2f6fab;
-  --lift:       0 1px 2px rgba(15, 29, 40, .05);
+  --lift:       0 1px 2px rgba(15, 29, 40, .06);
   --lift-panel: -1px 0 0 var(--rule), -24px 0 48px rgba(15, 29, 40, .10);
 }
 
@@ -158,15 +175,10 @@ button, input, select { font: inherit; color: inherit; }
   flex-wrap: wrap;
 }
 .scope { color: var(--ink-3); font-size: var(--step-0); }
-.views { display: flex; gap: 1px; margin-left: auto; }
-.views button {
-  border: 0; background: none;
-  padding: 5px 11px; border-radius: 3px;
-  cursor: pointer; color: var(--ink-2); font-size: var(--step-0);
-  transition: background-color 120ms ease, color 120ms ease;
-}
-.views button:hover { background: var(--surface-2); color: var(--ink); }
-.views button.is-current { background: var(--ink); color: var(--surface); }
+/* The navigation moved from a horizontal bar to the rail. The old .views
+   rules are gone rather than overridden: margin-left:auto was still pushing
+   the whole rail 35px off the left edge inside its own grid column, which is
+   the kind of fault that survives for months because it looks like padding. */
 
 .live { display: flex; align-items: center; gap: 7px; font-size: var(--step--1); color: var(--ink-3); }
 .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
@@ -672,3 +684,296 @@ button, input, select { font: inherit; color: inherit; }
 .vs-controls input[type="range"] { width: 11rem; accent-color: var(--focus); }
 .vs-controls output { font-variant-numeric: tabular-nums; min-width: 2.2rem; }
 .vs-attrib { margin-left: auto; color: var(--ink-3); }
+
+/* ============================================ the shell: rail + stage */
+
+/* The app is a two-column frame that never scrolls as a whole: the rail
+   stays put and only the stage moves, so where you are is always visible. */
+#app.shell {
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+  height: 100vh;
+  background: var(--paper);
+}
+
+.rail {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 18px 12px 14px;
+  border-right: 1px solid var(--rule-hair);
+  background: var(--surface);
+  overflow-y: auto;
+}
+.rail .wordmark { font-size: var(--step-2); padding: 0 8px 4px; }
+.rail .scope {
+  padding: 0 8px 16px; font-size: var(--step--1); color: var(--ink-3);
+  line-height: 1.35;
+}
+/* Section headings in the rail are sentence case, not tracked-out capitals:
+   the groups are few and short enough to read as groups without shouting. */
+.rail-group {
+  padding: 14px 8px 5px; font-size: var(--step--1); color: var(--ink-3);
+}
+.rail-group:first-of-type { padding-top: 2px; }
+.rail button[data-view] {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; text-align: left;
+  padding: 7px 9px; border: 0; border-radius: var(--r-control);
+  background: none; color: var(--ink-2);
+  font: inherit; font-size: var(--step-0); cursor: pointer;
+}
+.rail button[data-view]:hover { background: var(--surface-2); color: var(--ink); }
+.rail button[data-view].is-current { background: var(--surface-2); color: var(--ink); }
+/* The accent marks the current view and nothing else in the rail. */
+.rail button[data-view].is-current::before {
+  content: ''; width: 3px; height: 15px; border-radius: 2px;
+  background: var(--ours); margin-left: -9px; margin-right: 6px;
+}
+.rail button[data-view]:not(.is-current)::before {
+  content: ''; width: 3px; height: 15px; margin-left: -9px; margin-right: 6px;
+}
+.rail-foot { margin-top: auto; padding: 12px 8px 0; display: grid; gap: 9px; }
+
+.stage { overflow-y: auto; display: flex; flex-direction: column; }
+
+/* The bar above the stage carries search and session, not navigation. */
+.topbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 13px var(--gut);
+  border-bottom: 1px solid var(--rule-hair);
+  background: var(--surface);
+  position: sticky; top: 0; z-index: 10;
+}
+
+.page-head { padding: 24px var(--gut) 4px; }
+.page-head h1 {
+  margin: 0; font-size: var(--step-3); font-weight: 600; letter-spacing: -0.012em;
+}
+.page-head p { margin: 5px 0 0; font-size: var(--step-0); color: var(--ink-3); }
+
+/* ------------------------------------------------------------ panels */
+
+.grid { display: grid; gap: 14px; padding: 18px var(--gut) var(--gut); }
+.grid-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.grid-hero { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
+@media (max-width: 1080px) {
+  .grid-2, .grid-hero { grid-template-columns: minmax(0, 1fr); }
+  #app.shell { grid-template-columns: 64px minmax(0, 1fr); }
+  .rail .wordmark, .rail .scope, .rail-group, .rail button span { display: none; }
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--rule-hair);
+  border-radius: var(--r-panel);
+  padding: 17px 18px;
+  min-width: 0;
+}
+.panel-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; margin-bottom: 14px;
+}
+.panel-head h2 { margin: 0; font-size: var(--step-1); font-weight: 600; }
+.panel-head .note { font-size: var(--step--1); color: var(--ink-3); }
+
+/* ------------------------------------------------- the headline panel */
+
+/* The thesis of the whole product is one subtraction, so the hero shows the
+   subtraction rather than three numbers side by side: the full bar is what
+   could be had, the cut-away is what is being lost, what remains is the
+   answer. */
+/* The panel is as tall as the ranked list beside it, so the three parts
+   spread rather than bunching at the top and leaving a hole. */
+.headline { display: grid; gap: 16px; align-content: space-between; }
+.headline-figure {
+  font-family: Newsreader, Georgia, serif; font-weight: 300;
+  font-size: var(--figure); line-height: .92; letter-spacing: -0.018em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ours);
+}
+.headline-figure.is-negative { color: var(--theirs); }
+.headline-label { font-size: var(--step-0); color: var(--ink-3); margin-top: 7px; }
+
+.subtraction { display: grid; gap: 7px; }
+.sub-bar {
+  display: flex; height: 12px; border-radius: 3px; overflow: hidden;
+  background: var(--surface-2);
+}
+.sub-bar i { display: block; height: 100%; }
+.sub-bar .is-keep { background: var(--ours); }
+.sub-bar .is-lose { background: var(--theirs); opacity: .55; }
+.sub-legend {
+  display: flex; flex-wrap: wrap; gap: 4px 20px;
+  font-size: var(--step--1); color: var(--ink-3);
+}
+.sub-legend b {
+  color: var(--ink-2); font-weight: 500;
+  font-variant-numeric: tabular-nums; margin-right: 5px;
+}
+
+/* ---------------------------------------------------------- stat strip */
+
+.stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1px; background: var(--rule-hair);
+  border: 1px solid var(--rule-hair); border-radius: var(--r-panel);
+  overflow: hidden;
+}
+.stat { background: var(--surface); padding: 14px 16px; display: grid; gap: 3px; }
+.stat-value {
+  font-family: Newsreader, Georgia, serif; font-weight: 300;
+  font-size: var(--step-3); line-height: 1.05;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.stat-value.is-negative { color: var(--theirs); }
+.stat-value.is-good { color: var(--ours); }
+.stat-label { font-size: var(--step--1); color: var(--ink-3); }
+
+/* --------------------------------------------------------- ranked list */
+
+.rank-list { display: grid; }
+.rank-row {
+  display: grid; grid-template-columns: 3px 1fr auto auto;
+  align-items: center; gap: 11px;
+  width: 100%; text-align: left; background: none; border: 0;
+  border-bottom: 1px solid var(--rule-hair);
+  padding: 9px 2px; color: var(--ink); font: inherit; font-size: var(--step-0);
+  cursor: pointer;
+}
+.rank-row:last-child { border-bottom: 0; }
+.rank-row:hover { background: var(--surface-2); }
+/* The margin flag: the only heavy mark in the interface. */
+.rank-row i { display: block; height: 20px; border-radius: 2px; background: transparent; }
+.rank-row.is-urgent i { background: var(--theirs); }
+.rank-ward { display: grid; gap: 1px; min-width: 0; }
+.rank-ward b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.rank-ward span {
+  font-size: var(--step--1); color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rank-num { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+/* A quantity bar that reads left to right at a glance. */
+.qbars { display: grid; gap: 9px; }
+.qbar { display: grid; grid-template-columns: 6.5rem 1fr 4rem; align-items: center; gap: 11px; }
+.qbar-label { font-size: var(--step-0); color: var(--ink-2); }
+/* Both are spans so they can sit inside a grid cell without a wrapper, which
+   means display:block is required: an inline element ignores height, and the
+   first version rendered every bar as an empty track. */
+.qbar-track {
+  display: block; height: 7px; background: var(--surface-2);
+  border-radius: 4px; overflow: hidden;
+}
+.qbar-fill { display: block; height: 100%; background: var(--ours); border-radius: 4px; }
+.qbar-fill.is-warn { background: var(--theirs); }
+.qbar-num {
+  font-size: var(--step-0); color: var(--ink-2); text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------- the pills */
+
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 20px;
+  font-size: var(--step--1); line-height: 1.6;
+  background: var(--surface-2); color: var(--ink-2);
+}
+.pill.is-good { color: var(--ours); }
+.pill.is-warn { color: var(--theirs); }
+.pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* ======================================================= control panel */
+
+/* These fields move the campaign's headline number, so the screen is built
+   to slow a hand down rather than speed it up: grouped, each with a line
+   saying what it does, a visible unsaved state, and one explicit save. */
+.cp-groups { display: grid; gap: 14px; }
+.cp-group { }
+.cp-fields { display: grid; gap: 1px; background: var(--rule-hair); }
+.cp-field {
+  display: grid; grid-template-columns: minmax(0, 1fr) 11rem;
+  gap: 4px 18px; align-items: center;
+  background: var(--surface); padding: 12px 2px;
+}
+.cp-field label { font-size: var(--step-0); color: var(--ink); }
+.cp-field .cp-help {
+  grid-column: 1; font-size: var(--step--1); color: var(--ink-3);
+  line-height: 1.45; max-width: 52ch;
+}
+.cp-field input, .cp-field select {
+  grid-column: 2; grid-row: 1 / 3;
+  width: 100%; padding: 7px 9px;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: var(--r-control);
+  font: inherit; font-size: var(--step-0);
+  font-variant-numeric: tabular-nums;
+}
+.cp-field input:focus, .cp-field select:focus {
+  outline: 2px solid var(--focus); outline-offset: -1px; border-color: var(--focus);
+}
+.cp-field.is-dirty input, .cp-field.is-dirty select { border-color: var(--ours); }
+.cp-field.is-bad input, .cp-field.is-bad select { border-color: var(--theirs); }
+.cp-error { grid-column: 1 / -1; font-size: var(--step--1); color: var(--theirs); }
+/* The choice fields carry a sentence each, because picking the wrong one
+   here changes the headline number by hundreds of thousands of votes. */
+.cp-choice-help {
+  grid-column: 1 / -1; font-size: var(--step--1); color: var(--ink-3);
+  padding: 2px 0 0 0; border-left: 2px solid var(--rule); padding-left: 10px;
+}
+.cp-bar {
+  position: sticky; bottom: 0;
+  display: flex; align-items: center; gap: 14px;
+  margin: 16px calc(-1 * var(--gut)) 0;
+  padding: 13px var(--gut);
+  background: var(--surface); border-top: 1px solid var(--rule);
+}
+.cp-bar .cp-state { font-size: var(--step-0); color: var(--ink-3); margin-right: auto; }
+.cp-bar .cp-state.is-dirty { color: var(--ink-2); }
+.btn {
+  padding: 7px 15px; border-radius: var(--r-control);
+  border: 1px solid var(--rule); background: var(--surface-2);
+  color: var(--ink-2); font: inherit; font-size: var(--step-0); cursor: pointer;
+}
+.btn:hover { color: var(--ink); border-color: var(--ink-3); }
+.btn-primary {
+  background: var(--ours); border-color: var(--ours); color: var(--paper);
+  font-weight: 500;
+}
+.btn-primary:hover { filter: brightness(1.08); color: var(--paper); }
+.btn:disabled, .btn-primary:disabled {
+  opacity: .45; cursor: not-allowed; filter: none;
+}
+
+/* The source strip on the overview: compact, one row, status by dot. */
+.src-strip { display: grid; gap: 1px; background: var(--rule-hair); }
+.src-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center;
+  background: var(--surface); padding: 8px 2px; font-size: var(--step-0);
+}
+.src-row .src-when { font-size: var(--step--1); color: var(--ink-3); }
+
+/* Rail foot: left-aligned with the nav items above it, not centred. */
+.rail-foot .theme { justify-self: start; min-width: 0; }
+.rail-foot .live { padding-left: 1px; }
+
+/* Panels take their natural height. Forcing a short panel to match a tall
+   one beside it just moves its content apart to fill the hole. */
+.grid-2, .grid-hero { align-items: start; }
+
+/* Issue volume and municipal revenue are not "ours", so they do not get the
+   accent — green answers exactly one question in this interface. Volume is
+   neutral; only a reading past the negative threshold takes the warm colour. */
+.qbar-fill { background: var(--ink-3); }
+.qbar-fill.is-warn { background: var(--theirs); }
+.qbar-fill.is-ours { background: var(--ours); }
+
+/* The control panel reads as label, explanation, then the field it belongs
+   to. Across a 1600px panel the input ends up a screen away from its own
+   help text, so the form is capped at a readable measure. */
+#view-settings .panel { max-width: 54rem; }
+#view-settings .cp-bar { max-width: none; }
+.btn:disabled, .btn-primary:disabled { opacity: .35; }
+/* Three Johannesburg rows in a row say nothing without the service they
+   are counting. */
+.qbar-label { line-height: 1.25; }
+.qbar-sub { display: block; font-size: var(--step--1); color: var(--ink-3); }

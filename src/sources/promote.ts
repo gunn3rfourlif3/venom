@@ -1,6 +1,6 @@
 import { withTransaction } from '../db.js';
 import {
-  MunicipalMoneyClient, SERVICE_ITEMS, AUDITED_ACTUAL,
+  MunicipalMoneyClient, SERVICE_ITEMS, AUDITED_ACTUAL, AUDIT_SEVERITY,
   type MunicipalityRow, type IncExpRow,
 } from './municipalMoney.js';
 import type { PoolClient } from 'pg';
@@ -124,6 +124,41 @@ export async function promoteServiceRevenue(
   return written;
 }
 
+/** The three UIFW lines, kept under their own metric names so a chart can
+ *  separate "spent without authority" from "spent on nothing". */
+export async function promoteUifw(
+  client: PoolClient, rows: IncExpRow[],
+): Promise<number> {
+  let written = 0;
+  for (const row of rows) {
+    written += await promoteSimpleFact(
+      client, row.demarcation_code, row.financial_year,
+      `uifw.${row.item_code}`, row.amount, 'ZAR', row.item_label,
+      MunicipalMoneyClient.factsUrl('uifwexp', row.demarcation_code, row.financial_year));
+  }
+  return written;
+}
+
+/** One fact with no grievance category: governance and upkeep figures are
+ *  about the municipality as a whole, not about water or refuse. */
+export async function promoteSimpleFact(
+  client: PoolClient, demarcationCode: string, financialYear: number,
+  metric: string, value: number, unit: string,
+  publisherLabel: string, sourceUrl: string,
+): Promise<number> {
+  const result = await client.query(
+    `INSERT INTO service_fact
+       (source_id, demarcation_code, financial_year, metric, category,
+        value, unit, publisher_label, source_url, retrieved_at)
+     VALUES ('municipal_money', $1, $2, $3, NULL, $4, $5, $6, $7, now())
+     ON CONFLICT (source_id, demarcation_code, financial_year, metric) DO UPDATE
+       SET value = EXCLUDED.value, unit = EXCLUDED.unit,
+           publisher_label = EXCLUDED.publisher_label,
+           source_url = EXCLUDED.source_url, retrieved_at = now()`,
+    [demarcationCode, financialYear, metric, value, unit, publisherLabel, sourceUrl]);
+  return result.rowCount ?? 0;
+}
+
 /** One pass: the municipality list, then the service lines for each
  *  ward-holding municipality across the requested years.
  *
@@ -148,6 +183,34 @@ export async function runMunicipalMoney(
         const rows = await client.incomeAndExpenditure(m.demarcation_code, year, AUDITED_ACTUAL);
         seen += rows.length;
         facts += await promoteServiceRevenue(c, rows);
+
+        // Governance and upkeep. These answer questions revenue cannot:
+        // what was repaired, what was spent without authority, and what the
+        // Auditor-General made of the books.
+        const uifw = await client.uifw(m.demarcation_code, year);
+        seen += uifw.length;
+        facts += await promoteUifw(c, uifw);
+
+        const repairs = await client.repairsAndMaintenance(m.demarcation_code, year);
+        if (repairs !== null) {
+          seen += 1;
+          facts += await promoteSimpleFact(c, m.demarcation_code, year,
+            'repairs_and_maintenance', repairs, 'ZAR',
+            'Repairs and maintenance, audited actual',
+            MunicipalMoneyClient.factsUrl('repmaint_v2', m.demarcation_code, year));
+        }
+
+        const opinion = await client.auditOpinion(m.demarcation_code, year);
+        if (opinion) {
+          seen += 1;
+          const severity = AUDIT_SEVERITY[opinion.code];
+          if (severity !== undefined) {
+            facts += await promoteSimpleFact(c, m.demarcation_code, year,
+              'audit_opinion_severity', severity, 'rank',
+              opinion.label, opinion.reportUrl
+                ?? MunicipalMoneyClient.factsUrl('audit_opinions', m.demarcation_code, year));
+          }
+        }
       }
     }
 

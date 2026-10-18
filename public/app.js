@@ -67,54 +67,9 @@ $('signout').addEventListener('click', async () => {
   location.reload();
 });
 
-/* -------------------------------------------------------- statement */
-
-/** The statement is behind a real wait: the ledger fetches two thousand rows
- *  alongside it, so the figures land a couple of seconds after the frame does.
- *  The loader runs on first load only — once figures are on screen a later
- *  refresh replaces them in place, and re-skeletoning would read as a fault. */
-function statementSettled() {
-  const s = $('statement');
-  s.classList.remove('is-loading');
-  s.setAttribute('aria-busy', 'false');
-}
-
-async function loadStatement() {
-  let data, as_of;
-  try {
-    ({ data, as_of } = await api('/api/campaign'));
-  } catch (error) {
-    statementSettled();
-    for (const id of ['fig-a', 'fig-l', 'fig-eo']) $(id).textContent = NO_VALUE;
-    $('statement-meta').innerHTML =
-      `<div><dt>Statement</dt><dd>could not be read: ${esc(error.message)}</dd></div>`;
-    return;
-  }
-  statementSettled();
-  if (!data) {
-    for (const id of ['fig-a', 'fig-l', 'fig-eo']) $(id).textContent = NO_VALUE;
-    $('statement-meta').innerHTML =
-      '<div><dt>Statement</dt><dd>nothing ingested yet</dd></div>';
-    return;
-  }
-  $('fig-a').textContent = num(data.a_total_votes);
-  $('fig-l').textContent = num(data.l_total_votes);
-  const eo = $('fig-eo');
-  eo.textContent = num(data.eo_est_votes);
-  eo.classList.toggle('is-negative', Number(data.eo_est_votes) < 0);
-
-  const basis = { ALL: 'all 2024 voters', POOL_SHARE: 'our share of the pool', OWN_VOTE: 'our own voters' };
-  const meta = [
-    ['Wards', num(data.wards_total)],
-    ['Declared', `${num(data.wards_declared)} of ${num(data.wards_total)}`],
-    ['Without a candidate', num(data.wards_no_candidate)],
-    ['People short', num(data.people_gap_total)],
-    ['Leakage charged against', basis[data.leakage_basis] ?? data.leakage_basis],
-    ['As of', as_of ? new Date(as_of).toLocaleString('en-ZA') : NO_VALUE],
-  ];
-  $('statement-meta').innerHTML = meta
-    .map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
-}
+/* The three headline figures now live on the overview, which fetches them
+   with everything else in one round trip. The old standalone statement strip
+   and its loader are gone with it: one screen, one read. */
 
 /* ----------------------------------------------------------- ledger */
 
@@ -643,7 +598,8 @@ async function loadHealth() {
 
 /* ------------------------------------------------------------ views */
 
-const VIEWS = ['wards', 'sentiment', 'decisions', 'viewshed', 'float', 'health'];
+const VIEWS = ['overview', 'wards', 'sentiment', 'decisions', 'viewshed',
+               'float', 'health', 'settings'];
 
 function showView(view) {
   document.querySelectorAll('.views button').forEach((b) =>
@@ -654,12 +610,266 @@ function showView(view) {
   // running behind a hidden pane burns a core for nothing.
   if (view !== 'viewshed') window.VenomViewshed?.hide();
 
+  if (view === 'overview') loadOverview();
   if (view === 'sentiment') loadSentiment();
   if (view === 'decisions') loadDecisions();
   if (view === 'float') loadFloat();
   if (view === 'health') loadHealth();
   if (view === 'viewshed') loadViewshed();
+  if (view === 'settings') loadControlPanel();
 }
+
+/* -------------------------------------------------------- overview */
+
+const ISSUE_MAX_BARS = 8;
+
+async function loadOverview() {
+  let data;
+  try {
+    ({ data } = await api('/api/overview'));
+  } catch (error) {
+    $('ov-sub').textContent = `Could not read the overview: ${error.message}`;
+    return;
+  }
+
+  const c = data.campaign;
+  if (!c) {
+    $('ov-sub').textContent = 'Nothing ingested yet. Run the baseline fetch once IEC credentials are issued.';
+    return;
+  }
+
+  const potential = Number(c.a_total_votes);
+  const eroding = Number(c.l_total_votes);
+  const eo = Number(c.eo_est_votes);
+
+  $('ov-sub').textContent =
+    `${num(c.wards_total)} wards in Gauteng. ${num(c.wards_declared)} declared. `
+    + `leakage charged against ${LEAKAGE_WORDS[c.leakage_basis] ?? c.leakage_basis}`;
+
+  const eoEl = $('ov-eo');
+  eoEl.textContent = num(eo);
+  eoEl.classList.toggle('is-negative', eo < 0);
+
+  // The bar is the subtraction: the whole width is what could be had, the
+  // dimmed part is what is being lost, the accent is what survives it.
+  const keep = potential > 0 ? Math.max(0, Math.min(1, eo / potential)) : 0;
+  $('ov-bar').innerHTML =
+    `<i class="is-keep" style="width:${(keep * 100).toFixed(1)}%"></i>`
+    + `<i class="is-lose" style="width:${((1 - keep) * 100).toFixed(1)}%"></i>`;
+  $('ov-legend').innerHTML =
+    `<span><b>${num(potential)}</b>could be had</span>`
+    + `<span><b>&minus;${num(eroding)}</b>eroding</span>`
+    + `<span><b>${num(eo)}</b>expected</span>`;
+
+  $('ov-stats').innerHTML = [
+    ['Without a candidate', num(c.wards_no_candidate), Number(c.wards_no_candidate) > 0],
+    ['People short', num(c.people_gap_total), Number(c.people_gap_total) > 0],
+    ['Wards with signal', num(data.sentiment?.wards ?? 0), false],
+    ['Act now', num(data.act_now.length), false],
+  ].map(([label, value, bad]) =>
+    `<div class="stat"><span class="stat-value${bad ? ' is-negative' : ''}">${esc(value)}</span>
+       <span class="stat-label">${esc(label)}</span></div>`).join('');
+
+  // Act now
+  $('ov-act-note').textContent = data.act_now.length
+    ? 'highest priority first' : '';
+  $('ov-act').innerHTML = data.act_now.length ? data.act_now.map((w) => `
+    <button class="rank-row${w.pressure_band === 'HIGH' ? ' is-urgent' : ''}" data-ward="${esc(w.ward_id)}">
+      <i aria-hidden="true"></i>
+      <span class="rank-ward"><b>${esc(w.ward_id)}</b><span>${esc(w.municipality)}</span></span>
+      <span class="pill">${esc(w.recommended_box ?? '—')}</span>
+      <span class="rank-num">${num(w.eo_est_votes)}</span>
+    </button>`).join('')
+    : '<p class="empty">No ward is marked act-now under the current settings.</p>';
+
+  // Pressure by issue
+  const issues = data.issues.slice(0, ISSUE_MAX_BARS);
+  const issueMax = Math.max(1, ...issues.map((i) => Number(i.mentions)));
+  $('ov-issues-note').textContent = data.sentiment?.synthetic
+    ? 'synthetic data' : `${num(data.sentiment?.mentions ?? 0)} mentions`;
+  $('ov-issues').innerHTML = issues.length ? issues.map((i) => `
+    <div class="qbar">
+      <span class="qbar-label">${esc(i.category)}</span>
+      <span class="qbar-track"><span class="qbar-fill${Number(i.net) < -0.3 ? ' is-warn' : ''}"
+        style="width:${((Number(i.mentions) / issueMax) * 100).toFixed(1)}%"></span></span>
+      <span class="qbar-num">${num(i.mentions)}</span>
+    </div>`).join('')
+    : '<p class="empty">No sentiment signal in the window.</p>';
+
+  // Municipal finance, newest audited year
+  const muni = data.municipal.slice(0, 8);
+  const muniMax = Math.max(1, ...muni.map((m) => Number(m.value)));
+  $('ov-municipal').innerHTML = muni.length ? muni.map((m) => `
+    <div class="qbar">
+      <span class="qbar-label">${esc(m.municipality.replace(/^City of /, ''))}
+        <span class="qbar-sub">${esc(m.category ?? '')}</span></span>
+      <span class="qbar-track"><span class="qbar-fill"
+        style="width:${((Number(m.value) / muniMax) * 100).toFixed(1)}%"></span></span>
+      <span class="qbar-num">R${(Number(m.value) / 1e9).toFixed(1)}bn</span>
+    </div>`).join('')
+    : '<p class="empty">Run <code>npm run sources:official</code> to load Treasury figures.</p>';
+
+  // Sources
+  const live = data.sources.filter((s) => s.status === 'Live').length;
+  $('ov-src-note').textContent = `${live} of ${data.sources.length} connected`;
+  $('ov-sources').innerHTML = data.sources.map((s) => `
+    <div class="src-row">
+      <span>${esc(s.label)}</span>
+      <span class="src-when">${s.last_ok_at
+        ? new Date(s.last_ok_at).toLocaleDateString('en-ZA') : 'never'}</span>
+      <span class="pill${s.status === 'Live' ? ' is-good' : s.status === 'Failing' ? ' is-warn' : ''}">
+        <span class="pill-dot"></span>${esc(s.status.toLowerCase())}</span>
+    </div>`).join('');
+}
+
+const LEAKAGE_WORDS = {
+  ALL: 'all 2024 voters', POOL_SHARE: 'our share of the pool', OWN_VOTE: 'our own voters',
+};
+
+$('ov-act').addEventListener('click', (e) => {
+  const row = e.target.closest('.rank-row');
+  if (row) { showView('wards'); openDossier(row.dataset.ward); }
+});
+
+/* ---------------------------------------------------- control panel */
+
+let cpValues = {};
+let cpFields = [];
+
+function cpDirty() {
+  const form = $('cp-form');
+  return cpFields.filter((f) => {
+    const el = form.elements[f.key];
+    if (!el) return false;
+    return String(el.value) !== String(cpValues[f.key]);
+  });
+}
+
+function cpRefreshState() {
+  const dirty = cpDirty();
+  for (const field of cpFields) {
+    const wrap = document.getElementById(`cp-wrap-${field.key}`);
+    if (wrap) wrap.classList.toggle('is-dirty', dirty.some((d) => d.key === field.key));
+  }
+  const state = $('cp-state');
+  state.textContent = dirty.length === 0
+    ? 'No changes'
+    : `${dirty.length} change${dirty.length === 1 ? '' : 's'} not saved`;
+  state.classList.toggle('is-dirty', dirty.length > 0);
+  $('cp-save').disabled = dirty.length === 0 || state.dataset.readonly === 'true';
+  $('cp-reset').disabled = dirty.length === 0;
+}
+
+async function loadControlPanel() {
+  const { data } = await api('/api/control-panel');
+  cpFields = data.fields;
+  cpValues = data.values;
+
+  const groups = [...new Set(cpFields.map((f) => f.group))];
+  $('cp-groups').innerHTML = groups.map((group) => `
+    <div class="cp-group">
+      <div class="panel-head"><h2>${esc(group)}</h2></div>
+      <div class="cp-fields">
+        ${cpFields.filter((f) => f.group === group).map(cpFieldHtml).join('')}
+      </div>
+    </div>`).join('');
+
+  const readonly = state.user?.role !== 'admin';
+  $('cp-state').dataset.readonly = String(readonly);
+  if (readonly) {
+    for (const el of $('cp-form').elements) el.disabled = true;
+    $('cp-state').textContent = `Read only — your account is a ${state.user?.role ?? 'viewer'}.`;
+  }
+  cpRefreshState();
+}
+
+function cpFieldHtml(f) {
+  const value = cpValues[f.key];
+  const control = f.kind === 'choice'
+    ? `<select name="${esc(f.key)}" id="cp-${esc(f.key)}">${f.choices.map((c) =>
+        `<option value="${esc(c.value)}"${String(value) === c.value ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select>`
+    : `<input type="number" name="${esc(f.key)}" id="cp-${esc(f.key)}"
+         value="${esc(String(value ?? ''))}" min="${f.min ?? ''}" max="${f.max ?? ''}"
+         step="${f.step ?? 'any'}" inputmode="decimal">`;
+
+  const chosen = f.kind === 'choice'
+    ? f.choices.find((c) => c.value === String(value))
+    : null;
+
+  return `<div class="cp-field" id="cp-wrap-${esc(f.key)}">
+      <label for="cp-${esc(f.key)}">${esc(f.label)}</label>
+      ${control}
+      <p class="cp-help">${esc(f.help)}</p>
+      ${chosen ? `<p class="cp-choice-help" id="cp-chosen-${esc(f.key)}">${esc(chosen.help)}</p>` : ''}
+    </div>`;
+}
+
+$('cp-form').addEventListener('input', (e) => {
+  // A choice field explains itself as it changes, so the consequence is
+  // visible before the save rather than after it.
+  const field = cpFields.find((f) => f.key === e.target.name);
+  if (field?.kind === 'choice') {
+    const note = document.getElementById(`cp-chosen-${field.key}`);
+    const chosen = field.choices.find((c) => c.value === e.target.value);
+    if (note && chosen) note.textContent = chosen.help;
+  }
+  cpRefreshState();
+});
+
+$('cp-reset').addEventListener('click', () => { loadControlPanel(); });
+
+$('cp-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const dirty = cpDirty();
+  if (dirty.length === 0) return;
+
+  const patch = {};
+  for (const f of dirty) {
+    const raw = $('cp-form').elements[f.key].value;
+    patch[f.key] = f.kind === 'choice' ? raw : Number(raw);
+  }
+
+  $('cp-save').disabled = true;
+  $('cp-state').textContent = 'Saving…';
+  for (const f of cpFields) {
+    document.getElementById(`cp-wrap-${f.key}`)?.classList.remove('is-bad');
+    document.getElementById(`cp-err-${f.key}`)?.remove();
+  }
+
+  try {
+    const response = await fetch('/api/control-panel', {
+      method: 'PUT', credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+
+    if (response.status === 422) {
+      const { problems } = await response.json();
+      for (const p of problems) {
+        const wrap = document.getElementById(`cp-wrap-${p.key}`);
+        if (!wrap) continue;
+        wrap.classList.add('is-bad');
+        wrap.insertAdjacentHTML('beforeend',
+          `<p class="cp-error" id="cp-err-${esc(p.key)}">${esc(p.message)}</p>`);
+      }
+      $('cp-state').textContent = 'Not saved — see the fields marked below.';
+      $('cp-save').disabled = false;
+      return;
+    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const { data } = await response.json();
+    cpValues = data;
+    $('cp-state').textContent = 'Saved. The model has been recomputed.';
+    cpRefreshState();
+    // Everything downstream reads these numbers, so the overview is wrong
+    // until it is read again.
+    if (!$('view-overview').hidden) loadOverview();
+  } catch (error) {
+    $('cp-state').textContent = `Not saved: ${error.message}`;
+    $('cp-save').disabled = false;
+  }
+});
 
 document.querySelector('.views').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-view]'); if (!btn) return;
@@ -827,7 +1037,7 @@ function connectLive() {
   });
   // The push carries an identifier, never a value: read back through the
   // same queries used on load so the screen cannot drift from the database.
-  source.addEventListener('extract_stale', () => { loadStatement(); loadWards(); });
+  source.addEventListener('extract_stale', () => { loadOverview(); loadWards(); });
   source.addEventListener('ward_changed', () => { loadWards(); });
   source.onerror = () => {
     el.className = 'live is-down'; $('live-text').textContent = 'reconnecting';
@@ -838,7 +1048,10 @@ function connectLive() {
 
 async function start() {
   $('who').textContent = `${state.user.display_name ?? state.user.user_id}, ${state.user.role}`;
-  await Promise.all([loadStatement(), loadWards()]);
+  // Overview first: it is the screen that is showing. The ledger loads
+  // behind it so switching to Wards is instant.
+  await loadOverview();
+  loadWards();
   connectLive();
 }
 

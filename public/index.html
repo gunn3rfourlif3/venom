@@ -41,18 +41,37 @@
   </form>
 </div>
 
-<div id="app" hidden>
-  <header class="topbar">
+<div id="app" class="shell" hidden>
+  <nav class="rail views" aria-label="Views">
     <span class="wordmark">Venom</span>
-    <span class="scope">Gauteng, 2026 municipal elections</span>
-    <nav class="views">
-      <button data-view="wards" class="is-current">Wards</button>
-      <button data-view="sentiment">Sentiment</button>
-      <button data-view="decisions">Decisions</button>
-      <button data-view="viewshed">Viewshed</button>
-      <button data-view="float">Float</button>
-      <button data-view="health">Sources</button>
-    </nav>
+    <span class="scope">Gauteng<br>2026 municipal elections</span>
+
+    <p class="rail-group">Campaign</p>
+    <button data-view="overview" class="is-current"><span>Overview</span></button>
+    <button data-view="wards"><span>Wards</span></button>
+    <button data-view="decisions"><span>Decisions</span></button>
+    <button data-view="float"><span>Float</span></button>
+
+    <p class="rail-group">Listening</p>
+    <button data-view="sentiment"><span>Sentiment</span></button>
+    <button data-view="viewshed"><span>Viewshed</span></button>
+
+    <p class="rail-group">System</p>
+    <button data-view="health"><span>Sources</span></button>
+    <button data-view="settings"><span>Control panel</span></button>
+
+    <div class="rail-foot">
+      <span class="live" id="live" title="Live connection">
+        <span class="live-dot"></span><span id="live-text">connecting</span>
+      </span>
+      <button class="theme" id="theme" title="Theme" aria-label="Theme: dark">
+        <span id="theme-text">Dark</span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="stage">
+  <header class="topbar">
     <form class="search" id="search" role="search" autocomplete="off">
       <input id="search-input" type="search" placeholder="Search wards, documents, decisions"
              aria-label="Search" aria-expanded="false" aria-controls="search-results"
@@ -60,41 +79,93 @@
       <kbd class="search-key" aria-hidden="true">/</kbd>
       <div class="search-results" id="search-results" role="listbox" hidden></div>
     </form>
-    <span class="live" id="live" title="Live connection">
-      <span class="live-dot"></span><span id="live-text">connecting</span>
-    </span>
-    <button class="theme" id="theme" title="Theme" aria-label="Theme: dark">
-      <span id="theme-text">Dark</span>
-    </button>
     <span class="who" id="who"></span>
     <button class="signout" id="signout">Sign out</button>
   </header>
 
-  <!-- The balance sheet. Three figures on one rule, not three cards:
-       the model produces one statement, not three metrics. -->
-  <section class="statement is-loading" id="statement" aria-label="Campaign balance sheet"
-           aria-busy="true">
-    <div class="figure">
-      <span class="figure-value" id="fig-a"><i class="rule-skeleton" aria-hidden="true"></i></span>
-      <span class="figure-label">Potential votes</span>
+  <!-- Overview: the one screen that answers "how are we doing" without
+       opening anything else. -->
+  <main id="view-overview">
+    <div class="page-head">
+      <h1>Overview</h1>
+      <p id="ov-sub">Reading the ledger…</p>
     </div>
-    <div class="figure">
-      <span class="figure-value" id="fig-l"><i class="rule-skeleton" aria-hidden="true"></i></span>
-      <span class="figure-label">Eroding</span>
-    </div>
-    <div class="figure figure-result">
-      <span class="figure-value" id="fig-eo"><i class="rule-skeleton" aria-hidden="true"></i></span>
-      <span class="figure-label">Expected outcome</span>
-    </div>
-    <!-- Indeterminate by design: the server does not report progress, and a bar
-         that invents a percentage is lying about what it knows. -->
-    <div class="statement-progress" id="statement-progress" role="status">
-      <span class="sr-only">Reading the ledger</span>
-    </div>
-    <dl class="statement-meta" id="statement-meta"></dl>
-  </section>
 
-  <main class="pane" id="view-wards">
+    <div class="grid grid-hero">
+      <section class="panel headline" aria-label="Expected outcome">
+        <div>
+          <div class="headline-figure" id="ov-eo">&mdash;</div>
+          <div class="headline-label">Expected outcome, in votes</div>
+        </div>
+        <!-- The subtraction, drawn. What could be had, less what is being
+             lost, leaves the answer above. -->
+        <div class="subtraction">
+          <div class="sub-bar" id="ov-bar" role="img" aria-labelledby="ov-legend"></div>
+          <div class="sub-legend" id="ov-legend"></div>
+        </div>
+        <div class="stats" id="ov-stats"></div>
+      </section>
+
+      <section class="panel" aria-label="Wards to act on now">
+        <div class="panel-head">
+          <h2>Act now</h2>
+          <span class="note" id="ov-act-note"></span>
+        </div>
+        <div class="rank-list" id="ov-act"></div>
+      </section>
+    </div>
+
+    <div class="grid grid-2">
+      <section class="panel" aria-label="Pressure by issue">
+        <div class="panel-head">
+          <h2>Pressure by issue</h2>
+          <span class="note" id="ov-issues-note"></span>
+        </div>
+        <div class="qbars" id="ov-issues"></div>
+      </section>
+
+      <section class="panel" aria-label="Municipal finances">
+        <div class="panel-head">
+          <h2>What the municipalities report</h2>
+          <span class="note">National Treasury, audited</span>
+        </div>
+        <div class="qbars" id="ov-municipal"></div>
+      </section>
+    </div>
+
+    <div class="grid">
+      <section class="panel" aria-label="Data sources">
+        <div class="panel-head">
+          <h2>Where the numbers come from</h2>
+          <span class="note" id="ov-src-note"></span>
+        </div>
+        <div class="src-strip" id="ov-sources"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Control panel: the parameters the model runs on. -->
+  <main id="view-settings" hidden>
+    <div class="page-head">
+      <h1>Control panel</h1>
+      <p>Every number the model runs on. Changing these changes what the
+         campaign is told, so only administrators can save.</p>
+    </div>
+    <div class="grid">
+      <section class="panel">
+        <form id="cp-form">
+          <div class="cp-groups" id="cp-groups"></div>
+          <div class="cp-bar">
+            <span class="cp-state" id="cp-state">No changes</span>
+            <button type="button" class="btn" id="cp-reset" disabled>Discard changes</button>
+            <button type="submit" class="btn btn-primary" id="cp-save" disabled>Save changes</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <main class="pane" id="view-wards" hidden>
     <aside class="filters" aria-label="Filters">
       <div class="filter-group">
         <h2>Box</h2>
@@ -213,6 +284,8 @@
       <div id="health-list"></div>
     </section>
   </main>
+
+  </div><!-- /.stage -->
 
   <aside class="dossier" id="dossier" hidden aria-label="Ward dossier">
     <button class="dossier-close" id="dossier-close" aria-label="Close dossier">Close</button>
