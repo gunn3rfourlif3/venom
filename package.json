@@ -3,13 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "ingest:baseline": "node --env-file=.env dist/cli/ingest-baseline.js",
     "promote": "node --env-file=.env dist/cli/promote.js",
-    "verify:promotion": "node --env-file=.env dist/cli/verify-promotion.js"
+    "verify:promotion": "node --env-file=.env dist/cli/verify-promotion.js",
+    "api": "node --env-file=.env dist/api/server.js",
+    "create-user": "node --env-file=.env dist/cli/create-user.js"
   },
   "dependencies": {
     "pg": "8.13.1"

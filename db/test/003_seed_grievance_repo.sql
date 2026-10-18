@@ -36,19 +36,22 @@ INSERT INTO ward_issue (
   resolved_at, evidence_url, recorded_by, recorded_at)
 SELECT
   ward_id,
+  -- category and summary are drawn on the SAME index so they agree. Drawn
+  -- independently they produced rows like "Sanitation - transformer
+  -- failures", which makes demo data look broken to anyone reading it.
   (ARRAY['Water','Electricity','Refuse','Roads','Housing',
          'Sanitation','Safety','Billing']::issue_category[])[1 + floor(r1 * 8)],
   (ARRAY['Low','Moderate','High','Severe']::issue_severity[])[1 + floor(r2 * 4)],
   (ARRAY[
     'Intermittent supply across the eastern section for several weeks',
-    'Street lighting out along the main approach road',
+    'Transformer failures recurring after each outage',
     'Refuse collection missed on the scheduled round',
     'Potholes on the arterial route reported repeatedly',
     'Housing list queries unanswered at the regional office',
     'Sewage overflow near the community hall',
-    'Transformer failures recurring after each outage',
+    'Street lighting out along the main approach road',
     'Prepaid metering disputes unresolved at the service point'
-  ])[1 + floor(r3 * 8)],
+  ])[1 + floor(r1 * 8)],
   CURRENT_DATE - (7 + floor(r1 * 70))::int,
   CURRENT_DATE - floor(r2 * 6)::int,
   CASE WHEN r3 < 0.22 THEN CURRENT_DATE - floor(r3 * 4)::int ELSE NULL END,

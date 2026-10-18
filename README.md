@@ -163,6 +163,52 @@ The rest is discipline. Crossing this line turns campaign analytics into
 profiling, with the POPIA exposure that follows, and breaks the same
 no-individual-records boundary the whole design rests on.
 
+## API
+
+Read-only HTTP, Node 20, no web framework. Sessions are server-side so
+access can be revoked the same hour somebody leaves; passwords are scrypt
+from `node:crypto`. The only runtime dependency in the whole project is
+`pg`.
+
+```
+node --env-file=.env dist/cli/create-user.js you@example.com "Your Name" admin
+npm run api
+```
+
+| Endpoint | Returns | Role |
+|---|---|---|
+| `POST /api/auth/login` · `logout` | session cookie | open |
+| `GET /api/wards` | ranked list, filterable by box and municipality | viewer |
+| `GET /api/wards/:id` | full dossier with stations, issues, decisions, documents | viewer |
+| `GET /api/targets` | contestability crossed with pressure | viewer |
+| `GET /api/campaign` | the one-row balance sheet | viewer |
+| `GET /api/float` | issued, accounted, shrinkage | **treasurer** |
+| `GET /api/decisions` | decision log, full-text searchable | viewer |
+| `GET /api/documents` | register; Restricted hidden below treasurer | viewer |
+| `GET /api/ingest-health` | staleness per source | viewer |
+| `GET /api/live` | server-sent events | viewer |
+
+Four rules hold across all of it: **read-only** — every write goes through
+import or the two authenticated forms; **every response carries `as_of`**,
+because a figure without a timestamp cannot be defended in an argument;
+**null is a real answer** — `eo_act_votes` is null until the declaration and
+the client must render the absence rather than coerce it to zero; and **no
+computation in the app layer** — if the dashboard needs a figure that is not
+already a column, the figure belongs in a view.
+
+### The live path is SSE, not WebSocket
+
+The specification said WebSocket. Server-sent events are the better fit: the
+channel is one-way, it is plain HTTP so it needs no dependency, the browser
+reconnects on its own — which on counting night matters more than anything
+else here — and it survives proxies that will not negotiate an upgrade.
+
+What is pushed is an **identifier, never a value**. A payload of `ward_id`
+alone stays under the 8 kB `NOTIFY` limit, cannot be applied out of order,
+and makes the client read back through the same query it used on load.
+Pushing values is the usual reason a dashboard drifts out of sync with its
+database and nobody can say why.
+
 ## Scope boundary
 
 No voter-level data: no person table, no contact history, no canvassing queue.
