@@ -56,17 +56,60 @@ DELETE FROM ward WHERE source = 'SYNTHETIC';
 
 ## Setup
 
+Needs **PostgreSQL 16** and **Node 20.6 or later** (`--env-file` arrives in
+20.6). XAMPP does not ship PostgreSQL, so install it separately and make
+sure `psql` is on PATH.
+
+The stack uses materialised views, `FILTER` aggregates and `LISTEN`/
+`NOTIFY`. None of these exist in MySQL, so XAMPP's database is not a target
+and never will be.
+
+### Windows, PowerShell
+
+```powershell
+createdb -U postgres venom
+
+Get-ChildItem db\migrations\*.sql | ForEach-Object {
+  psql -U postgres -d venom -v ON_ERROR_STOP=1 -f $_.FullName }
+Get-ChildItem db\views\*.sql | ForEach-Object {
+  psql -U postgres -d venom -v ON_ERROR_STOP=1 -f $_.FullName }
+psql -U postgres -d venom -f db\extract\mv_campaign_extract.sql
+
+# optional demo data, 523 synthetic wards
+psql -U postgres -d venom -f db\test\002_seed_gauteng_demo.sql
+psql -U postgres -d venom -f db\test\003_seed_grievance_repo.sql
 ```
+
+The file prefixes are zero-padded, so alphabetical order is dependency
+order. Run the three directories in the sequence above; within each, order
+takes care of itself.
+
+### macOS and Linux
+
+```sh
 createdb venom
 for f in db/migrations/*.sql db/views/*.sql db/extract/*.sql; do
   psql -d venom -v ON_ERROR_STOP=1 -f "$f"
 done
-psql -d venom -f db/test/001_seed_three_wards.sql   # optional fixture
+psql -d venom -f db/test/002_seed_gauteng_demo.sql    # optional
+psql -d venom -f db/test/003_seed_grievance_repo.sql  # optional
 ```
 
-PostgreSQL 16. The stack uses materialised views, `FILTER` aggregates and
-`LISTEN`/`NOTIFY`; none of these exist in MySQL, so XAMPP's database is not a
-target.
+### Then run it
+
+```
+copy .env.example .env        # Windows; cp on macOS and Linux
+npm install
+npm run build
+node --env-file=.env dist/cli/create-user.js you@example.com "Your Name" admin
+npm run api
+```
+
+The password is printed once and stored only as a scrypt hash. Open
+http://localhost:8080 and sign in.
+
+`DATABASE_URL` in `.env` must point at the database you just created, for
+example `postgres://postgres:yourpassword@localhost:5432/venom`.
 
 ## Ingestion
 
