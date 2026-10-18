@@ -44,14 +44,47 @@ PostgreSQL 16. The stack uses materialised views, `FILTER` aggregates and
 `LISTEN`/`NOTIFY`; none of these exist in MySQL, so XAMPP's database is not a
 target.
 
+## Ingestion
+
+TypeScript, Node 20+. Fetchers write only to `raw.fetch`; a separate
+promotion step validates and upserts into the canonical tables.
+
+```
+cp .env.example .env     # IEC credentials from webmaster@elections.org.za
+npm install && npm run build
+npm run ingest:baseline  # staging only, writes no canonical table
+npm run promote          # staging -> canonical, refresh extract, NOTIFY
+npm run verify:promotion # offline check against known payloads
+```
+
+Two things about the IEC API worth knowing before reading the code:
+
+**National results have no ward endpoint.** `LGEBallotResults` goes down to
+ward, but `NPEBallotResults` stops at voting district. Ward-level 2024
+figures are summed from the VDs the delimitation assigns to each ward.
+
+**Party names are never substring-matched.** `"DEMOCRATIC ALLIANCE"` contains
+`ANC`; `"AFRICAN NATIONAL CONGRESS"` does not. Matching is exact, against the
+IEC party ID where known and otherwise the full name or abbreviation, and a
+configuration that matches nothing aborts the run rather than writing zero
+votes for every ward. See `src/ingest/parties.ts`.
+
+Promotion never writes campaign-entered columns — `zone`,
+`candidate_status`, the `m1`-`m5` capacity fields, and everything reported at
+a station. An ingest run must not erase what the organisers reported.
+
 ## Status
 
-The schema and all ten views are written, run clean, and are verified against
-a three-ward fixture with hand-computed expected values in `db/test/`.
+Schema, ten views and the extract: written, running, verified against a
+three-ward fixture with hand-computed expected values in `db/test/`.
 
-**Not built yet:** ingestion (IEC API client and promotion), the two
-authenticated write forms, the API, and the dashboard. There is no real data
-in the system — the fixture is synthetic.
+Ingestion: IEC client and promotion written, typechecked, and verified
+end to end against staged payloads with no network.
+
+**Not built yet:** the two authenticated write forms, the API, and the
+dashboard. No real data is in the system — both fixtures are synthetic, and
+nothing has run against the live API because the credentials are not issued
+yet.
 
 Nothing is tuned to Gauteng yet. `control_panel.swing_threshold_share`
 especially needs calibrating against the real baseline once it loads.
