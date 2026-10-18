@@ -30,6 +30,7 @@
     <span class="scope">Gauteng, 2026 municipal elections</span>
     <nav class="views">
       <button data-view="wards" class="is-current">Wards</button>
+      <button data-view="sentiment">Sentiment</button>
       <button data-view="decisions">Decisions</button>
       <button data-view="float">Float</button>
       <button data-view="health">Sources</button>
@@ -92,6 +93,46 @@
     </section>
   </main>
 
+  <main class="pane pane-single" id="view-sentiment" hidden>
+    <section class="panel-body viz">
+      <p class="provenance" id="sent-provenance"></p>
+
+      <div class="kpi-row" id="sent-kpis"></div>
+
+      <figure class="viz-figure">
+        <figcaption>
+          <h3>Where the pressure is</h3>
+          <p>Mentions by municipality and issue, over the window. The scale runs
+             fewer to more; the legend below shows which way.</p>
+        </figcaption>
+        <div class="viz-scroll"><div id="sent-heatmap"></div></div>
+        <div class="viz-legend" id="sent-heatmap-legend"></div>
+      </figure>
+
+      <figure class="viz-figure">
+        <figcaption>
+          <h3>How it is being taken</h3>
+          <p>Share of mentions by sentiment, centred on mixed.</p>
+        </figcaption>
+        <div class="viz-scroll"><div id="sent-bands"></div></div>
+        <div class="viz-legend" id="sent-bands-legend"></div>
+      </figure>
+
+      <figure class="viz-figure">
+        <figcaption>
+          <h3>Eight weeks by issue</h3>
+          <p>Weekly mentions per category, on one shared scale.</p>
+        </figcaption>
+        <div id="sent-trend" class="small-multiples"></div>
+      </figure>
+
+      <details class="viz-table">
+        <summary>Table view</summary>
+        <div id="sent-table"></div>
+      </details>
+    </section>
+  </main>
+
   <main class="pane pane-single" id="view-decisions" hidden>
     <section class="panel-body">
       <div class="search-row">
@@ -114,6 +155,7 @@
     <div id="dossier-body"></div>
   </aside>
   <div class="scrim" id="scrim" hidden></div>
+  <div class="tip" id="tip" hidden role="status"></div>
 </div>
 
 <script src="/app.js" type="module"></script>

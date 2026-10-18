@@ -46,6 +46,7 @@ const table: Route[] = [
   { method: 'GET',  pattern: /^\/api\/float$/,        handler: routes.getFloat },
   { method: 'GET',  pattern: /^\/api\/decisions$/,    handler: routes.getDecisions },
   { method: 'GET',  pattern: /^\/api\/documents$/,    handler: routes.getDocuments },
+  { method: 'GET',  pattern: /^\/api\/sentiment$/,     handler: routes.getSentiment },
   { method: 'GET',  pattern: /^\/api\/ingest-health$/, handler: routes.getIngestHealth },
 
   { method: 'GET',  pattern: /^\/api\/live$/,

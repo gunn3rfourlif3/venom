@@ -298,6 +298,243 @@ $('dossier-close').addEventListener('click', closeDossier);
 $('scrim').addEventListener('click', closeDossier);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDossier(); });
 
+
+/* ------------------------------------------------------- sentiment */
+
+const CATEGORY_ORDER = ['Water','Electricity','Refuse','Roads','Housing',
+                        'Sanitation','Safety','Billing'];
+const BAND_ORDER = ['Strongly negative','Negative','Mixed','Positive','Strongly positive'];
+const BAND_VAR = {
+  'Strongly negative': '--div-neg-2', 'Negative': '--div-neg-1',
+  'Mixed': '--div-mid', 'Positive': '--div-pos-1', 'Strongly positive': '--div-pos-2',
+};
+
+const tip = () => $('tip');
+function showTip(event, html) {
+  const t = tip();
+  t.innerHTML = html;
+  t.hidden = false;
+  const pad = 14;
+  const r = t.getBoundingClientRect();
+  let x = event.clientX + pad;
+  let y = event.clientY + pad;
+  if (x + r.width > window.innerWidth - 8) x = event.clientX - r.width - pad;
+  if (y + r.height > window.innerHeight - 8) y = event.clientY - r.height - pad;
+  t.style.left = `${Math.max(8, x)}px`;
+  t.style.top = `${Math.max(8, y)}px`;
+}
+function hideTip() { tip().hidden = true; }
+
+/** Attaches hover to every mark carrying data-tip. A chart in a browser is
+ *  interactive by nature; shipping one without a hover layer wastes it. */
+function bindTips(root) {
+  root.querySelectorAll('[data-tip]').forEach((el) => {
+    el.addEventListener('mousemove', (e) => showTip(e, el.dataset.tip));
+    el.addEventListener('mouseleave', hideTip);
+    el.addEventListener('focus', (e) => showTip(
+      { clientX: el.getBoundingClientRect().left, clientY: el.getBoundingClientRect().top },
+      el.dataset.tip));
+    el.addEventListener('blur', hideTip);
+  });
+}
+
+const seqStep = (t) => {
+  // seven steps, low -> high; low sits nearest the surface
+  const i = Math.max(1, Math.min(7, Math.ceil(t * 7) || 1));
+  return `var(--seq-${i})`;
+};
+
+function renderHeatmap(area) {
+  const municipalities = [...new Set(area.map((r) => r.municipality))].sort();
+  const cats = CATEGORY_ORDER.filter((c) => area.some((r) => r.category === c));
+  const byKey = new Map(area.map((r) => [`${r.municipality}|${r.category}`, r]));
+  const max = Math.max(1, ...area.map((r) => Number(r.mentions)));
+
+  const left = 150, top = 26, cw = 84, ch = 38, gap = 2;
+  const w = left + cats.length * cw;
+  const h = top + municipalities.length * ch + 6;
+
+  const cells = municipalities.map((m, row) => cats.map((c, col) => {
+    const r = byKey.get(`${m}|${c}`);
+    const n = r ? Number(r.mentions) : 0;
+    const t = n / max;
+    const x = left + col * cw, y = top + row * ch;
+    // The figure sits on its own cell, so the ink has to beat the cell it sits
+    // on, not the page. Measured both ways across the ramp: the dark ink wins
+    // steps 1-4, the surface wins 5-7. Worst case either side of that line is
+    // 4.4:1 light / 3.8:1 dark; ink-2 on step 3 was 2.9:1, which is why the
+    // mid-blue cells read as smudges. Exact values live in the table view.
+    const step = Math.max(1, Math.min(7, Math.ceil(t * 7) || 1));
+    const label = n ? `<text x="${x + cw / 2 - 1}" y="${y + ch / 2 + 4}" text-anchor="middle"
+        font-size="11.5" fill="${step >= 5 ? 'var(--surface)' : 'var(--ink)'}"
+        style="pointer-events:none">${n.toLocaleString('en-ZA')}</text>` : '';
+    const tipHtml = r
+      ? `<b>${esc(m)}</b><br>${esc(c)}<br>${n.toLocaleString('en-ZA')} mentions across ${r.wards} wards<br>net sentiment ${dec(r.net_sentiment)}, mostly ${esc(r.dominant_tone.toLowerCase())}`
+      : `<b>${esc(m)}</b><br>${esc(c)}<br>no signal`;
+    return `<rect class="cell" x="${x}" y="${y}" width="${cw - gap}" height="${ch - gap}" rx="2"
+       fill="${n ? seqStep(t) : 'var(--rule-hair)'}" tabindex="0"
+       data-tip="${esc(tipHtml).replace(/&lt;/g, '<').replace(/&gt;/g, '>')}"/>${label}`;
+  }).join('')).join('');
+
+  const rowLabels = municipalities.map((m, row) =>
+    `<text x="${left - 12}" y="${top + row * ch + ch / 2 + 4}" text-anchor="end"
+       font-size="12" fill="var(--ink-2)">${esc(m)}</text>`).join('');
+  const colLabels = cats.map((c, col) =>
+    `<text x="${left + col * cw + (cw - gap) / 2}" y="${top - 10}" text-anchor="middle"
+       font-size="11.5" fill="var(--ink-3)">${esc(c)}</text>`).join('');
+
+  $('sent-heatmap').innerHTML =
+    `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img"
+       aria-label="Mentions by municipality and issue category">${colLabels}${rowLabels}${cells}</svg>`;
+
+  $('sent-heatmap-legend').innerHTML =
+    `<span>fewer</span>` +
+    [1,2,3,4,5,6,7].map((i) => `<span><i style="background:var(--seq-${i})"></i></span>`).join('') +
+    `<span>more, to ${max.toLocaleString('en-ZA')}</span>`;
+  bindTips($('sent-heatmap'));
+}
+
+function renderBands(bands) {
+  const municipalities = [...new Set(bands.map((r) => r.municipality))].sort();
+  const byMun = new Map();
+  for (const r of bands) {
+    if (!byMun.has(r.municipality)) byMun.set(r.municipality, new Map());
+    byMun.get(r.municipality).set(r.band, Number(r.share));
+  }
+
+  const left = 150, top = 8, rowH = 34, barH = 18, half = 300, gap = 2;
+  const gutter = 96;   // "100% negative" at 11.5px needs ~84; the old 60 clipped it
+  const w = left + half * 2 + gutter;
+  const h = top + municipalities.length * rowH + 26;
+  const mid = left + half;
+
+  const rows = municipalities.map((m, i) => {
+    const shares = byMun.get(m) ?? new Map();
+    const y = top + i * rowH + (rowH - barH) / 2;
+    // negative arm grows leftward from the centre, positive rightward,
+    // and Mixed straddles so the centre line means "nothing either way"
+    const neg = ['Negative', 'Strongly negative'];
+    const pos = ['Positive', 'Strongly positive'];
+    const mixed = shares.get('Mixed') ?? 0;
+
+    let segs = '';
+    let x = mid - (mixed * half) / 2;
+    segs += seg(x, y, (mixed * half), 'Mixed', m, mixed);
+    let cursor = x;
+    for (const b of neg) {
+      const sv = shares.get(b) ?? 0;
+      const wpx = sv * half;
+      cursor -= wpx;
+      segs += seg(cursor, y, wpx, b, m, sv);
+    }
+    cursor = x + mixed * half;
+    for (const b of pos) {
+      const sv = shares.get(b) ?? 0;
+      const wpx = sv * half;
+      segs += seg(cursor, y, wpx, b, m, sv);
+      cursor += wpx;
+    }
+    const negTotal = neg.reduce((a, b) => a + (shares.get(b) ?? 0), 0);
+    return `<text x="${left - 12}" y="${y + barH / 2 + 4}" text-anchor="end"
+        font-size="12" fill="var(--ink-2)">${esc(m)}</text>${segs}` +
+      `<text x="${w - 8}" y="${y + barH / 2 + 4}" text-anchor="end" font-size="11.5"
+        fill="var(--ink-2)">${pct(negTotal, 0)} negative</text>`;
+
+    function seg(sx, sy, sw, band, mun, share) {
+      if (sw <= 0.4) return '';
+      const t = `<b>${esc(mun)}</b><br>${esc(band)}<br>${pct(share, 1)} of mentions`;
+      return `<rect class="seg" x="${sx + gap / 2}" y="${sy}" width="${Math.max(0.5, sw - gap)}"
+         height="${barH}" rx="1.5" fill="var(${BAND_VAR[band]})" tabindex="0"
+         data-tip="${t}"/>`;
+    }
+  }).join('');
+
+  $('sent-bands').innerHTML =
+    `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img"
+       aria-label="Share of mentions by sentiment band, per municipality">
+       <line x1="${mid}" y1="${top - 2}" x2="${mid}" y2="${h - 22}"
+         stroke="var(--axis)" stroke-width="1"/>
+       ${rows}
+       <text x="${mid}" y="${h - 6}" text-anchor="middle" font-size="11"
+         fill="var(--ink-3)">mixed</text></svg>`;
+
+  $('sent-bands-legend').innerHTML = BAND_ORDER.map((b) =>
+    `<span><i style="background:var(${BAND_VAR[b]})"></i>${esc(b)}</span>`).join('');
+  bindTips($('sent-bands'));
+}
+
+function renderTrend(trend) {
+  const cats = CATEGORY_ORDER.filter((c) => trend.some((r) => r.category === c));
+  const weeks = [...new Set(trend.map((r) => r.week_start))].sort();
+  const max = Math.max(1, ...trend.map((r) => Number(r.mentions)));
+  const w = 220, h = 66, padX = 4, padY = 8;
+
+  $('sent-trend').innerHTML = cats.map((c) => {
+    const series = weeks.map((wk) => {
+      const row = trend.find((r) => r.category === c && r.week_start === wk);
+      return { wk, n: row ? Number(row.mentions) : 0, net: row ? row.net_sentiment : null };
+    });
+    const total = series.reduce((a, b) => a + b.n, 0);
+    const x = (i) => padX + (i * (w - padX * 2)) / Math.max(1, series.length - 1);
+    const y = (n) => h - padY - (n / max) * (h - padY * 2);
+    const line = series.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(d.n).toFixed(1)}`).join(' ');
+    const dots = series.map((d, i) =>
+      `<circle class="dot" cx="${x(i).toFixed(1)}" cy="${y(d.n).toFixed(1)}" r="4.5"
+         fill="var(--seq-5)" stroke="var(--surface)" stroke-width="2" tabindex="0"
+         data-tip="<b>${esc(c)}</b><br>week of ${date(d.wk)}<br>${d.n.toLocaleString('en-ZA')} mentions<br>net sentiment ${dec(d.net)}"/>`).join('');
+    return `<div class="sm-panel">
+      <div class="sm-head"><span class="sm-name">${esc(c)}</span>
+        <span class="sm-total">${total.toLocaleString('en-ZA')}</span></div>
+      <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" role="img"
+        aria-label="${esc(c)}: ${total} mentions over ${series.length} weeks">
+        <line x1="0" y1="${h - padY}" x2="${w}" y2="${h - padY}" stroke="var(--grid)"/>
+        <path d="${line}" fill="none" stroke="var(--seq-5)" stroke-width="2"
+          stroke-linejoin="round" stroke-linecap="round"/>
+        ${dots}
+      </svg></div>`;
+  }).join('');
+  bindTips($('sent-trend'));
+}
+
+function renderSentimentTable(area) {
+  const rows = [...area].sort((a, b) => Number(b.mentions) - Number(a.mentions));
+  $('sent-table').innerHTML = `<table>
+    <thead><tr><th>Municipality</th><th>Issue</th><th class="n">Wards</th>
+      <th class="n">Mentions</th><th class="n">Net sentiment</th><th>Mostly</th>
+      <th class="n">Confidence</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr>
+      <td>${esc(r.municipality)}</td><td>${esc(r.category)}</td>
+      <td class="n">${r.wards}</td>
+      <td class="n">${Number(r.mentions).toLocaleString('en-ZA')}</td>
+      <td class="n">${dec(r.net_sentiment)}</td>
+      <td>${esc(r.dominant_tone)}</td>
+      <td class="n">${dec(r.confidence)}</td></tr>`).join('')}</tbody></table>`;
+}
+
+async function loadSentiment() {
+  const { data } = await api('/api/sentiment');
+  const s = data.summary;
+
+  $('sent-provenance').innerHTML = s && s.synthetic
+    ? '<b>Synthetic data.</b> No sentiment feed is connected yet. Every figure on this screen was generated for development and describes no real area. Nothing here may be read as what anyone actually thinks.'
+    : `Signals from a connected feed. Average classifier confidence ${dec(s?.confidence)}. A sentiment figure is only as good as the feed behind it.`;
+
+  $('sent-kpis').innerHTML = [
+    ['Mentions', num(s?.mentions)],
+    ['Wards with signal', num(s?.wards)],
+    ['Issues tracked', num(s?.categories)],
+    ['Net sentiment', dec(s?.net_sentiment), Number(s?.net_sentiment) < 0],
+    ['Last observed', date(s?.last_observed)],
+  ].map(([label, value, neg]) =>
+    `<div class="kpi"><span class="kpi-value${neg ? ' is-negative' : ''}">${esc(value)}</span>
+      <span class="kpi-label">${esc(label)}</span></div>`).join('');
+
+  renderHeatmap(data.area);
+  renderBands(data.bands);
+  renderTrend(data.trend);
+  renderSentimentTable(data.area);
+}
+
 /* ------------------------------------------------------ other views */
 
 async function loadDecisions(q) {
@@ -353,9 +590,10 @@ document.querySelector('.views').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-view]'); if (!btn) return;
   const view = btn.dataset.view;
   document.querySelectorAll('.views button').forEach((b) => b.classList.toggle('is-current', b === btn));
-  for (const name of ['wards', 'decisions', 'float', 'health']) {
+  for (const name of ['wards', 'sentiment', 'decisions', 'float', 'health']) {
     $(`view-${name}`).hidden = name !== view;
   }
+  if (view === 'sentiment') loadSentiment();
   if (view === 'decisions') loadDecisions();
   if (view === 'float') loadFloat();
   if (view === 'health') loadHealth();

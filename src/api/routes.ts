@@ -170,6 +170,54 @@ async function getDocuments(ctx: Ctx): Promise<void> {
   json(ctx.res, 200, await envelope(result.rows));
 }
 
+/**
+ * Everything the sentiment screen needs, in one round trip: the grid for
+ * the heatmap, the bands for the diverging bar, the weekly series for the
+ * small multiples, and a summary row.
+ *
+ * `synthetic` is returned explicitly. A sentiment figure whose provenance
+ * the reader cannot see is decoration, and the screen says so on its face
+ * rather than in a comment nobody reads.
+ */
+async function getSentiment(ctx: Ctx): Promise<void> {
+  const municipality = ctx.url.searchParams.get('municipality');
+
+  const [area, bands, trend, summary] = await Promise.all([
+    pool.query(
+      `SELECT * FROM v_sentiment_area
+        WHERE ($1::text IS NULL OR municipality = $1)
+        ORDER BY municipality, category`, [municipality]),
+    pool.query(
+      `SELECT * FROM v_sentiment_bands
+        WHERE ($1::text IS NULL OR municipality = $1)
+        ORDER BY municipality, band_order`, [municipality]),
+    pool.query(
+      `SELECT t.* FROM v_sentiment_trend t ORDER BY t.category, t.week_start`),
+    pool.query(
+      `SELECT count(*)::int                                   AS signals,
+              count(DISTINCT ward_id)::int                    AS wards,
+              count(DISTINCT category)::int                   AS categories,
+              COALESCE(sum(mentions), 0)::int                 AS mentions,
+              ROUND(AVG(net_sentiment), 3)                    AS net_sentiment,
+              ROUND(AVG(confidence), 3)                       AS confidence,
+              max(observed_on)                                AS last_observed,
+              bool_and(source = 'SYNTHETIC')                  AS synthetic
+         FROM issue_signal s
+        CROSS JOIN control_panel cp
+        WHERE s.observed_on >= CURRENT_DATE - cp.sentiment_window_days`),
+  ]);
+
+  json(ctx.res, 200, {
+    as_of: new Date().toISOString(),
+    data: {
+      summary: summary.rows[0] ?? null,
+      area: area.rows,
+      bands: bands.rows,
+      trend: trend.rows,
+    },
+  });
+}
+
 async function getIngestHealth(ctx: Ctx): Promise<void> {
   const result = await pool.query('SELECT * FROM v_ingest_health ORDER BY source');
   json(ctx.res, 200, await envelope(result.rows));
@@ -178,5 +226,5 @@ async function getIngestHealth(ctx: Ctx): Promise<void> {
 export const routes = {
   postLogin, postLogout, getMe, getWards, getWard, getTargets,
   getCampaign, getFloat, getDecisions, getDocuments, getIngestHealth,
-  authenticate,
+  getSentiment, authenticate,
 };

@@ -403,3 +403,93 @@ button, input, select { font: inherit; color: inherit; }
   .dossier { animation: slide-in 200ms cubic-bezier(.2, .7, .3, 1); }
   @keyframes slide-in { from { transform: translateX(20px); opacity: 0; } }
 }
+
+/* ===================================================== sentiment view */
+
+/* Chart roles. Sequential is one blue hue; the dark steps are read from
+   the same ramp in the direction that keeps low values near the surface,
+   not an automatic inversion. Diverging is blue <-> red with a neutral
+   gray midpoint, equal steps per arm. Validated against these surfaces. */
+.viz {
+  --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec;
+  --seq-4: #3987e5; --seq-5: #2a78d6; --seq-6: #1c5cab; --seq-7: #104281;
+  --div-neg-2: #d03b3b; --div-neg-1: #e8837f;
+  --div-mid:   #e1e0d9;
+  --div-pos-1: #86b6ef; --div-pos-2: #2a78d6;
+  --grid: var(--rule-hair);
+  --axis: var(--rule);
+}
+@media (prefers-color-scheme: dark) {
+  .viz {
+    --seq-1: #0d366b; --seq-2: #184f95; --seq-3: #256abf;
+    --seq-4: #2a78d6; --seq-5: #3987e5; --seq-6: #6da7ec; --seq-7: #b7d3f6;
+    --div-neg-2: #e66767; --div-neg-1: #a8453f;
+    --div-mid:   #383835;
+    --div-pos-1: #1c5cab; --div-pos-2: #3987e5;
+  }
+}
+
+.provenance {
+  margin: 0 0 20px; padding: 10px 13px;
+  border-left: 3px solid var(--theirs);
+  background: var(--surface-2);
+  font-size: var(--step-0); color: var(--ink-2); line-height: 1.5;
+  max-width: 68ch;
+}
+
+.kpi-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 1px; background: var(--rule-hair);
+  border: 1px solid var(--rule-hair); border-radius: 3px;
+  margin-bottom: 32px; overflow: hidden;
+}
+.kpi { background: var(--surface); padding: 16px 18px; display: grid; gap: 4px; }
+.kpi-value { font-size: 1.5rem; line-height: 1.1; font-weight: 500; }
+.kpi-value.is-negative { color: var(--theirs); }
+.kpi-label { font-size: var(--step--1); color: var(--ink-3); }
+
+.viz-figure { margin: 0 0 36px; }
+.viz-figure figcaption { margin-bottom: 14px; }
+.viz-figure h3 { margin: 0 0 3px; font-size: var(--step-1); font-weight: 600; }
+.viz-figure figcaption p { margin: 0; font-size: var(--step--1); color: var(--ink-3); }
+.viz-scroll { overflow-x: auto; }
+.viz-legend {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px;
+  font-size: var(--step--1); color: var(--ink-2);
+}
+.viz-legend span { display: flex; align-items: center; gap: 6px; }
+.viz-legend i { width: 11px; height: 11px; border-radius: 2px; display: block; }
+
+.small-multiples {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 20px 24px;
+}
+.sm-panel { display: grid; gap: 5px; }
+.sm-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.sm-name { font-size: var(--step-0); font-weight: 600; }
+.sm-total { font-size: var(--step--1); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+.viz-table { margin-top: 8px; }
+.viz-table summary {
+  cursor: pointer; font-size: var(--step-0); color: var(--ink-2);
+  padding: 8px 0; list-style-position: inside;
+}
+.viz-table table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: var(--step-0); }
+.viz-table th, .viz-table td {
+  text-align: left; padding: 7px 12px 7px 0; border-bottom: 1px solid var(--rule-hair);
+}
+.viz-table th { color: var(--ink-2); font-weight: 600; }
+.viz-table td.n { text-align: right; font-variant-numeric: tabular-nums; }
+
+.tip {
+  position: fixed; z-index: 20; pointer-events: none;
+  background: var(--ink); color: var(--paper);
+  padding: 7px 10px; border-radius: 3px;
+  font-size: var(--step--1); line-height: 1.45;
+  box-shadow: 0 2px 10px rgba(0,0,0,.2);
+  max-width: 17rem;
+}
+.tip b { font-weight: 600; }
+
+.cell, .seg, .dot { cursor: default; }
+.cell:hover, .seg:hover { stroke: var(--ink); stroke-width: 1.5; }
