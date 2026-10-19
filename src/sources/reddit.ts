@@ -117,7 +117,7 @@ export class RedditClient {
       if (text === '') continue;
       items.push({
         text,
-        wardId,
+        placeId: wardId,
         observedOn: new Date((post.created_utc ?? Date.now() / 1000) * 1000)
           .toISOString().slice(0, 10),
       });

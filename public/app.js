@@ -27,11 +27,47 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
 /* Stored uppercase for the database's convenience, not the reader's. */
 const sentence = (s) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : s);
 
+/* Every request the app makes goes through here, so counting them here is
+   what makes one progress bar able to speak for the whole app rather than
+   each screen having to remember to say it is busy. The counter, not a
+   boolean: two requests in flight and one finishing must not read as idle. */
+let inFlight = 0;
+
+function setBusy(delta) {
+  inFlight = Math.max(0, inFlight + delta);
+  const bar = document.getElementById('progress');
+  if (!bar) return;
+  const busy = inFlight > 0;
+  bar.classList.toggle('is-busy', busy);
+  bar.setAttribute('aria-hidden', String(!busy));
+  document.documentElement.classList.toggle('is-fetching', busy);
+}
+
 async function api(path, options) {
-  const res = await fetch(path, { credentials: 'same-origin', ...options });
-  if (res.status === 401) { showSignIn(); throw new Error('unauthenticated'); }
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
-  return res.json();
+  setBusy(1);
+  try {
+    const res = await fetch(path, { credentials: 'same-origin', ...options });
+    if (res.status === 401) { showSignIn(); throw new Error('unauthenticated'); }
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
+    return await res.json();
+  } finally {
+    setBusy(-1);
+  }
+}
+
+/** Marks a region as loading while a promise runs. Used where a wait has a
+ *  place on screen — the ward list, a panel — so the bar says "something is
+ *  happening" and the region says "this thing". */
+async function whileLoading(elementId, work) {
+  const el = document.getElementById(elementId);
+  el?.classList.add('is-loading');
+  el?.setAttribute('aria-busy', 'true');
+  try {
+    return await work();
+  } finally {
+    el?.classList.remove('is-loading');
+    el?.setAttribute('aria-busy', 'false');
+  }
 }
 
 /* ----------------------------------------------------------- sign in */
@@ -74,19 +110,27 @@ $('signout').addEventListener('click', async () => {
 /* ----------------------------------------------------------- ledger */
 
 async function loadWards() {
-  const [wards, targets] = await Promise.all([
-    api('/api/wards?limit=1000'),
-    api('/api/targets?limit=1000'),
-  ]);
-  state.wards = wards.data;
-  state.targets = new Map(targets.data.map((t) => [t.ward_id, t]));
+  // Two thousand rows over two requests takes a couple of seconds, and the
+  // sidebar counts cannot be computed until both land. Until then the
+  // filters are shown as placeholders rather than as zeros, because a zero
+  // beside "Recruit" is a claim and a placeholder is not.
+  document.querySelector('.filters')?.classList.add('is-waiting');
+  return whileLoading('view-wards', async () => {
+    const [wards, targets] = await Promise.all([
+      api('/api/wards?limit=1000'),
+      api('/api/targets?limit=1000'),
+    ]);
+    state.wards = wards.data;
+    state.targets = new Map(targets.data.map((t) => [t.ward_id, t]));
 
-  const municipalities = [...new Set(state.wards.map((w) => w.municipality))].sort();
-  $('filter-munic').innerHTML = '<option value="">All</option>' +
-    municipalities.map((m) => `<option>${esc(m)}</option>`).join('');
+    const municipalities = [...new Set(state.wards.map((w) => w.municipality))].sort();
+    $('filter-munic').innerHTML = '<option value="">All</option>' +
+      municipalities.map((m) => `<option>${esc(m)}</option>`).join('');
 
-  renderChips();
-  renderLedger();
+    document.querySelector('.filters')?.classList.remove('is-waiting');
+    renderChips();
+    renderLedger();
+  });
 }
 
 function countBy(key, value) {
@@ -314,8 +358,17 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDossi
 
 /* ------------------------------------------------------- sentiment */
 
+/* The canonical order, then anything else the data actually contains. A
+   fixed list silently dropped categories a source did produce — the screen
+   said "11 issues tracked" above a grid showing eight. */
 const CATEGORY_ORDER = ['Water','Electricity','Refuse','Roads','Housing',
-                        'Sanitation','Safety','Billing'];
+                        'Sanitation','Safety','Health','Transport','Billing','Other'];
+
+const orderedCategories = (rows) => {
+  const present = new Set(rows.map((r) => r.category));
+  return [...CATEGORY_ORDER.filter((c) => present.has(c)),
+          ...[...present].filter((c) => !CATEGORY_ORDER.includes(c)).sort()];
+};
 const BAND_ORDER = ['Strongly negative','Negative','Mixed','Positive','Strongly positive'];
 const BAND_VAR = {
   'Strongly negative': '--div-neg-2', 'Negative': '--div-neg-1',
@@ -359,7 +412,7 @@ const seqStep = (t) => {
 
 function renderHeatmap(area) {
   const municipalities = [...new Set(area.map((r) => r.municipality))].sort();
-  const cats = CATEGORY_ORDER.filter((c) => area.some((r) => r.category === c));
+  const cats = orderedCategories(area);
   const byKey = new Map(area.map((r) => [`${r.municipality}|${r.category}`, r]));
   const max = Math.max(1, ...area.map((r) => Number(r.mentions)));
 
@@ -477,7 +530,7 @@ function renderBands(bands) {
 }
 
 function renderTrend(trend) {
-  const cats = CATEGORY_ORDER.filter((c) => trend.some((r) => r.category === c));
+  const cats = orderedCategories(trend);
   const weeks = [...new Set(trend.map((r) => r.week_start))].sort();
   const max = Math.max(1, ...trend.map((r) => Number(r.mentions)));
   const w = 220, h = 66, padX = 4, padY = 8;
@@ -534,9 +587,28 @@ function emptyState(title, why, command) {
     </div>`;
 }
 
+let sentimentSource = null;
+
 async function loadSentiment() {
-  const { data } = await api('/api/sentiment');
+  return whileLoading('view-sentiment', () => renderSentiment());
+}
+
+async function renderSentiment() {
+  const q = sentimentSource ? `?source=${encodeURIComponent(sentimentSource)}` : '';
+  const { data } = await api(`/api/sentiment${q}`);
   const s = data.summary;
+  sentimentSource = data.chosen;
+
+  // The feeds on offer, with what each measures. A real feed outranks the
+  // synthetic one in the view that produces this list, so the screen opens
+  // on real data as soon as any exists.
+  $('sent-sources').innerHTML = (data.sources ?? []).map((src) => `
+    <button class="src-pick${src.source_id === data.chosen ? ' is-on' : ''}"
+            data-source="${esc(src.source_id)}">
+      <span class="src-pick-name">${esc(src.label)}</span>
+      <span class="src-pick-meta">${num(src.mentions)} mentions &middot; ${
+        esc(String(src.geo_level).toLowerCase())} level</span>
+    </button>`).join('');
 
   // Nothing at all in the table is a different situation from a connected
   // feed reading zero, and the screen used to show the same thing for both:
@@ -559,13 +631,21 @@ async function loadSentiment() {
     return;
   }
 
+  const chosen = (data.sources ?? []).find((x) => x.source_id === data.chosen);
+  $('sent-sub').textContent = s.geo_level === 'MUNICIPALITY'
+    ? 'Measured per municipality. Not broken down by ward, because this source does not know wards.'
+    : 'Measured per ward.';
+
   $('sent-provenance').innerHTML = s.synthetic
-    ? '<b>Synthetic data.</b> No sentiment feed is connected yet. Every figure on this screen was generated for development and describes no real area. Nothing here may be read as what anyone actually thinks.'
-    : `Signals from a connected feed. Average classifier confidence ${dec(s?.confidence)}. A sentiment figure is only as good as the feed behind it.`;
+    ? '<b>Synthetic data.</b> Every figure under this feed was generated for development and describes no real area. Nothing here may be read as what anyone actually thinks.'
+    : `<b>${esc(chosen?.label ?? 'Connected feed')}.</b> This measures ${
+        esc(chosen?.measures ?? 'signal from a connected source')}. Headlines are counted and scored, never stored. `
+      + `Average classifier confidence ${dec(s?.confidence)}, which is the lexicon baseline being honest about itself.`;
 
   $('sent-kpis').innerHTML = [
     ['Mentions', num(s?.mentions)],
-    ['Wards with signal', num(s?.wards)],
+    [s?.geo_level === 'MUNICIPALITY' ? 'Municipalities' : 'Wards with signal',
+     num(s?.geo_level === 'MUNICIPALITY' ? s?.places : s?.wards)],
     ['Issues tracked', num(s?.categories)],
     ['Net sentiment', dec(s?.net_sentiment), Number(s?.net_sentiment) < 0],
     ['Last observed', date(s?.last_observed)],
@@ -1138,3 +1218,10 @@ async function start() {
     showSignIn();
   }
 })();
+
+
+$('sent-sources').addEventListener('click', (e) => {
+  const pick = e.target.closest('.src-pick'); if (!pick) return;
+  sentimentSource = pick.dataset.source;
+  loadSentiment();
+});

@@ -6,7 +6,11 @@
 <title>Venom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Two families, used for two jobs. Instrument Sans carries the
+     interface; Newsreader carries every quantity of votes or people,
+     with optical sizing so the hero figure is cut for display size and
+     a stat tile is not. The mono is for commands and identifiers only. -->
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,200;6..72,300;6..72,400&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app.css">
 <script>
 /* Stamped before the stylesheet paints, so the register never flashes the
@@ -71,6 +75,13 @@
   </nav>
 
   <div class="stage">
+  <!-- One bar for the whole app. It is driven by a counter of in-flight
+       requests inside api(), so any screen that fetches anything shows it
+       without having to remember to. Indeterminate, because the server
+       reports no progress. -->
+  <div class="progress" id="progress" role="status" aria-hidden="true">
+    <span class="sr-only">Loading</span>
+  </div>
   <header class="topbar">
     <form class="search" id="search" role="search" autocomplete="off">
       <input id="search-input" type="search" placeholder="Search wards, documents, decisions"
@@ -227,6 +238,15 @@
 
   <main class="pane pane-single" id="view-sentiment" hidden>
     <section class="panel-body viz">
+      <div class="page-head page-head-tight">
+        <h1>Issue pressure</h1>
+        <p id="sent-sub">Which services are generating noise, where.</p>
+      </div>
+      <!-- Which feed is being read, and what that feed actually measures.
+           Two feeds with different meanings must never be averaged, so this
+           chooses one rather than blending. -->
+      <div class="source-switch" id="sent-sources" role="group"
+           aria-label="Signal source"></div>
       <p class="provenance" id="sent-provenance"></p>
 
       <div class="kpi-row" id="sent-kpis"></div>

@@ -96,7 +96,9 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: Archivo, system-ui, sans-serif;
+  font-family: 'Instrument Sans', system-ui, sans-serif;
+  font-feature-settings: 'ss01';
+  letter-spacing: -0.006em;
   font-size: var(--step-1);
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
@@ -1042,3 +1044,102 @@ button, input, select { font: inherit; color: inherit; }
 @media (max-width: 1180px) {
   .pane:not(.pane-single) { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ============================================= type & surface refinement */
+
+/* Newsreader has optical sizing. The hero figure is set at display size and
+   a light weight, where the modulation of a serif actually shows; a stat
+   tile uses the same family a notch heavier so it still reads as a figure
+   at a quarter the size. Without this they were the same cut scaled, which
+   is what makes big serif numbers look thin and small ones look clumsy. */
+.headline-figure {
+  font-variation-settings: 'opsz' 72;
+  font-weight: 200;
+  letter-spacing: -0.03em;
+}
+.stat-value, .vs-n, .kpi-value {
+  font-variation-settings: 'opsz' 24;
+  font-weight: 300;
+  letter-spacing: -0.014em;
+}
+.page-head h1 { letter-spacing: -0.022em; }
+.panel-head h2 { letter-spacing: -0.012em; }
+.rail .wordmark { letter-spacing: -0.01em; }
+
+/* A hairline of light along the top of each panel. One pixel, barely
+   visible, and it is what stops a flat fill reading as a block of colour:
+   the surface picks up an edge the way a real material would. */
+.panel, .stats, .source, .vs-canvas, .nothing {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+:root[data-theme="light"] .panel,
+:root[data-theme="light"] .stats,
+:root[data-theme="light"] .source,
+:root[data-theme="light"] .nothing {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 1px 2px rgba(15, 29, 40, .04);
+}
+
+/* ================================================= loading indication */
+
+/* The whole-app bar. Fixed to the top of the stage, driven by the in-flight
+   counter in api(). Indeterminate, because the server reports no progress
+   and a bar that invents a percentage is lying about what it knows. */
+.progress {
+  position: sticky; top: 0; z-index: 20;
+  /* Its own 2px row. The first version pulled itself up under the topbar
+     with a negative margin and the topbar's own background painted over it,
+     so the bar existed, was busy, and could not be seen. */
+  height: 2px; flex: 0 0 2px;
+  background: var(--rule-hair); overflow: hidden;
+  opacity: 0; transition: opacity 140ms ease;
+}
+.progress.is-busy { opacity: 1; }
+.progress::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 24%;
+  background: var(--ours);
+  animation: app-sweep 1.1s ease-in-out infinite;
+}
+@keyframes app-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(417%); }
+}
+
+/* A region that is waiting. The shimmer is on the region, not on invented
+   placeholder rows: a skeleton that mimics eight ward rows is a promise
+   about what is coming that the data may not keep. */
+.is-loading { position: relative; }
+.is-loading > * { opacity: .38; transition: opacity 160ms ease; }
+.is-loading::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(100deg,
+    transparent 30%, rgba(67, 217, 163, .055) 50%, transparent 70%);
+  background-size: 220% 100%;
+  animation: region-sheen 1.3s ease-in-out infinite;
+}
+@keyframes region-sheen {
+  0%   { background-position: 160% 0; }
+  100% { background-position: -60% 0; }
+}
+
+/* The ward sidebar specifically: counts cannot be known until both requests
+   land, and a zero beside "Recruit" would be a claim. Dashes until then. */
+.filters.is-waiting .chip-n::after { content: '—'; }
+
+@media (prefers-reduced-motion: reduce) {
+  .progress::after { animation: none; width: 100%; opacity: .5; }
+  .is-loading::after { animation: none; background: none; }
+}
+
+/* --------------------------------------------- the signal source picker */
+
+.source-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.src-pick {
+  display: grid; gap: 2px; text-align: left;
+  padding: 9px 13px; border-radius: var(--r-control);
+  border: 1px solid var(--rule); background: var(--surface);
+  color: var(--ink-2); font: inherit; cursor: pointer;
+}
+.src-pick:hover { border-color: var(--ink-3); color: var(--ink); }
+.src-pick.is-on { border-color: var(--ours); color: var(--ink); }
+.src-pick-name { font-size: var(--step-0); font-weight: 500; }
+.src-pick-meta { font-size: var(--step--1); color: var(--ink-3); }

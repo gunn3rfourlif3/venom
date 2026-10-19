@@ -31,9 +31,17 @@ export interface ScoredItem {
  *  layer: nothing in src/sentiment/ accepts it as a write argument. */
 export interface RawItem {
   text: string;
-  /** Resolved before scoring, from place names or the subreddit/geo hints. */
-  wardId: string;
+  /** The place this item is about: a ward id, or a municipality's
+   *  demarcation code. Which one depends on what the source actually knows.
+   *  A source that only knows the municipality says so and is stored that
+   *  way, rather than having a ward guessed for it. */
+  placeId: string;
   observedOn: string;   // ISO date
+  /** Set when the SOURCE already knows the category and the classifier does
+   *  not need to guess it. A news item returned by the water query is about
+   *  water, whatever words the headline happens to use; letting a lexicon
+   *  re-derive it from "Emfuleni crisis deepens" just loses the fact. */
+  category?: IssueCategory;
 }
 
 export interface Scorer {

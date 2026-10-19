@@ -17,7 +17,8 @@
     "api": "node --env-file=.env dist/api/server.js",
     "create-user": "node --env-file=.env dist/cli/create-user.js",
     "sources:official": "node --env-file=.env dist/cli/sources-official.js",
-    "sources:cameras": "node --env-file=.env dist/cli/sources-cameras.js"
+    "sources:cameras": "node --env-file=.env dist/cli/sources-cameras.js",
+    "sources:news": "node --env-file=.env dist/cli/sources-news.js"
   },
   "dependencies": {
     "pg": "8.13.1"

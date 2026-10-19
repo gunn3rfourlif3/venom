@@ -115,7 +115,7 @@ export class XClient {
         if (text === '') continue;
         items.push({
           text,
-          wardId,
+          placeId: wardId,
           observedOn: (post.created_at ?? new Date().toISOString()).slice(0, 10),
         });
       }

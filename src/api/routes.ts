@@ -184,35 +184,51 @@ async function getDocuments(ctx: Ctx): Promise<void> {
 async function getSentiment(ctx: Ctx): Promise<void> {
   const municipality = ctx.url.searchParams.get('municipality');
 
+  // Which feed is being read. Default is the first row of v_signal_sources,
+  // which orders real feeds ahead of the synthetic one: once something real
+  // is connected the screen stops opening on invented numbers by itself.
+  const sources = await pool.query<{ source_id: string }>(
+    'SELECT * FROM v_signal_sources');
+  const asked = ctx.url.searchParams.get('source');
+  const chosen = sources.rows.some((s) => s.source_id === asked)
+    ? asked!
+    : sources.rows[0]?.source_id ?? null;
+
   const [area, bands, trend, summary] = await Promise.all([
     pool.query(
       `SELECT * FROM v_sentiment_area
-        WHERE ($1::text IS NULL OR municipality = $1)
-        ORDER BY municipality, category`, [municipality]),
+        WHERE source = $2 AND ($1::text IS NULL OR municipality = $1)
+        ORDER BY municipality, category`, [municipality, chosen]),
     pool.query(
       `SELECT * FROM v_sentiment_bands
-        WHERE ($1::text IS NULL OR municipality = $1)
-        ORDER BY municipality, band_order`, [municipality]),
+        WHERE source = $2 AND ($1::text IS NULL OR municipality = $1)
+        ORDER BY municipality, band_order`, [municipality, chosen]),
     pool.query(
-      `SELECT t.* FROM v_sentiment_trend t ORDER BY t.category, t.week_start`),
+      `SELECT t.* FROM v_sentiment_trend t WHERE t.source = $1
+        ORDER BY t.category, t.week_start`, [chosen]),
     pool.query(
       `SELECT count(*)::int                                   AS signals,
               count(DISTINCT ward_id)::int                    AS wards,
+              count(DISTINCT COALESCE(ward_id, demarcation_code))::int AS places,
               count(DISTINCT category)::int                   AS categories,
               COALESCE(sum(mentions), 0)::int                 AS mentions,
               ROUND(AVG(net_sentiment), 3)                    AS net_sentiment,
               ROUND(AVG(confidence), 3)                       AS confidence,
               max(observed_on)                                AS last_observed,
+              min(geo_level)::text                            AS geo_level,
               bool_and(source = 'SYNTHETIC')                  AS synthetic
          FROM issue_signal s
         CROSS JOIN control_panel cp
-        WHERE s.observed_on >= CURRENT_DATE - cp.sentiment_window_days`),
+        WHERE s.source = $1
+          AND s.observed_on >= CURRENT_DATE - cp.sentiment_window_days`, [chosen]),
   ]);
 
   json(ctx.res, 200, {
     as_of: new Date().toISOString(),
     data: {
       summary: summary.rows[0] ?? null,
+      sources: sources.rows,
+      chosen,
       area: area.rows,
       bands: bands.rows,
       trend: trend.rows,
