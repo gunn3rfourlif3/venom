@@ -720,6 +720,7 @@ async function loadHealth() {
       </div>
       <p class="source-access">${esc(s.access)} &mdash; ${esc(ACCESS_NOTE[s.access] ?? '')}${
         s.kind === 'SOCIAL' ? ' &middot; aggregate only, no posts stored' : ''}</p>
+      ${s.measures ? `<p class="source-measures">Tells you ${esc(s.measures)}.</p>` : ''}
       <p class="source-notes">${esc(s.notes)}</p>
       <p class="meta">${
         s.last_ok_at ? `Last succeeded ${new Date(s.last_ok_at).toLocaleString('en-ZA')}` : 'Never succeeded'

@@ -18,7 +18,8 @@
     "create-user": "node --env-file=.env dist/cli/create-user.js",
     "sources:official": "node --env-file=.env dist/cli/sources-official.js",
     "sources:cameras": "node --env-file=.env dist/cli/sources-cameras.js",
-    "sources:news": "node --env-file=.env dist/cli/sources-news.js"
+    "sources:news": "node --env-file=.env dist/cli/sources-news.js",
+    "sources:instagram": "node --env-file=.env dist/cli/sources-instagram.js"
   },
   "dependencies": {
     "pg": "8.13.1"
