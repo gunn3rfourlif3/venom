@@ -328,6 +328,7 @@ export async function postRoster(ctx: Ctx): Promise<void> {
   if (typeof body.text !== 'string') throw new HttpError(400, 'text required');
 
   const added: string[] = [];
+  const updated: string[] = [];
   const refused: Array<{ line: string; reason: string }> = [];
 
   for (const line of body.text.split(/\r?\n/)) {
@@ -345,20 +346,27 @@ export async function postRoster(ctx: Ctx): Promise<void> {
     if (!phone) { refused.push({ line: trimmed, reason: `"${phoneRaw}" is not a phone number` }); continue; }
 
     try {
-      await pool.query(
+      /* xmax is zero on a fresh insert and non-zero on the conflict path, so
+         this distinguishes a marshal newly added from one already on the
+         roster. Without it both count as "added", and an operator who pastes
+         the same list twice is told it loaded twice — which, when the list is
+         several hundred names, is the difference between believing the roster
+         is complete and knowing it is. */
+      const r = await pool.query<{ inserted: boolean }>(
         `INSERT INTO reporter_roster (phone, display_name, added_by, enabled)
          VALUES ($1,$2,$3,$4)
          ON CONFLICT (phone) DO UPDATE
            SET display_name = EXCLUDED.display_name,
-               enabled      = EXCLUDED.enabled`,
+               enabled      = EXCLUDED.enabled
+         RETURNING (xmax = 0) AS inserted`,
         [phone, name, ctx.userId ?? 'unknown', body.enabled !== false]);
-      added.push(phone);
+      if (r.rows[0]?.inserted) added.push(phone); else updated.push(phone);
     } catch (error) {
       refused.push({ line: trimmed, reason: (error as Error).message });
     }
   }
 
-  json(ctx.res, 201, { data: { added: added.length, refused } });
+  json(ctx.res, 201, { data: { added: added.length, updated: updated.length, refused } });
 }
 
 export const whatsapp = {

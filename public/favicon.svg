@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Tab mark. The X is cut out of the field rather than drawn on it, so it
+       stays legible at 16px where a stroked glyph fills in. Yellow is the
+       identity colour and carries no status meaning here. -->
+  <rect width="32" height="32" rx="6" fill="#0a0a0d"/>
+  <path d="M9 8h4.4l2.6 4.4L18.6 8H23l-4.8 7.9L23 24h-4.4l-2.6-4.5L13.4 24H9l4.8-8.1z"
+        fill="#f5c518"/>
+</svg>

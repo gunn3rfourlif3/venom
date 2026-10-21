@@ -487,3 +487,20 @@ items under "Other".
 **Fixed:** source-known category wins — `item.category ?? verdict.category`.
 Re-running produced exactly the eight categories searched.
 **Lesson:** do not infer what you were told.
+
+### G39 · A file transfer that silently rewrote an SVG
+`favicon.svg` left the container as 451 bytes and arrived on the Windows
+machine as **8,225 bytes** with an `xmlns:c2pa` namespace: the transfer path
+treated the `.svg` as an image and embedded a C2PA content-credentials
+manifest. The commit call reported `"rejected":[]`. The file still rendered,
+so nothing would have looked wrong — a favicon eighteen times larger than it
+needs to be, fetched on every page load, carrying provenance metadata nobody
+asked for.
+**Fixed:** wrote the file directly over the device shell with a heredoc,
+which does not pass through image handling. Checksum then matched.
+**Lesson:** this is the fourth time in this project a transfer reported
+success and delivered different bytes (see G33, G37). The four text files in
+the same call arrived intact; only the one the pipeline recognised as an
+image was altered. **Checksum both sides of every transfer** — and note that
+"it renders" is not verification, because a rewritten file usually still
+works. Prefer the device shell for binary or image-adjacent assets.

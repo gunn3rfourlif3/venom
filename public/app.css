@@ -1645,3 +1645,47 @@ button, input, select { font: inherit; color: inherit; }
   .alert-item { grid-template-columns: auto 1fr auto; gap: 6px 9px; }
   .alert-item .ab { grid-column: 1 / -1; }
 }
+
+/* Lines the roster would not take. Shown above the list and kept there
+   until the next add, because a count without the failing line is not
+   something anyone can act on. */
+.roster-refused {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--st-warn);
+  border-radius: var(--r-control);
+  background: rgba(251, 146, 60, .07);
+  font-size: var(--step-0);
+}
+.roster-refused strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--st-warn);
+  font-weight: 600;
+}
+.roster-refused div { color: var(--ink-2); padding: 2px 0; }
+.roster-refused code { color: var(--ink); }
+
+/* Hundreds of marshals get pasted here, not two. */
+/* Width matters more than height here. A textarea left at its default 20
+   columns wraps one marshal across two lines, so a paste of several hundred
+   is unreadable and the operator can't see which line is malformed. */
+#lg-roster-paste {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  font-size: var(--step-0);
+  line-height: 1.6;
+}
+#lg-roster-paste:focus {
+  outline: none;
+  border-color: var(--ours);
+}

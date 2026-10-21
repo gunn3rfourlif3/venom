@@ -1311,7 +1311,108 @@ async function loadLogistics() {
     return;
   }
 
-  /* Open alerts. Fetched separately from the board so that a slow or failing
+  /* The marshal roster: who automated ingest will accept a report from.
+   Fetched separately from the board for the same reason as alerts — an
+   administrative list must never be able to stop the operational screen
+   from rendering. */
+async function loadRoster() {
+  const host = $('lg-roster-list');
+  const count = $('lg-roster-count');
+  if (!host) return;
+  let data;
+  try { ({ data } = await api('/api/roster')); }
+  catch { if (count) count.textContent = 'could not read the roster'; return; }
+
+  const rows = data || [];
+  const on = rows.filter((r) => r.enabled).length;
+  if (count) {
+    count.textContent = rows.length === 0
+      ? 'nobody on the roster yet'
+      : `${fmt(on)} enabled${rows.length > on ? `, ${fmt(rows.length - on)} off` : ''}`;
+  }
+
+  if (rows.length === 0) {
+    /* The empty state is load-bearing here. An empty roster is not a blank
+       screen, it is a system that will refuse every report that arrives —
+       so it says so rather than showing nothing. */
+    host.innerHTML = `<p class="viz-sub">
+      Until somebody is on this list, every message to the reporting number
+      is refused. The paste form above still works, because a person filing
+      on behalf of the ground is authenticated by their own sign-in.</p>`;
+    return;
+  }
+
+  const shown = rows.slice(0, 40);
+  host.innerHTML = `
+    <table class="logi-table">
+      <thead><tr><th>Name</th><th>Number</th><th>Last heard</th><th>State</th></tr></thead>
+      <tbody>
+        ${shown.map((r) => `<tr>
+          <td data-k="Name">${esc(r.display_name)}</td>
+          <td data-k="Number"><span class="id">…${esc(String(r.phone).slice(-4))}</span></td>
+          <td data-k="Last heard">${r.last_message_at
+            ? esc(since((Date.now() - new Date(r.last_message_at).getTime()) / 60000))
+            : '—'}</td>
+          <td data-k="State">${r.enabled
+            ? pill('is-good', 'enabled') : pill('is-unknown', 'off')}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    ${rows.length > shown.length
+      ? `<p class="viz-sub">…and ${fmt(rows.length - shown.length)} more.</p>` : ''}`;
+}
+
+/* Only the last four digits are ever shown. HQ needs to recognise a marshal,
+   not to read a phone book off a screen left open on a desk — the same
+   reasoning as v_ingest_exceptions. */
+
+$('lg-roster-add')?.addEventListener('click', async () => {
+  const text = $('lg-roster-paste')?.value ?? '';
+  const note = $('lg-roster-note');
+  if (text.trim() === '') { if (note) note.textContent = 'Nothing pasted.'; return; }
+
+  const button = $('lg-roster-add');
+  button.disabled = true;
+  if (note) note.textContent = 'Adding…';
+  try {
+    const { data } = await api('/api/roster', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const refused = data.refused || [];
+    if (note) {
+      const parts = [`${fmt(data.added)} added`];
+      /* "already on roster" is not a failure, but it is not an addition
+         either. Re-pasting a list is normal; saying so stops the count
+         being read as growth. */
+      if (data.updated > 0) parts.push(`${fmt(data.updated)} already on roster`);
+      if (refused.length) parts.push(`${fmt(refused.length)} refused`);
+      note.textContent = parts.join(', ');
+    }
+    if (data.added > 0 || data.updated > 0) $('lg-roster-paste').value = '';
+    await loadRoster();
+
+    /* Refusals are named, not counted. "2 refused" tells the operator
+       nothing they can act on; the line that failed and why does.
+       Rendered AFTER loadRoster, because loadRoster replaces this element's
+       contents — writing the refusals first meant they appeared and were
+       wiped in the same tick, leaving a count and no detail. */
+    if (refused.length > 0) {
+      $('lg-roster-list').insertAdjacentHTML('afterbegin',
+        `<div class="roster-refused">
+          <strong>${fmt(refused.length)} line${refused.length === 1 ? '' : 's'} not added</strong>
+          ${refused.map((r) => `<div><code>${esc(r.line)}</code> — ${esc(r.reason)}</div>`).join('')}
+        </div>`);
+    }
+  } catch (error) {
+    if (note) note.textContent = `Failed: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+/* Open alerts. Fetched separately from the board so that a slow or failing
    alerts query cannot stop the logistics screen from rendering - the screen
    is more important than the banner on it. */
 async function loadAlerts() {
@@ -1469,6 +1570,7 @@ $('lg-alerts')?.addEventListener('click', async (e) => {
 
   renderSilence(data.silence || [], blind, Number(r.stations_total));
   loadAlerts();
+  loadRoster();
 
   /* Three different numbers here, and conflating them is how a screen
      lies: `shown` is what passed the client filter, `rows.length` is what

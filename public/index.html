@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Xnith</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="mask-icon" href="/favicon.svg" color="#f5c518">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Two families, used for two jobs. Instrument Sans carries the
@@ -35,7 +37,7 @@
 <div id="signin" class="signin" hidden>
   <form class="signin-card" id="signin-form">
     <h1 class="wordmark">Xnith</h1>
-    <p class="signin-note">Ward ledger for the 2026 municipal elections, Gauteng.</p>
+    <p class="signin-note">Ward ledger for the 2026 municipal elections.</p>
     <label for="email">Email</label>
     <input id="email" type="email" autocomplete="username" required>
     <label for="password">Password</label>
@@ -70,7 +72,7 @@
     <button data-view="settings"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M15 8h-2M3 8H1M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4M12.9 12.9l-1.4-1.4M4.5 4.5L3.1 3.1"/></svg><span>Control panel</span></button>
 
     <dl class="rail-stats" id="rail-stats">
-      <div><dt>Active region</dt><dd id="rs-region">Gauteng</dd></div>
+      <div><dt>Active region</dt><dd id="rs-region">&mdash;</dd></div>
       <div><dt>Stations</dt><dd id="rs-stations">&mdash;</dd></div>
       <div><dt>Register</dt><dd id="rs-sync">IEC GIS</dd></div>
     </dl>
@@ -234,7 +236,7 @@
     <section class="ledger-wrap">
       <div class="page-head page-head-tight">
         <h1>Wards</h1>
-        <p>Every ward in Gauteng, ordered by what needs doing first. Click a
+        <p>Every ward, ordered by what needs doing first. Click a
            row for the full picture of that ward.</p>
       </div>
       <!-- Each column says what it means on hover and under its own title:
@@ -418,6 +420,29 @@
         <span id="lg-parse-note" class="viz-sub" style="margin:0"></span>
       </div>
       <div id="lg-parse" style="margin-top:10px"></div>
+    </section>
+
+    <!-- Who may file a report. An allowlist, so this screen is what makes
+         automated ingest usable at all: an empty roster refuses everybody. -->
+    <section class="panel" id="lg-roster-panel" style="margin-top:14px">
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Who may report</h2>
+        <span class="viz-sub" style="margin:0" id="lg-roster-count">&mdash;</span>
+      </div>
+      <p class="viz-sub">
+        Automated ingest accepts a message only from a number on this list.
+        A report from anywhere else is recorded and refused, never filed &mdash;
+        which is what stops a stranger who learns the number from putting a
+        staffed booth on the exception list. Paste one marshal per line as
+        <code>Name, 082 123 4567</code>.</p>
+      <label class="sr-only" for="lg-roster-paste">Marshals to add</label>
+      <textarea id="lg-roster-paste" spellcheck="false"
+        placeholder="Thabo Mokoena, 082 123 4567&#10;Nomsa Dlamini, 073 555 0199"></textarea>
+      <div class="row" style="margin-top:10px;gap:8px;align-items:center">
+        <button id="lg-roster-add" class="btn btn-primary">Add to roster</button>
+        <span id="lg-roster-note" class="viz-sub" style="margin:0"></span>
+      </div>
+      <div id="lg-roster-list" style="margin-top:12px"></div>
     </section>
   </main>
 

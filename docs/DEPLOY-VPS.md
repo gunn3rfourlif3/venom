@@ -604,24 +604,37 @@ blast radius, and checking them is how you find out you were wrong about that.
 
 ## 12. Deploying a change
 
+Every `docker compose` call here needs `--env-file`, because the secrets live
+outside the repo and compose will otherwise start the app with an empty
+password and fail in a way that looks like a database fault (G38).
+
 ```bash
 cd /opt/xnith/app
 sudo -u xnith git pull
 
 # see what the migration would do before it does it
-sudo -u xnith docker compose exec app node dist/cli/migrate.js --dry-run
+sudo -u xnith docker compose --env-file /opt/xnith/secrets/xnith.env \
+  exec app node dist/cli/migrate.js --dry-run
 
-sudo -u xnith docker compose up -d --build app
-sudo -u xnith docker compose exec app node dist/cli/migrate.js
+sudo -u xnith docker compose --env-file /opt/xnith/secrets/xnith.env \
+  up -d --build app
+sudo -u xnith docker compose --env-file /opt/xnith/secrets/xnith.env \
+  exec app node dist/cli/migrate.js
 curl -fsS https://xnith.zaaka.io/api/health
 ```
+
+Static files under `public/` are served from the image, so a change to
+`app.js`, `app.css` or `index.html` still needs the `--build`. Hard-reload the
+browser afterwards (Ctrl-F5) or you will be looking at the cached old one and
+concluding the deploy failed.
 
 **Rollback:**
 
 ```bash
 sudo -u xnith git log --oneline -5
 sudo -u xnith git checkout <previous-sha>
-sudo -u xnith docker compose up -d --build app
+sudo -u xnith docker compose --env-file /opt/xnith/secrets/xnith.env \
+  up -d --build app
 ```
 
 Note that code rolls back and **schema does not** — the migrator never
