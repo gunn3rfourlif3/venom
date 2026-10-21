@@ -3,6 +3,7 @@ import { pool } from '../db.js';
 import { HttpError, json, readJson, readRaw, type Ctx } from './http.js';
 import { requireRole } from './auth.js';
 import { parseLine, inferSeverity } from './logistics.js';
+import { sendText } from '../sources/whatsappSend.js';
 
 /* Automated ingest of marshal reports over the WhatsApp Business Platform.
  *
@@ -25,9 +26,6 @@ import { parseLine, inferSeverity } from './logistics.js';
 
 const APP_SECRET   = process.env.WHATSAPP_APP_SECRET ?? '';
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN ?? '';
-const TOKEN        = process.env.WHATSAPP_TOKEN ?? '';
-const PHONE_ID     = process.env.WHATSAPP_PHONE_NUMBER_ID ?? '';
-const GRAPH        = 'https://graph.facebook.com/v21.0';
 
 /** South African numbers arrive from Meta without a plus and may be typed by
  *  a marshal in any of three local habits. Normalised to E.164 so the roster
@@ -234,27 +232,15 @@ async function handleOne(msg: InboundText): Promise<Handled> {
  *  Inside the 24-hour service window this needs no approved template, which
  *  is why ingest can be stood up without waiting on template review. It also
  *  does real work: a marshal who gets no acknowledgement does not know
- *  whether to resend, and a marshal who resends doubles the volume. */
+ *  whether to resend, and a marshal who resends doubles the volume.
+ *
+ *  The Graph call itself lives in sources/whatsappSend.ts, shared with the
+ *  alert engine - one place for the credentials and one place for Meta's
+ *  error codes. */
 async function acknowledge(to: string, text: string): Promise<void> {
-  if (!TOKEN || !PHONE_ID) return;   // not configured; ingest still works
-  try {
-    await fetch(`${GRAPH}/${PHONE_ID}/messages`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${TOKEN}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'text',
-        text: { body: text, preview_url: false },
-      }),
-      signal: AbortSignal.timeout(8000),
-    });
-  } catch {
-    // An acknowledgement that fails to send must never fail the ingest.
-  }
+  // An acknowledgement that fails to send must never fail the ingest.
+  const result = await sendText(to, text);
+  if (!result.ok) console.warn(`whatsapp ack to ${to.slice(-4)}: ${result.error}`);
 }
 
 const REPLY: Record<Outcome, (d: Handled) => string> = {

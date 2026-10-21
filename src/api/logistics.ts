@@ -420,4 +420,51 @@ export async function patchDeployment(ctx: Ctx, id: string): Promise<void> {
 export const logistics = {
   getLogistics, getCallSheet, getStationReports,
   postParse, postReports, patchDeployment,
+  getAlerts, postAlertAck,
 };
+
+/** Open alerts for the board.
+ *
+ *  Unacknowledged first and newest first: the board's job is to show what
+ *  nobody has picked up yet. Acknowledged alerts stay in the table as the
+ *  record that somebody saw it and when. */
+export async function getAlerts(ctx: Ctx): Promise<void> {
+  const limit = intParam(ctx.url, 'limit', 50, 1, 200);
+  const [open, counts] = await Promise.all([
+    pool.query(
+      `SELECT alert_id, kind::text AS kind, scope, severity, body, value,
+              station_id, raised_at, delivered_at, delivery_error,
+              acknowledged_at, acknowledged_by
+         FROM alert
+        WHERE acknowledged_at IS NULL
+        ORDER BY severity = 'serious' DESC, raised_at DESC
+        LIMIT $1`, [limit]),
+    pool.query(
+      `SELECT count(*) FILTER (WHERE acknowledged_at IS NULL)::int AS open,
+              count(*) FILTER (WHERE acknowledged_at IS NULL
+                               AND severity = 'serious')::int      AS open_serious,
+              count(*) FILTER (WHERE delivered_at IS NULL
+                               AND delivery_error IS NOT NULL)::int AS undelivered
+         FROM alert WHERE raised_at > now() - interval '24 hours'`),
+  ]);
+  json(ctx.res, 200, {
+    as_of: new Date().toISOString(),
+    data: { alerts: open.rows, counts: counts.rows[0] ?? null },
+  });
+}
+
+/** Acknowledging is a claim that a person has it in hand, so it records who
+ *  and when rather than simply clearing the row. */
+export async function postAlertAck(ctx: Ctx, id: string): Promise<void> {
+  requireRole(ctx, 'reporter');
+  const alertId = Number(id);
+  if (!Number.isInteger(alertId)) throw new HttpError(400, 'Bad alert id');
+  const { rows } = await pool.query(
+    `UPDATE alert
+        SET acknowledged_at = now(), acknowledged_by = $2
+      WHERE alert_id = $1 AND acknowledged_at IS NULL
+      RETURNING alert_id, acknowledged_at, acknowledged_by`,
+    [alertId, ctx.userId ?? 'unknown']);
+  if (!rows[0]) throw new HttpError(404, 'No such open alert');
+  json(ctx.res, 200, { data: rows[0] });
+}
