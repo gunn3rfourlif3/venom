@@ -1,0 +1,111 @@
+# Xnith on the shared VPS.
+#
+# This box already runs 26 containers across six projects — the Locare PMS and
+# its demo stack, two WordPress sites, the zaaka auction platform and
+# EternalGuard — all fronted by one Caddy container that owns ports 80 and
+# 443. Xnith joins that arrangement rather than replacing any of it.
+#
+# WHAT THE ISOLATION ACTUALLY IS, since it is easy to claim more than is true:
+#
+#   - Postgres is on `internal` ONLY. It is unreachable from deploy_default,
+#     so nothing else on this box — not Locare, not WordPress — can open a
+#     connection to it, and it publishes no host port either.
+#   - The app is on both networks, because Caddy has to reach it. That is the
+#     single deliberate opening.
+#   - The container runs as an unprivileged user (see Dockerfile).
+#   - Memory and CPU are capped, so a runaway query here cannot starve the
+#     other projects.
+#
+# What it is NOT: a security boundary against someone who already has the
+# `deploy` account. That account is in the `docker` group, which is
+# root-equivalent on this host. Worth being honest about rather than
+# implying a separation that is not there.
+
+name: xnith
+
+services:
+  db:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: xnith
+      POSTGRES_USER: xnith
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    # No `ports:` key, deliberately. Postgres is reachable only on `internal`.
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - internal
+    command:
+      - postgres
+      # Tuned for the 3GB this container is allowed, not for the 11GB the box
+      # has — most of that belongs to the other 26 containers.
+      - -c
+      - shared_buffers=768MB
+      - -c
+      - effective_cache_size=2GB
+      - -c
+      - work_mem=12MB
+      - -c
+      - maintenance_work_mem=192MB
+      - -c
+      - max_connections=60
+      # A runaway query on election day must not take the board with it.
+      - -c
+      - statement_timeout=30000
+      - -c
+      - idle_in_transaction_session_timeout=60000
+      - -c
+      - log_min_duration_statement=1000
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: "1.5"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xnith -d xnith"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: xnith-app:local
+    restart: unless-stopped
+    env_file: .env
+    # No published host port either: Caddy reaches this container by name over
+    # deploy_default. One less thing listening on the host.
+    networks:
+      internal:
+      deploy_default:
+        # The name the Caddyfile proxies to. Same arrangement as
+        # buddhapets-wp and cofifi-wp in that file.
+        aliases:
+          - xnith-app
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+          cpus: "1"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  db-data:
+
+networks:
+  # Ours. app <-> db, and nothing else on this box can see it.
+  internal:
+  # Caddy's. Created by the PMS03 compose project, so it is external here —
+  # this stack must never try to manage or remove it.
+  deploy_default:
+    external: true

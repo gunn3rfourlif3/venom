@@ -1,6 +1,40 @@
+# Secrets first, because they are the entries that cannot be undone: a secret
+# pushed to GitHub is a secret to rotate, not a commit to amend. `.env` was
+# already here and has never been committed; what is new is covering the
+# deploy/.env this stack needs, plus keys and the backup dumps.
+.env
+.env.*
+!.env.example
+!deploy/env.example
+deploy/.env
+*.pem
+*.key
+secrets/
+
+# Build output and dependencies
 node_modules/
 dist/
-.env
+
+# Local scratch — screenshot harnesses and probes written while debugging.
+# They are useful and disposable; neither reason to commit them.
+shot*.mjs
+diag.mjs
+probe.mjs
+sweep.mjs
+net.mjs
 *.log
-.DS_Store
+
+# Register and backup artefacts
+backups/
+*.dump
+*.dump.gz
+
+# PHP dependencies (kept from the original file — this repo sits under
+# xampp/htdocs and composer may yet run here).
 vendor/
+
+# Editor and OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
