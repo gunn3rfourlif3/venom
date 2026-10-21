@@ -340,6 +340,56 @@ reporting success is a claim, not evidence, and "I sent it" is not the same
 sentence as "it is there". All fourteen transferred files were re-verified
 after this was found.
 
+### G36 · The restore procedure in the runbook could never have worked
+`DEPLOY-VPS.md` carried `gunzip -c …dump.gz | tail -1 | pg_restore`. The
+`tail -1` was meant to select the newest *file*; in that position it took the
+last line of the decompressed binary archive and fed that to `pg_restore`,
+which fails every time with "input file does not appear to be a valid
+archive". It sat in the runbook from the day it was written.
+
+The dump was always fine — 1.1 MB, valid, on disk. **The procedure for
+getting it back was broken**, and nothing except running it would have shown
+that. It would have been reached for in the one hour nobody has time to
+debug a pipeline.
+**Fixed:** `LATEST=$(ls -t … | head -1)` picks the file; `gunzip -c "$LATEST"`
+streams the whole archive.
+**Verified:** restored into a scratch database and got 4,485 wards and
+23,696 stations back, matching production exactly.
+**Lesson:** this is the entire argument for rehearsing a restore rather than
+writing one down. A backup you have never restored is a hope, and so is a
+runbook you have never run.
+
+### G37 · A single-file bind mount silently ignores every `git pull`
+`deploy-caddy-1` mounts `/home/deploy/PMS03/deploy/Caddyfile` as a **file**.
+Docker binds the *inode*, not the path, and git does not edit files in
+place — it writes a new file and renames it over the old one, creating a new
+inode. So the host path points at the new file while the container holds the
+old one, for as long as that container lives.
+
+Measured during the Xnith deploy: host `inode=609456 size=16312`, container
+`inode=609236 size=14462`. The 1,850-byte difference was the new site block.
+`caddy validate` passed and `caddy reload` succeeded — against the stale
+file, reporting success and changing nothing.
+
+**Implication beyond Xnith: every Caddyfile change deployed by `git pull`
+since that container was last recreated has been silently ignored.** The file
+on disk and the config in memory have been diverging.
+**Workaround:** recreate the container (`--force-recreate`), which re-binds
+the mount.
+**Real fix, for after the election:** mount the *directory* (`./:/etc/caddy/`)
+rather than the file. Directory mounts follow renames correctly.
+
+### G38 · `docker compose` in PMS03/deploy operates on the wrong file
+That stack's compose file is `compose.prod.yml`, not a default name, and it
+interpolates variables from `.env.prod`. A plain `docker compose up` in that
+directory reads a different file and reports `no such service: caddy` — or
+worse, acts on a partial stack.
+**Always:** `docker compose -f compose.prod.yml --env-file .env.prod …`
+**Note the shape it shares with G37 and G33:** a command that looks like it
+worked and did nothing. Three separate instances of that failure mode in one
+evening is a pattern worth naming — when something should have changed and
+no evidence says it did, check the evidence rather than the exit code.
+
 ### G31 · The exceptions table listed 19,803 identical rows
 G4 predicted this; building the screen made it visible. Before the first
 reporting cycle every station in the country is `NO_REPORT`, so "stations

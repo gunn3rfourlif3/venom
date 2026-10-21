@@ -501,20 +501,28 @@ that disk goes with it. Any object store will do.
 
 ### Rehearse the restore — do this once, now
 
+**The `tail -1` that used to be here was a bug**, and a dangerous one: it
+was meant to pick the newest *file*, but in that position it took the last
+line of the decompressed binary archive and fed that to `pg_restore`, which
+fails every time with "input file does not appear to be a valid archive".
+A restore procedure that cannot restore is worse than none, because it is
+reached for in the one hour nobody has time to debug it. Found by rehearsing.
+
 ```bash
-cd /opt/xnith/app
-# restore last night's dump into a scratch database
-sudo -u xnith docker compose exec -T db createdb -U xnith restore_test
-gunzip -c /opt/xnith/backups/xnith-*.dump.gz | tail -1 | \
-  sudo -u xnith docker compose exec -T db pg_restore -U xnith -d restore_test
+cd /home/deploy/xnith/deploy
+LATEST=$(ls -t /home/deploy/xnith/backups/xnith-*.dump.gz | head -1)
+echo "restoring $LATEST"
+docker compose exec -T db dropdb -U xnith --if-exists restore_test
+docker compose exec -T db createdb -U xnith restore_test
+gunzip -c "$LATEST" | docker compose exec -T db pg_restore -U xnith -d restore_test
 
 # verify it is actually a working database, not just bytes
-sudo -u xnith docker compose exec -T db psql -U xnith -d restore_test -c \
+docker compose exec -T db psql -U xnith -d restore_test -c \
   "SELECT (SELECT count(*) FROM ward)    AS wards,
           (SELECT count(*) FROM station) AS stations,
-          (SELECT count(*) FROM booth_report) AS reports;"
+          (SELECT count(*) FROM app_user) AS users;"
 
-sudo -u xnith docker compose exec -T db dropdb -U xnith restore_test
+docker compose exec -T db dropdb -U xnith restore_test
 ```
 
 If those counts are wrong or the restore errors, **fix it today**, not on
