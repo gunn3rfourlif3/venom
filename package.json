@@ -19,6 +19,7 @@
     "sources:official": "node --env-file=.env dist/cli/sources-official.js",
     "sources:cameras": "node --env-file=.env dist/cli/sources-cameras.js",
     "sources:news": "node --env-file=.env dist/cli/sources-news.js",
+    "sources:press": "node --env-file=.env dist/cli/sources-press.js",
     "sources:instagram": "node --env-file=.env dist/cli/sources-instagram.js"
   },
   "dependencies": {
