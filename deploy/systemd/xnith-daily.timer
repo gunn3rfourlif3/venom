@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Xnith daily sweep each morning
+
+[Timer]
+# 04:12, off the hour for the same reason as the backup. Each community
+# press feed carries only its ten most recent items, so a skipped day is a
+# permanent hole in the series — hence Persistent.
+OnCalendar=*-*-* 04:12:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

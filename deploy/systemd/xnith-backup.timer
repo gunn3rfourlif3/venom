@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Xnith database dump nightly
+
+[Timer]
+# 02:37 rather than 02:00. Every other scheduled job on every other box runs
+# on the hour, and this one shares a VPS with six other projects.
+OnCalendar=*-*-* 02:37:00
+# If the box was down at 02:37, dump on next boot rather than skipping a day.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

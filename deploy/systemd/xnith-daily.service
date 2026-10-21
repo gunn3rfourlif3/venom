@@ -1,0 +1,12 @@
+[Unit]
+Description=Xnith daily source sweep, alerts and retention purge
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/xnith/deploy
+# Runs inside the app container, where DATABASE_URL and the source
+# credentials already live. -T because there is no terminal here.
+ExecStart=/usr/bin/docker compose exec -T app node dist/cli/daily.js
