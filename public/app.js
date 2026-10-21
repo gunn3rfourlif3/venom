@@ -45,14 +45,34 @@ function setBusy(delta) {
 
 async function api(path, options) {
   setBusy(1);
+  const started = performance.now();
   try {
     const res = await fetch(path, { credentials: 'same-origin', ...options });
+    /* Every request times itself, so the readout is the real round trip
+       rather than a number that sits there looking reassuring. On election
+       day it is the first thing to look at when the board feels slow: it
+       separates "the server is struggling" from "my connection is". */
+    setLatency(performance.now() - started);
     if (res.status === 401) { showSignIn(); throw new Error('unauthenticated'); }
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
     return await res.json();
+  } catch (error) {
+    setLatency(null);
+    throw error;
   } finally {
     setBusy(-1);
   }
+}
+
+/** The topbar latency readout. Slow is a status, so it is coloured; fast is
+ *  not news, so it is not. */
+function setLatency(ms) {
+  const el = document.getElementById('sys-lat');
+  if (!el) return;
+  if (ms == null) { el.textContent = '—'; el.className = 'v is-bad'; return; }
+  const rounded = Math.round(ms);
+  el.textContent = `${rounded}ms`;
+  el.className = rounded > 2000 ? 'v is-bad' : rounded > 700 ? 'v is-warn' : 'v';
 }
 
 /** Marks a region as loading while a promise runs. Used where a wait has a
@@ -743,8 +763,8 @@ async function loadHealth() {
 
 /* ------------------------------------------------------------ views */
 
-const VIEWS = ['overview', 'wards', 'sentiment', 'decisions', 'viewshed',
-               'float', 'health', 'settings'];
+const VIEWS = ['logistics', 'overview', 'wards', 'sentiment', 'decisions',
+               'viewshed', 'float', 'health', 'settings'];
 
 function showView(view) {
   document.querySelectorAll('.views button').forEach((b) =>
@@ -755,6 +775,7 @@ function showView(view) {
   // running behind a hidden pane burns a core for nothing.
   if (view !== 'viewshed') window.VenomViewshed?.hide();
 
+  if (view === 'logistics') loadLogistics();
   if (view === 'overview') loadOverview();
   if (view === 'sentiment') loadSentiment();
   if (view === 'decisions') loadDecisions();
@@ -1226,3 +1247,335 @@ $('sent-sources').addEventListener('click', (e) => {
   sentimentSource = pick.dataset.source;
   loadSentiment();
 });
+
+/* ------------------------------------------------------- logistics */
+
+const PRESENCE = {
+  UNSTAFFED:    { cls: 'is-bad',     word: 'Unstaffed',    rank: 0, row: 'needs-action' },
+  NO_REPORT:    { cls: 'is-unknown', word: 'No report',    rank: 1, row: 'needs-watch' },
+  STALE:        { cls: 'is-warn',    word: 'Stale',        rank: 2, row: 'needs-watch' },
+  UNDERSTAFFED: { cls: 'is-warn',    word: 'Understaffed', rank: 3, row: 'needs-watch' },
+  NO_PLAN:      { cls: 'is-unknown', word: 'No plan',      rank: 4, row: '' },
+  STAFFED:      { cls: 'is-good',    word: 'Staffed',      rank: 5, row: '' },
+};
+const SUPPLY = {
+  SUPPLY_BROKEN:  { cls: 'is-bad',     word: 'Broken' },
+  SUPPLY_PARTIAL: { cls: 'is-warn',    word: 'Partial' },
+  SUPPLY_PENDING: { cls: 'is-warn',    word: 'In transit' },
+  // Not 'OK'. Nothing was dispatched to this ward, which is an absence of
+  // information rather than a delivery that went well.
+  SUPPLY_NONE:    { cls: 'is-unknown', word: 'None sent' },
+  SUPPLY_OK:      { cls: 'is-good',    word: 'Arrived' },
+};
+
+let logiFilter = '';
+
+/** num() is the house formatter but returns the no-value dash for null; the
+ *  tiles also pass an already-formatted string like "87.5%", which must not
+ *  go through Math.round. */
+const fmt = (v) => (typeof v === 'string' ? v : num(v));
+
+/** "14m", "3h 20m", "—". A duration nobody has to divide by 60 themselves. */
+function since(minutes) {
+  if (minutes == null) return '—';
+  const m = Math.round(Number(minutes));
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h}h ${m % 60}m` : `${Math.floor(h / 24)}d ${h % 24}h`;
+}
+
+const pill = (cls, word) => `<span class="pill ${cls}">${esc(word)}</span>`;
+
+async function loadLogistics() {
+  let data;
+  try {
+    /* Three states, and they ask the server three different questions.
+       A named flag asks for that flag; "all" asks for everything; the
+       default — Exceptions — asks for only the stations where something has
+       happened, so the rows the screen would discard are never sent. */
+    const query = logiFilter === 'all' ? ''
+      : logiFilter ? `?presence=${encodeURIComponent(logiFilter)}`
+        : '?mode=exceptions';
+    ({ data } = await api(`/api/logistics${query}`));
+  } catch (error) {
+    $('lg-sub').textContent = `Could not read the ground: ${error.message}`;
+    return;
+  }
+
+  const r = data.rollup;
+  if (!r || Number(r.stations_total) === 0) {
+    $('lg-sub').textContent =
+      'No voting stations are loaded yet. Run `npm run sources:register` to build the register.';
+    $('lg-tiles').innerHTML = '';
+    $('lg-rows').innerHTML = '';
+    return;
+  }
+
+  /* Silence, by municipality, as a band rather than as rows.
+     Only drawn while silence is widespread: once most stations are
+     reporting, a silent one IS an exception and belongs in the table with
+     the others, so the band gets out of the way. */
+  function renderSilence(areas, blind, total) {
+    const host = $('lg-silence');
+    if (!host) return;
+    const widespread = total > 0 && blind / total > 0.25 && blind > 50;
+    if (!widespread || areas.length === 0) { host.hidden = true; host.innerHTML = ''; return; }
+    host.hidden = false;
+
+    const top = areas.slice(0, 12);
+    const rest = areas.length - top.length;
+    host.innerHTML = `
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Not heard from yet</h2>
+        <span class="viz-sub" style="margin:0">${fmt(blind)} of ${fmt(total)} stations</span>
+      </div>
+      <p class="viz-sub">
+        Listing these individually would put ${fmt(blind)} identical rows on
+        screen, so they are counted by municipality instead. The table below
+        shows only stations where something has actually happened.</p>
+      <div class="silence-grid">
+        ${top.map((a) => {
+          const pct = a.stations > 0 ? Math.round((a.silent / a.stations) * 100) : 0;
+          return `<div class="silence-item">
+            <span class="sa">${esc(a.municipality)}</span>
+            <span class="sb"><b>${fmt(a.silent)}</b> of ${fmt(a.stations)}</span>
+            <span class="sbar" aria-hidden="true"><i style="width:${pct}%"></i></span>
+          </div>`;
+        }).join('')}
+      </div>
+      ${rest > 0 ? `<p class="viz-sub">…and ${fmt(rest)} more municipalities.</p>` : ''}`;
+  }
+
+  /* The headline sentence. Deliberately a sentence: "412 of 23,699 stations
+     have not been heard from" is a thing somebody can repeat down a phone,
+     and a row of numbers is not. */
+  setRailStats(r.stations_total, data.provinces);
+  const blind = Number(r.stations_blind);
+  $('lg-sub').textContent =
+    `${fmt(r.stations_total)} stations. ${fmt(blind)} not heard from, `
+    + `${fmt(r.stations_unstaffed)} with nobody there, `
+    + `${fmt(r.active_high_problems)} serious problems open.`;
+
+  // --- status strip
+  const t = data.thresholds || {};
+  const rate = data.rate || {};
+  const lastMin = rate.last_message_at
+    ? (Date.now() - new Date(rate.last_message_at).getTime()) / 60000 : null;
+  const silence = Number(t.ingest_silence_minutes ?? 20);
+  const live = lastMin == null ? 'is-down' : lastMin > silence ? 'is-stale' : 'is-live';
+  const liveWord = lastMin == null ? 'NO REPORTS YET'
+    : lastMin > silence ? 'INGEST QUIET' : 'INGEST LIVE';
+
+  $('lg-statline').innerHTML = `
+    <div><span class="k">Ingest</span>
+      <span class="v"><span class="pulse ${live}"></span>${liveWord}</span></div>
+    <div><span class="k">Last report</span><span class="v">${since(lastMin)}</span></div>
+    <div><span class="k">Filed this hour</span>
+      <span class="v">${fmt(rate.filed_1h ?? 0)}</span></div>
+    <div><span class="k">Refused</span>
+      <span class="v ${Number(rate.refused_1h) > 0 ? 'is-warn' : ''}">${fmt(rate.refused_1h ?? 0)}</span></div>
+    <div><span class="k">Stale after</span><span class="v">${fmt(t.report_stale_minutes ?? '—')}m</span></div>`;
+
+  // --- tiles. Order is severity, not alphabet.
+  const tile = (n, label, cls) =>
+    `<div class="tile ${cls}"><span class="n">${fmt(n)}</span><span class="l">${label}</span></div>`;
+  $('lg-tiles').innerHTML = [
+    tile(r.stations_unstaffed, 'Unstaffed', Number(r.stations_unstaffed) > 0 ? 'is-alarm' : 'is-ok'),
+    tile(r.supply_breaks, 'Supply breaks', Number(r.supply_breaks) > 0 ? 'is-alarm' : 'is-ok'),
+    tile(r.stations_blind, 'Not heard from', Number(blind) > 0 ? 'is-warn' : 'is-ok'),
+    tile(r.active_high_problems, 'Serious problems', Number(r.active_high_problems) > 0 ? 'is-alarm' : 'is-ok'),
+    tile(`${r.staffed_pct ?? 0}%`, 'Staffed', 'is-quiet'),
+  ].join('');
+
+  // --- table
+  const rows = (data.stations || []).slice();
+  rows.sort((a, b) => {
+    const pa = PRESENCE[a.presence_flag]?.rank ?? 9;
+    const pb = PRESENCE[b.presence_flag]?.rank ?? 9;
+    if (pa !== pb) return pa - pb;
+    if ((a.severity === 'high') !== (b.severity === 'high')) return a.severity === 'high' ? -1 : 1;
+    return String(a.station_id).localeCompare(String(b.station_id));
+  });
+
+  /* THE EXCEPTIONS VIEW DELIBERATELY DOES NOT LIST SILENCE.
+     Before the first reporting cycle every station is NO_REPORT, so listing
+     them put 19,803 identical rows on screen - an exception that applies to
+     everything is not an exception (GOTCHAS.md G4). Silence is summarised
+     by municipality above the table instead, and individual rows are kept
+     for stations where something has actually happened: somebody reported
+     and the news was bad, or supply failed.
+     Asking for "No report" explicitly still lists them, because then it is
+     what the operator went looking for. */
+  const shown = logiFilter === 'all'
+    ? rows
+    : logiFilter
+      ? rows.filter((s) => s.presence_flag === logiFilter)
+      : rows.filter((s) =>
+        (s.presence_flag !== 'STAFFED' && s.presence_flag !== 'NO_REPORT')
+        || s.supply_flag === 'SUPPLY_BROKEN'
+        || s.severity === 'high');
+
+  renderSilence(data.silence || [], blind, Number(r.stations_total));
+
+  /* Three different numbers here, and conflating them is how a screen
+     lies: `shown` is what passed the client filter, `rows.length` is what
+     this page of the API returned, and `matching` is how many exist. When
+     the server capped the page, say so - "400 of 400" on a register of
+     23,699 reads as "that is all of them". */
+  const matching = Number(data.matching ?? rows.length);
+  const capped = matching > rows.length;
+  $('lg-table-note').textContent = shown.length === 0
+    ? 'Nothing needs attention right now.'
+    : capped
+      ? `Showing the worst ${fmt(shown.length)} of ${fmt(matching)} stations matching.`
+      : `${fmt(shown.length)} of ${fmt(matching)} stations, worst first.`;
+
+  $('lg-rows').innerHTML = shown.map((s) => {
+    const p = PRESENCE[s.presence_flag] || { cls: 'is-unknown', word: s.presence_flag, row: '' };
+    const sup = SUPPLY[s.supply_flag] || { cls: 'is-unknown', word: s.supply_flag };
+    const serious = s.severity === 'high';
+    return `<tr class="${p.row}">
+      <td data-k="Station"><span class="id">${esc(s.station_id)}</span>
+        <span class="sub">${esc(s.name || '')}</span></td>
+      <td data-k="Ward">${esc(s.ward_id || '—')}
+        <span class="sub">${esc(s.municipality || '')}</span></td>
+      <td data-k="Presence">${pill(p.cls, p.word)}</td>
+      <td data-k="Supply">${pill(sup.cls, sup.word)}</td>
+      <td data-k="People" class="num">${s.people_now ?? 0}${
+        s.expected_people ? `<span class="sub">of ${s.expected_people}</span>` : ''}</td>
+      <td data-k="Queue">${esc(s.queue || 'unknown')}</td>
+      <td data-k="Problem">${s.problem
+        ? `${serious ? pill('is-bad', 'Serious') + ' ' : ''}${esc(s.problem)}` : '—'}</td>
+      <td data-k="Last report" class="num">${since(s.minutes_since_report)}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* --- intake: parse, show, then file. Never file what was not shown. */
+
+let parsedLines = [];
+
+/* The filter row. Delegated, like the rest of the shell's controls, so the
+   buttons survive the table being re-rendered under them. */
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#lg-filter button');
+  if (!b) return;
+  logiFilter = b.dataset.flag ?? '';
+  document.querySelectorAll('#lg-filter button').forEach((x) =>
+    x.classList.toggle('is-on', x === b));
+  loadLogistics();
+});
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#lg-check')) { e.preventDefault(); logiCheck(); }
+  if (e.target.closest('#lg-file'))  { e.preventDefault(); logiFile(); }
+});
+
+async function logiCheck() {
+  const text = $('lg-paste').value.trim();
+  if (!text) return;
+  $('lg-file').disabled = true;
+  let data;
+  try {
+    ({ data } = await api('/api/booth-reports/parse', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }));
+  } catch (error) {
+    $('lg-parse-note').textContent = `Could not check: ${error.message}`;
+    return;
+  }
+
+  parsedLines = (data.lines || []).filter((l) => l.error === null);
+  $('lg-parse-note').textContent =
+    `${data.ok} ready, ${data.bad} to fix.`;
+  $('lg-file').disabled = data.ok === 0;
+
+  $('lg-parse').innerHTML = (data.lines || []).map((l) => `
+    <div class="parse-row ${l.error ? 'is-error' : ''}">
+      <span class="ln">${l.line}</span>
+      <span>${l.error
+        ? esc(l.raw)
+        : `<strong>${esc(l.stationId)}</strong> ${esc(l.stationName || '')} — `
+          + `${esc(l.queue || '')}${l.peopleOnSite != null ? `, ${l.peopleOnSite} on site` : ''}`
+          + `${l.problem ? `, ${esc(l.problem)}` : ''}`}</span>
+      <span class="why">${l.error ? esc(l.error) : ''}</span>
+    </div>`).join('');
+}
+
+async function logiFile() {
+  const by = $('lg-by').value.trim();
+  if (!by) { $('lg-parse-note').textContent = 'Your name is needed — it goes on every report.'; return; }
+  if (parsedLines.length === 0) return;
+
+  $('lg-file').disabled = true;
+  try {
+    const { data } = await api('/api/booth-reports', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        reportedBy: by,
+        reports: parsedLines.map((l) => ({
+          stationId: l.stationId, queue: l.queue, problem: l.problem,
+          severity: l.severity, peopleOnSite: l.peopleOnSite,
+        })),
+      }),
+    });
+    const refused = data.refused?.length ?? 0;
+    $('lg-parse-note').textContent =
+      `Filed ${data.written}.${refused ? ` ${refused} refused.` : ''}`;
+    $('lg-paste').value = '';
+    $('lg-parse').innerHTML = '';
+    parsedLines = [];
+    await loadLogistics();
+  } catch (error) {
+    $('lg-parse-note').textContent = `Could not file: ${error.message}`;
+    $('lg-file').disabled = false;
+  }
+}
+
+/* The rail is a drawer below 760px. Closing on navigation matters: tapping
+   a view and being left staring at the menu you just used is the most
+   common phone-nav fault there is. */
+document.addEventListener('click', (e) => {
+  const rail = $('rail');
+  if (!rail) return;
+  if (e.target.closest('#railtoggle')) {
+    const open = rail.classList.toggle('is-open');
+    $('railtoggle')?.setAttribute('aria-expanded', String(open));
+    return;
+  }
+  if (e.target.closest('.views button[data-view]')) {
+    rail.classList.remove('is-open');
+    $('railtoggle')?.setAttribute('aria-expanded', 'false');
+    return;
+  }
+  if (rail.classList.contains('is-open') && !e.target.closest('#rail')) {
+    rail.classList.remove('is-open');
+    $('railtoggle')?.setAttribute('aria-expanded', 'false');
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') $('rail')?.classList.remove('is-open');
+});
+
+/* Rail footer figures. Read once from the logistics payload rather than
+   given their own request, since that screen already knows the register's
+   size. */
+function setRailStats(stationsTotal, provinces) {
+  const el = $('rs-stations');
+  if (el && stationsTotal != null) el.textContent = num(stationsTotal);
+
+  /* The scope line used to be the literal word "Gauteng" in the markup.
+     The register is national now, so a hardcoded province is simply a
+     wrong label on a screen somebody trusts. It reads from the data: one
+     province names it, several say how many. */
+  const where = !provinces || provinces.length === 0 ? null
+    : provinces.length === 1 ? provinces[0]
+      : `${provinces.length} provinces`;
+  const scope = $('scope');
+  if (scope && where) scope.innerHTML = `${esc(where)}<br>2026 municipal elections`;
+  const region = $('rs-region');
+  if (region && where) region.textContent = where;
+}

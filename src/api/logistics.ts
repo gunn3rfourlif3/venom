@@ -130,21 +130,45 @@ export async function getLogistics(ctx: Ctx): Promise<void> {
     ['NO_REPORT', 'STALE', 'UNSTAFFED', 'NO_PLAN', 'UNDERSTAFFED', 'STAFFED']);
   const limit = intParam(ctx.url, 'limit', 400, 1, 2000);
 
-  const [rollup, stations, recent, panel] = await Promise.all([
+  /* The default view wants only stations where something has happened, and
+     it used to get 400 rows of whatever sorted first and discard most of
+     them in the browser. Filtering here instead cut the payload from 172 KB
+     to a few, and the sort now runs over the handful of rows that qualify
+     rather than over all 19,803.
+     'NO_REPORT' is excluded because silence is summarised separately - see
+     the rollup below and GOTCHAS.md G4. */
+  const exceptionsOnly = ctx.url.searchParams.get('mode') === 'exceptions';
+  const where = `($1::text IS NULL OR w.municipality = $1)
+          AND ($2::text IS NULL OR b.presence_flag = $2)
+          AND (NOT $3::boolean OR (
+                b.presence_flag NOT IN ('STAFFED', 'NO_REPORT')
+                OR b.supply_flag = 'SUPPLY_BROKEN'
+                OR b.severity = 'high'))`;
+
+  const [rollup, stations, matching, recent, panel, rate, provinces, silence] = await Promise.all([
     pool.query('SELECT * FROM v_logistics_rollup'),
     pool.query(
       `SELECT b.*, w.municipality
          FROM v_booth_logistics b
          LEFT JOIN ward w USING (ward_id)
-        WHERE ($1::text IS NULL OR w.municipality = $1)
-          AND ($2::text IS NULL OR b.presence_flag = $2)
+        WHERE ${where}
         ORDER BY array_position(
                    ARRAY['UNSTAFFED','SUPPLY_BROKEN','NO_REPORT','STALE',
                          'UNDERSTAFFED','NO_PLAN','STAFFED'], b.presence_flag),
                  b.severity = 'high' DESC,
                  b.station_id
-        LIMIT $3`,
-      [municipality, presence, limit]),
+        LIMIT $4`,
+      [municipality, presence, exceptionsOnly, limit]),
+    // How many match the filter in total, as distinct from how many were
+    // returned. Without it the screen can only say "400 of 400 stations",
+    // which on a register of 23,699 reads as "that is all of them" when it
+    // means "that is all we sent you".
+    pool.query<{ n: number }>(
+      `SELECT count(*)::int AS n
+         FROM v_booth_logistics b
+         LEFT JOIN ward w USING (ward_id)
+        WHERE ${where}`,
+      [municipality, presence, exceptionsOnly]),
     // The last hour of filings, so the operator can see their own typing
     // land and spot a line they sent twice.
     pool.query(
@@ -154,7 +178,41 @@ export async function getLogistics(ctx: Ctx): Promise<void> {
         WHERE reported_at > now() - interval '2 hours'
         ORDER BY reported_at DESC
         LIMIT 60`),
-    pool.query('SELECT report_stale_minutes, understaffed_ratio FROM control_panel'),
+    pool.query(
+      `SELECT report_stale_minutes, understaffed_ratio, ingest_silence_minutes
+         FROM control_panel`),
+    // Ingest health travels with the board rather than on its own endpoint.
+    // A webhook that stops being called looks exactly like a quiet day, so
+    // the screen that shows the quiet has to show the ingest beside it.
+    pool.query('SELECT * FROM v_ingest_rate'),
+
+    /* Silence, rolled up by municipality.
+     *
+     * Before the first reporting cycle every station in the country is
+     * NO_REPORT, so the exceptions table lists ~19,800 identical rows and
+     * tells the operator nothing. That is GOTCHAS.md G4 in table form: an
+     * exception that applies to everything is not an exception.
+     *
+     * Grouped, it becomes usable. "Dr Beyers Naude: 54 of 54 silent" is a
+     * sentence somebody can act on; fifty-four rows reading NO REPORT are
+     * fifty-four rows somebody scrolls past. */
+    // Which provinces the register actually covers, for the rail's scope
+    // line. It used to read "Gauteng" because that word was in the markup.
+    pool.query<{ province: string }>(
+      `SELECT DISTINCT province FROM ward
+        WHERE province IS NOT NULL AND province <> '' ORDER BY province`),
+
+    pool.query(
+      `SELECT w.municipality,
+              count(*)::int AS stations,
+              count(*) FILTER (WHERE b.presence_flag = 'NO_REPORT')::int AS silent
+         FROM v_booth_logistics b
+         JOIN ward w USING (ward_id)
+        WHERE ($1::text IS NULL OR w.municipality = $1)
+        GROUP BY w.municipality
+       HAVING count(*) FILTER (WHERE b.presence_flag = 'NO_REPORT') > 0
+        ORDER BY 3 DESC, 1
+        LIMIT 80`, [municipality]),
   ]);
 
   json(ctx.res, 200, {
@@ -162,8 +220,13 @@ export async function getLogistics(ctx: Ctx): Promise<void> {
     data: {
       rollup: rollup.rows[0] ?? null,
       stations: stations.rows,
+      matching: matching.rows[0]?.n ?? stations.rows.length,
+      limit,
       recent: recent.rows,
       thresholds: panel.rows[0] ?? null,
+      rate: rate.rows[0] ?? null,
+      silence: silence.rows,
+      provinces: provinces.rows.map((p) => p.province),
     },
   });
 }

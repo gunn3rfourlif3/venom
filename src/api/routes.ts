@@ -42,7 +42,15 @@ async function postLogout(ctx: Ctx): Promise<void> {
 }
 
 async function getMe(ctx: Ctx): Promise<void> {
-  json(ctx.res, 200, { user_id: ctx.userId, role: ctx.role });
+  // display_name included because the topbar shows it. Without it the client
+  // falls back to user_id and greets the operator with a hex string.
+  const { rows } = await pool.query<{ display_name: string }>(
+    'SELECT display_name FROM app_user WHERE user_id = $1', [ctx.userId]);
+  json(ctx.res, 200, {
+    user_id: ctx.userId,
+    role: ctx.role,
+    display_name: rows[0]?.display_name ?? null,
+  });
 }
 
 // ---------------------------------------------------------------- reads

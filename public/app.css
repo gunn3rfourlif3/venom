@@ -26,24 +26,48 @@
    pattern repeats the whole token block under a second selector to beat the
    media query, and the two copies drift. */
 
+/* XNITH COMMAND SKIN.
+   Built to the agreed layout: near-black field, gold accent, technical
+   type. Two rules keep it honest, and both came out of measuring rather
+   than looking.
+
+   ONE: GOLD IS IDENTITY AND NEVER A STATUS. In the proposed layout gold
+   carries the hero figure, "People Short", the "Act Now" border and the
+   RECRUIT badge - so it means both "ours" and "needs attention" at once.
+   That cannot survive a logistics table where green is STAFFED and amber is
+   UNDERSTAFFED: measured against the brand gold, a green at #22c55e
+   separates by only ΔE 7.2 under protanopia, which is inside the floor band.
+   So gold appears on the current view, hero figures and primary actions, and
+   never inside a status column. The status ramp below is its own thing.
+
+   TWO: STATUS IS NEVER COLOUR ALONE. Every status pill carries its word.
+   The ramp passes CVD separation (ΔE 10.5 deutan, 13.9 tritan) and the
+   normal-vision floor (17.7), but gold against the warning orange is ΔE 12.9
+   - below the floor - so the two must never need telling apart by eye. They
+   do not, because they sit in different regions and both are labelled. */
+
 :root {
   color-scheme: dark;
 
-  /* Blue-black rather than neutral near-black: it is where Venom already
-     was, and it keeps the accent reading as green rather than as lime on
-     charcoal. Every value measured against the two surfaces it sits on. */
-  --paper:      #080e13;   /* the field everything sits on */
-  --surface:    #0f1821;   /* a panel */
-  --surface-2:  #15212c;   /* nested, hover, input wells */
-  --ink:        #e9f0f5;   /* 16.9 : 1 */
-  --ink-2:      #9db0bd;   /*  8.7 : 1 */
-  --ink-3:      #718699;   /*  5.2 : 1 — still real text, not decoration */
-  --rule:       #223240;
-  --rule-hair:  #17232e;
-  --ours:       #43d9a3;   /* 10.8 : 1 — the accent, and it only means ours */
-  --theirs:     #e8927c;
-  --flag:       #e9f0f5;
-  --focus:      #6aa9e0;
+  --paper:      #0a0a0d;   /* the field everything sits on */
+  --surface:    #121217;   /* a panel */
+  --surface-2:  #1a1a21;   /* nested, hover, input wells */
+  --ink:        #e8e8ec;   /* 16.4 : 1 */
+  --ink-2:      #9a9aa6;   /*  7.4 : 1 */
+  --ink-3:      #6e6e7c;   /*  4.2 : 1 — still real text, not decoration */
+  --rule:       #26262f;
+  --rule-hair:  #1b1b22;
+  --ours:       #f5c518;   /* 12.1 : 1 — identity only, never a status */
+  --theirs:     #8b8b99;
+  --flag:       #f5c518;
+  --focus:      #60a5fa;
+
+  /* The status ramp. Four states, each shipped with its word. */
+  --st-good:    #34d399;   /* staffed, arrived, healthy */
+  --st-warn:    #fb923c;   /* understaffed, stale, partial */
+  --st-bad:     #f43f5e;   /* unstaffed, supply broken, high severity */
+  --st-unknown: #94a3b8;   /* no report, no plan — absence, not alarm */
+  --st-info:    #60a5fa;   /* informational counts */
   --lift:       0 1px 2px rgba(0, 0, 0, .4);
   --lift-panel: -1px 0 0 var(--rule), -24px 0 48px rgba(0, 0, 0, .5);
 
@@ -73,12 +97,25 @@
   --ink-3:      #6b7f90;
   --rule:       #cfd8df;
   --rule-hair:  #e4eaee;
-  --ours:       #0f6b52;
-  --theirs:     #a33c22;
-  --flag:       #0b1620;
+  --ours:       #8a6400;
+  --theirs:     #6b6b78;
+  --flag:       #8a6400;
   --focus:      #2f6fab;
   --lift:       0 1px 2px rgba(15, 29, 40, .06);
   --lift-panel: -1px 0 0 var(--rule), -24px 0 48px rgba(15, 29, 40, .10);
+
+  /* Light status ramp, stepped for this surface rather than flipped from
+     dark. Normal-vision separation passes at ΔE 15.6 and every step clears
+     3:1 against the surface - but warn against bad is ΔE 5.3 under
+     deuteranopia, and no pair of warning/critical hues at these lightnesses
+     fixes that. So hue is not what carries the difference: critical is a
+     filled pill, warning an outlined one, and both always carry their word.
+     Form first, colour second. */
+  --st-good:    #047857;
+  --st-warn:    #a16207;
+  --st-bad:     #be123c;
+  --st-unknown: #475569;
+  --st-info:    #1d4ed8;
 }
 
 * { box-sizing: border-box; }
@@ -1150,3 +1187,322 @@ button, input, select { font: inherit; color: inherit; }
   margin: 0; font-size: var(--step--1); color: var(--ink-2);
   border-left: 2px solid var(--rule); padding-left: 10px;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   LOGISTICS
+   Built to the agreed command layout. Three regions, in the order a person
+   on election day needs them: what is wrong (tiles), where (exception
+   table), and how reports are arriving (ingest).
+
+   The ordering principle, which is the whole design: a station that is fine
+   needs no attention, so the board leads with the ones that are not. The
+   table is sorted worst-first and the default filter hides STAFFED. Nobody
+   scrolls 23,699 rows looking for trouble.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* The status strip above the stage — SYSTEM ONLINE / last report / scope.
+   Every figure on this app carries the time it was true at; this is where
+   that lives for the live layer. */
+.statline {
+  display: flex; align-items: stretch; gap: 0;
+  border: 1px solid var(--rule); border-radius: var(--r-panel);
+  background: var(--surface); overflow: hidden;
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  font-size: var(--step--1);
+}
+.statline > div {
+  padding: 8px 14px; border-right: 1px solid var(--rule-hair);
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.statline > div:last-child { border-right: 0; margin-left: auto; }
+.statline dt, .statline .k {
+  color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em;
+  font-size: 10px;
+}
+.statline .v { color: var(--ink); font-variant-numeric: tabular-nums; }
+.statline .v.is-good { color: var(--st-good); }
+.statline .v.is-warn { color: var(--st-warn); }
+.statline .v.is-bad  { color: var(--st-bad); }
+
+/* A live dot. Animated only when something is actually arriving, so a still
+   dot is information rather than decoration. */
+.pulse {
+  width: 7px; height: 7px; border-radius: 50%; display: inline-block;
+  background: var(--st-unknown); margin-right: 6px; vertical-align: 1px;
+}
+.pulse.is-live { background: var(--st-good); animation: pulse 2.4s ease-in-out infinite; }
+.pulse.is-stale { background: var(--st-warn); }
+.pulse.is-down { background: var(--st-bad); }
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+@media (prefers-reduced-motion: reduce) { .pulse.is-live { animation: none } }
+
+/* The four rollup tiles. */
+.tiles {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.tile {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--r-panel); padding: 16px 14px; text-align: center;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.tile .n {
+  font-size: clamp(1.75rem, 4vw, 2.5rem); line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.tile .l {
+  font-size: var(--step--1); color: var(--ink-2);
+  text-transform: uppercase; letter-spacing: .06em;
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+}
+/* A tile that is reporting trouble says so with a rule across its top as
+   well as a colour, so the alarm survives both colour blindness and a
+   greyscale print. */
+.tile.is-alarm { border-color: var(--st-bad); box-shadow: inset 0 2px 0 var(--st-bad); }
+.tile.is-alarm .n { color: var(--st-bad); }
+.tile.is-warn  { border-color: var(--st-warn); box-shadow: inset 0 2px 0 var(--st-warn); }
+.tile.is-warn .n { color: var(--st-warn); }
+.tile.is-ok .n { color: var(--st-good); }
+.tile.is-quiet .n { color: var(--ink-2); }
+
+/* STATUS PILLS — form carries the state, colour reinforces it.
+   Critical is filled, warning is outlined, good and unknown are plain. That
+   ordering is legible in greyscale and to a deuteranopic reader, which the
+   hues alone are not: warn against bad measures ΔE 5.3 under deutan in the
+   light theme and no pair of hues at these lightnesses fixes it. */
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+  padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid transparent;
+}
+.pill.is-bad  { background: var(--st-bad); color: #150a0e; font-weight: 600; }
+.pill.is-warn { border-color: var(--st-warn); color: var(--st-warn); }
+.pill.is-good { color: var(--st-good); border-color: color-mix(in srgb, var(--st-good) 35%, transparent); }
+.pill.is-unknown { color: var(--ink-2); border-color: var(--rule); }
+.pill.is-info { color: var(--st-info); border-color: color-mix(in srgb, var(--st-info) 35%, transparent); }
+
+/* The exception table. Dense, monospace identifiers, tabular figures. */
+.logi-table { width: 100%; border-collapse: collapse; font-size: var(--step-0); }
+.logi-table th {
+  text-align: left; font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-3); font-weight: 500;
+  padding: 0 10px 8px; border-bottom: 1px solid var(--rule);
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  position: sticky; top: 0; background: var(--surface); z-index: 1;
+}
+.logi-table td { padding: 9px 10px; border-bottom: 1px solid var(--rule-hair); vertical-align: top; }
+.logi-table tbody tr:hover { background: var(--surface-2); }
+.logi-table .id {
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  color: var(--ours); font-size: var(--step--1);
+}
+.logi-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.logi-table .sub { display: block; color: var(--ink-3); font-size: var(--step--1); margin-top: 2px; }
+
+/* The margin flag, kept from the original design: a solid mark in the left
+   margin of a row that needs acting on. It is the only heavy mark spent,
+   and it is what the eye finds before any colour registers. */
+.logi-table tr.needs-action td:first-child { box-shadow: inset 3px 0 0 var(--st-bad); }
+.logi-table tr.needs-watch  td:first-child { box-shadow: inset 3px 0 0 var(--st-warn); }
+
+/* Intake — the paste fallback. */
+.intake textarea {
+  width: 100%; min-height: 150px; resize: vertical;
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  font-size: var(--step-0); line-height: 1.6;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: var(--r-control); padding: 11px 12px;
+}
+.intake textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.parse-row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: baseline;
+  padding: 7px 10px; border-bottom: 1px solid var(--rule-hair); font-size: var(--step-0); }
+.parse-row.is-error { background: color-mix(in srgb, var(--st-bad) 9%, transparent); }
+.parse-row .ln {
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  color: var(--ink-3); font-size: var(--step--1);
+}
+.parse-row .why { color: var(--st-bad); font-size: var(--step--1); }
+
+/* PHONE. The mockup is a desk instrument; this layer is not in it and is
+   the one addition made without being asked, because deciding while moving
+   was an explicit requirement and a 9-column table does not survive 375px.
+   Below 760px each row becomes a card: station, status, the one number that
+   matters, and nothing else. */
+@media (max-width: 760px) {
+  .statline { flex-wrap: wrap; }
+  .statline > div { flex: 1 1 42%; border-right: 0; border-bottom: 1px solid var(--rule-hair); }
+  .statline > div:last-child { margin-left: 0; }
+
+  .logi-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .logi-table, .logi-table tbody, .logi-table tr, .logi-table td { display: block; width: 100%; }
+  .logi-table tr {
+    border: 1px solid var(--rule); border-radius: var(--r-control);
+    margin-bottom: 8px; padding: 10px 12px; background: var(--surface);
+  }
+  .logi-table tr.needs-action { border-left: 3px solid var(--st-bad); }
+  .logi-table tr.needs-watch  { border-left: 3px solid var(--st-warn); }
+  .logi-table td { border: 0; padding: 2px 0; }
+  .logi-table td[data-k]::before {
+    content: attr(data-k) " "; color: var(--ink-3); font-size: 10px;
+    text-transform: uppercase; letter-spacing: .07em;
+    font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  }
+  .logi-table .num { text-align: left; }
+  .tile { padding: 12px 10px; }
+}
+
+/* ── Command shell: the parts of the agreed layout the rail did not have ── */
+
+.wordmark .ver {
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  font-style: normal; font-size: 11px; color: var(--ours);
+  letter-spacing: .04em; margin-left: 5px; vertical-align: 2px;
+}
+
+/* Section labels and panel titles in the technical face. This is what makes
+   the skin read as an instrument rather than a report. */
+.rail-group, .viz-title, .page-head h1, .statline, .tile .l, .logi-table th {
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+}
+.rail-group { text-transform: uppercase; letter-spacing: .1em; font-size: 10px; }
+.page-head h1 { text-transform: uppercase; letter-spacing: .06em; }
+.viz-title { text-transform: uppercase; letter-spacing: .05em; font-size: var(--step-0); }
+
+/* Rail footer: scope, size, where the register came from. Standing context
+   that should never need a click. */
+.rail-stats {
+  margin: auto 0 10px; padding: 10px 0 0; border-top: 1px solid var(--rule-hair);
+  font-family: 'Spline Sans Mono', ui-monospace, monospace; font-size: 10px;
+}
+.rail-stats > div { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
+.rail-stats dt { color: var(--ink-3); text-transform: uppercase; letter-spacing: .07em; }
+.rail-stats dd { margin: 0; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* System block in the top bar. */
+.sysblock {
+  display: flex; flex-direction: column; gap: 1px; padding: 4px 12px 4px 0;
+  border-right: 1px solid var(--rule); margin-right: 12px;
+  font-family: 'Spline Sans Mono', ui-monospace, monospace; font-size: 10px;
+}
+.sysblock .k { color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em; }
+.sysblock .v { color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; }
+
+/* Filter segments. The current one is stated by weight and a rule beneath
+   it, not by colour alone. */
+.seg { display: flex; gap: 2px; flex-wrap: wrap; }
+.seg button {
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+  padding: 5px 10px; border: 1px solid var(--rule); border-radius: var(--r-control);
+  background: var(--surface); color: var(--ink-2); cursor: pointer;
+}
+.seg button:hover { background: var(--surface-2); color: var(--ink); }
+.seg button.is-on {
+  color: var(--paper); background: var(--ours); border-color: var(--ours); font-weight: 600;
+}
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* PHONE: the rail becomes a drawer rather than a dead column.
+   At 390px a 208px rail leaves 182px of stage, so it cannot simply stay. */
+@media (max-width: 760px) {
+  .shell { grid-template-columns: 1fr !important; }
+  .rail {
+    position: fixed; inset: 0 auto 0 0; width: 76vw; max-width: 280px;
+    z-index: 60; transform: translateX(-100%); transition: transform .18s ease;
+    background: var(--surface); border-right: 1px solid var(--rule);
+  }
+  .rail.is-open { transform: none; }
+  @media (prefers-reduced-motion: reduce) { .rail { transition: none } }
+  .railtoggle {
+    position: fixed; top: 8px; left: 8px; z-index: 61;
+    font-family: 'Spline Sans Mono', ui-monospace, monospace; font-size: 11px;
+    padding: 7px 11px; border-radius: var(--r-control);
+    border: 1px solid var(--rule); background: var(--surface); color: var(--ink);
+  }
+  .topbar { padding-left: 76px; }
+  .sysblock { display: none; }
+  .panel-head { align-items: flex-start; }
+}
+@media (min-width: 761px) { .railtoggle { display: none } }
+
+/* ---------------------------------------------------------------- silence
+   Counting what has not reported, instead of listing it.
+
+   Form before colour: the bar is a proportion, so it is a bar. The fill is
+   --st-unknown rather than a warning colour on purpose - a station that has
+   not reported yet is an absence, not an alarm, and painting 19,800 of them
+   amber on election morning would train people to ignore amber by 07:10. */
+.silence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 2px 18px;
+  margin-top: 10px;
+}
+.silence-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 2px 10px;
+  padding: 7px 0;
+  /* No border-bottom: the bar below each row already separates them, and
+     having both drew two parallel hairlines that read as a mistake. */
+}
+.silence-item .sa {
+  font: 500 .82rem/1.3 'Instrument Sans', system-ui, sans-serif;
+  color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.silence-item .sb {
+  font: 400 .76rem/1.3 'Spline Sans Mono', ui-monospace, monospace;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.silence-item .sb b { color: var(--ink); font-weight: 600; }
+/* The bar spans both columns, under the label and the count. */
+.silence-item .sbar {
+  grid-column: 1 / -1;
+  display: block;
+  height: 3px;
+  margin-top: 5px;
+  background: var(--rule-hair);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.silence-item .sbar i {
+  display: block;
+  height: 100%;
+  background: var(--st-unknown);
+  border-radius: 2px;
+}
+
+/* ------------------------------------------------------- brand & latency
+   The mark is the only heavy element in the rail, which is what makes the
+   rest of it recede. Amber is identity here, never status - the same rule
+   --ours carries everywhere else. */
+.brand { display: flex; align-items: center; gap: 9px; }
+.brand .mark {
+  display: grid;
+  place-items: center;
+  width: 26px; height: 26px;
+  flex: 0 0 26px;
+  border-radius: 6px;
+  background: var(--ours);
+  color: #14140a;
+  font: 700 .95rem/1 'Spline Sans Mono', ui-monospace, monospace;
+  letter-spacing: 0;
+}
+
+/* Rail glyphs. Stroke-only and currentColor, so they inherit the item's ink
+   and need no second colour rule - including the amber of the current item.
+   Sized to the cap height of the label beside them rather than to a grid,
+   because the eye aligns them to the text, not to the box. */
+.rail button .ri {
+  width: 15px; height: 15px;
+  flex: 0 0 15px;
+  opacity: .62;
+  transform: translateY(.5px);
+}
+.rail button.is-current .ri { opacity: 1; }
+.rail button:hover .ri { opacity: .85; }

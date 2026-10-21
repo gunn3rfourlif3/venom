@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Venom</title>
+<title>Xnith</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Two families, used for two jobs. Instrument Sans carries the
@@ -34,7 +34,7 @@
 
 <div id="signin" class="signin" hidden>
   <form class="signin-card" id="signin-form">
-    <h1 class="wordmark">Venom</h1>
+    <h1 class="wordmark">Xnith</h1>
     <p class="signin-note">Ward ledger for the 2026 municipal elections, Gauteng.</p>
     <label for="email">Email</label>
     <input id="email" type="email" autocomplete="username" required>
@@ -46,23 +46,34 @@
 </div>
 
 <div id="app" class="shell" hidden>
-  <nav class="rail views" aria-label="Views">
-    <span class="wordmark">Venom</span>
-    <span class="scope">Gauteng<br>2026 municipal elections</span>
+  <button class="railtoggle" id="railtoggle" aria-expanded="false" aria-controls="rail">Menu</button>
+  <nav class="rail views" id="rail" aria-label="Views">
+    <span class="brand"><span class="mark" aria-hidden="true">X</span><span class="wordmark">Xnith <i class="ver">v2.6</i></span></span>
+    <span class="scope" id="scope">&mdash;<br>2026 municipal elections</span>
 
-    <p class="rail-group">Campaign</p>
-    <button data-view="overview" class="is-current"><span>Overview</span></button>
-    <button data-view="wards"><span>Wards</span></button>
-    <button data-view="decisions"><span>Decisions</span></button>
-    <button data-view="float"><span>Float</span></button>
+    <p class="rail-group">Operations</p>
+    <!-- Logistics leads the rail on purpose. From now until the 4th it is
+         the screen that changes a decision inside the hour; Overview tells
+         you how the campaign is going, which can wait until the evening. -->
+    <button data-view="logistics"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4h9v7H1z"/><path d="M10 6h3l2 2v3h-5z"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="12.5" r="1.5"/></svg><span>Logistics</span></button>
+    <button data-view="overview" class="is-current"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 13V7m4 6V3m4 10V8m4 5V5"/></svg><span>Overview</span></button>
+    <button data-view="wards"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z"/></svg><span>Wards directory</span></button>
+    <button data-view="decisions"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v4M8 11v4M3.5 8H1M15 8h-2.5"/><circle cx="8" cy="8" r="3"/></svg><span>Decisions engine</span></button>
+    <button data-view="float"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5h14v8H1z"/><circle cx="8" cy="9" r="2"/></svg><span>Campaign float</span></button>
 
-    <p class="rail-group">Listening</p>
-    <button data-view="sentiment"><span>Sentiment</span></button>
-    <button data-view="viewshed"><span>Viewshed</span></button>
+    <p class="rail-group">Intelligence</p>
+    <button data-view="sentiment"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v8H6l-4 3z"/></svg><span>Social sentiment</span></button>
+    <button data-view="viewshed"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="1.8"/></svg><span>Viewshed analysis</span></button>
 
     <p class="rail-group">System</p>
-    <button data-view="health"><span>Sources</span></button>
-    <button data-view="settings"><span>Control panel</span></button>
+    <button data-view="health"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12V4m4 8V7m4 5V2m4 10V6"/></svg><span>Data sources</span></button>
+    <button data-view="settings"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M15 8h-2M3 8H1M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4M12.9 12.9l-1.4-1.4M4.5 4.5L3.1 3.1"/></svg><span>Control panel</span></button>
+
+    <dl class="rail-stats" id="rail-stats">
+      <div><dt>Active region</dt><dd id="rs-region">Gauteng</dd></div>
+      <div><dt>Stations</dt><dd id="rs-stations">&mdash;</dd></div>
+      <div><dt>Register</dt><dd id="rs-sync">IEC GIS</dd></div>
+    </dl>
 
     <div class="rail-foot">
       <span class="live" id="live" title="Live connection">
@@ -83,6 +94,13 @@
     <span class="sr-only">Loading</span>
   </div>
   <header class="topbar">
+    <div class="sysblock" id="sysblock" title="Connection to the server">
+      <span class="k">System</span>
+      <span class="v"><span class="pulse is-live" id="sys-dot"></span><span id="sys-state">online</span></span>
+    </div>
+    <div class="sysblock" id="latblock" title="Round trip to the server">
+      <span class="k">Latency</span><span class="v" id="sys-lat">&mdash;</span>
+    </div>
     <form class="search" id="search" role="search" autocomplete="off">
       <input id="search-input" type="search" placeholder="Search wards, documents, decisions"
              aria-label="Search" aria-expanded="false" aria-controls="search-results"
@@ -329,6 +347,73 @@
       <h2 class="viz-title">Election data ingestion</h2>
       <p class="viz-sub">IEC fetch and promotion runs.</p>
       <div id="health-list"></div>
+    </section>
+  </main>
+
+  <!-- LOGISTICS. Did our own intervention reach the ground.
+       Ordered as a person on the day needs it: what is wrong, where, and
+       whether reports are still arriving. -->
+  <main class="pane pane-single" id="view-logistics" hidden>
+    <div class="page-head">
+      <h1>Logistics</h1>
+      <p id="lg-sub">Reading the ground…</p>
+    </div>
+
+    <div class="statline" id="lg-statline" aria-label="Ingest status"></div>
+
+    <div class="tiles" id="lg-tiles" style="margin-top:14px"></div>
+
+    <!-- Silence, counted rather than listed. Hidden once most stations are
+         reporting, because then a silent one is a genuine exception and
+         belongs in the table below with everything else. -->
+    <section class="panel" id="lg-silence" style="margin-top:14px" hidden></section>
+
+    <section class="panel" style="margin-top:14px">
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Stations needing attention</h2>
+        <div class="seg" id="lg-filter" role="group" aria-label="Filter stations">
+          <button data-flag="" class="is-on">Exceptions</button>
+          <button data-flag="UNSTAFFED">Unstaffed</button>
+          <button data-flag="NO_REPORT">No report</button>
+          <button data-flag="STALE">Stale</button>
+          <button data-flag="all">All</button>
+        </div>
+      </div>
+      <p class="viz-sub" id="lg-table-note">
+        Worst first. A station that is fine needs no attention, so this list
+        leads with the ones that are not.</p>
+      <div style="overflow:auto;max-height:60vh">
+        <table class="logi-table" id="lg-table">
+          <thead><tr>
+            <th>Station</th><th>Ward</th><th>Presence</th><th>Supply</th>
+            <th class="num">People</th><th>Queue</th><th>Problem</th>
+            <th class="num">Last report</th>
+          </tr></thead>
+          <tbody id="lg-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel intake" style="margin-top:14px">
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Report intake</h2>
+        <span class="pill is-unknown" id="lg-intake-mode">fallback</span>
+      </div>
+      <p class="viz-sub">
+        Reports normally arrive by WhatsApp straight into the database. This
+        is the manual path for when they do not — paste the batch, check what
+        it read, then file. Nothing is written until you have seen the parse.</p>
+      <label class="sr-only" for="lg-paste">Pasted reports</label>
+      <textarea id="lg-paste" spellcheck="false"
+        placeholder="10234 med none 3&#10;10235 long IEC official late 2"></textarea>
+      <div class="row" style="margin-top:10px;gap:8px;align-items:center">
+        <label class="sr-only" for="lg-by">Your name</label>
+        <input id="lg-by" placeholder="Filed by (your name)" autocomplete="name">
+        <button id="lg-check" class="btn">Check</button>
+        <button id="lg-file" class="btn btn-primary" disabled>File reports</button>
+        <span id="lg-parse-note" class="viz-sub" style="margin:0"></span>
+      </div>
+      <div id="lg-parse" style="margin-top:10px"></div>
     </section>
   </main>
 
