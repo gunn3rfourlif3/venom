@@ -34,6 +34,20 @@ export class MunicipalMoneyError extends Error {
   }
 }
 
+/** province_name -> the code this system uses. The cube's own province_code
+ *  disagrees with itself (KZ/KZN, LP/LIM), so the name is the key to trust. */
+export const PROVINCE_CODE: Record<string, string> = {
+  'Eastern Cape': 'EC',
+  'Free State': 'FS',
+  'Gauteng': 'GT',
+  'KwaZulu-Natal': 'KZN',
+  'Limpopo': 'LIM',
+  'Mpumalanga': 'MP',
+  'Northern Cape': 'NC',
+  'North West': 'NW',
+  'Western Cape': 'WC',
+};
+
 export interface MunicipalityRow {
   demarcation_code: string;
   name: string;
@@ -129,6 +143,44 @@ export class MunicipalMoneyClient {
    *  merged into Rand West City in 2016 and are kept so that historic figures
    *  still resolve. The caller decides which of those it wants; this method
    *  does not silently drop them. */
+  /** Every municipality in the cube, in one request, with province codes
+   *  normalised.
+   *
+   *  WHY NOT NINE CALLS FILTERED BY PROVINCE. Because the province_code in
+   *  this cube is not consistent: the 54 current KwaZulu-Natal municipalities
+   *  carry 'KZ' while the 11 abolished in the 2016 amalgamations carry 'KZN',
+   *  and Limpopo is split the same way between 'LP' (27 current) and 'LIM'
+   *  (6 defunct). Filtering on 'KZN' therefore returns only municipalities
+   *  that no longer exist - which looks exactly like a province with eleven
+   *  municipalities rather than like a bug.
+   *
+   *  province_name is consistent, so the code is derived from it here and the
+   *  cube's own province_code is discarded. One unfiltered request also means
+   *  no list of province codes to keep correct.
+   */
+  async allMunicipalities(): Promise<MunicipalityRow[]> {
+    const body = await this.get('/cubes/municipalities/facts', {
+      fields: [
+        'municipality.demarcation_code', 'municipality.name', 'municipality.category',
+        'municipality.province_code', 'municipality.province_name',
+      ].join(','),
+      page_size: '1000',
+    });
+
+    const rows = (body as { data?: Array<Record<string, unknown>> }).data ?? [];
+    return rows.map((r) => {
+      const name = r['municipality.province_name'] == null
+        ? null : String(r['municipality.province_name']);
+      return {
+        demarcation_code: String(r['municipality.demarcation_code']),
+        name: String(r['municipality.name']),
+        category: r['municipality.category'] == null ? null : String(r['municipality.category']),
+        province_code: PROVINCE_CODE[name ?? ''] ?? null,
+        province_name: name,
+      };
+    });
+  }
+
   async municipalities(provinceCode = 'GT'): Promise<MunicipalityRow[]> {
     const body = await this.get('/cubes/municipalities/facts', {
       cut: MunicipalMoneyClient.cut({ 'municipality.province_code': provinceCode }),
