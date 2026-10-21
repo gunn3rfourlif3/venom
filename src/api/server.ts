@@ -1,11 +1,14 @@
 /**
- * Venom API. Read-only.
+ * Venom API.
  *
- * Every write in this cut goes through spreadsheet import or the two
- * authenticated forms, never through this surface. Nothing here computes a
- * figure: every number served is already a column in a view. If the
- * dashboard needs something that is not, it belongs in a view - that is the
- * whole point of keeping the lineage.
+ * Reads are the bulk of it and nothing here computes a figure: every number
+ * served is already a column in a view. If the dashboard needs something
+ * that is not, it belongs in a view - that is the whole point of keeping
+ * the lineage.
+ *
+ * Three endpoints write, all of them logistics: booth reports (append-only,
+ * from our own marshals) and deployment arrival. Everything else still
+ * arrives by spreadsheet import or the control panel.
  *
  *   npm run build && npm run api
  */
@@ -13,6 +16,8 @@ import { createServer } from 'node:http';
 import { pool } from '../db.js';
 import { HttpError, json, type Ctx } from './http.js';
 import { routes } from './routes.js';
+import { logistics } from './logistics.js';
+import { whatsapp } from './whatsapp.js';
 import { purgeExpiredSessions } from './auth.js';
 import { LiveHub } from './live.js';
 import { serveStatic } from './static.js';
@@ -54,6 +59,25 @@ const table: Route[] = [
   { method: 'GET',  pattern: /^\/api\/overview$/,      handler: routes.getOverview },
   { method: 'GET',  pattern: /^\/api\/control-panel$/, handler: routes.getControlPanel },
   { method: 'PUT',  pattern: /^\/api\/control-panel$/, handler: routes.putControlPanel },
+
+  { method: 'GET',  pattern: /^\/api\/logistics$/,   handler: logistics.getLogistics },
+  { method: 'GET',  pattern: /^\/api\/call-sheet$/,  handler: logistics.getCallSheet },
+  { method: 'GET',  pattern: /^\/api\/booth-reports\/([^/]+)$/,
+    handler: async (ctx, id) => logistics.getStationReports(ctx, id ?? '') },
+  { method: 'POST', pattern: /^\/api\/booth-reports\/parse$/, handler: logistics.postParse },
+  { method: 'POST', pattern: /^\/api\/booth-reports$/,        handler: logistics.postReports },
+  { method: 'PATCH', pattern: /^\/api\/deployments\/([^/]+)$/,
+    handler: async (ctx, id) => logistics.patchDeployment(ctx, id ?? '') },
+
+  // Meta calls these, so they carry no session. The POST is authenticated by
+  // the X-Hub-Signature-256 HMAC instead, and the GET by the verify token.
+  { method: 'GET',  pattern: /^\/api\/whatsapp\/webhook$/, open: true,
+    handler: whatsapp.getWebhook },
+  { method: 'POST', pattern: /^\/api\/whatsapp\/webhook$/, open: true,
+    handler: whatsapp.postWebhook },
+  { method: 'GET',  pattern: /^\/api\/roster$/,            handler: whatsapp.getRoster },
+  { method: 'POST', pattern: /^\/api\/roster$/,            handler: whatsapp.postRoster },
+  { method: 'GET',  pattern: /^\/api\/ingest-exceptions$/, handler: whatsapp.getExceptions },
 
   { method: 'GET',  pattern: /^\/api\/live$/,
     handler: async (ctx) => { hub.subscribe(ctx.res); } },

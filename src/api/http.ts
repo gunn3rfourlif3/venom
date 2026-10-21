@@ -41,6 +41,26 @@ export async function readJson<T>(req: IncomingMessage, limitBytes = 64000): Pro
   }
 }
 
+/** The raw bytes, not the parsed object.
+ *
+ *  Needed because a signed webhook is signed over the exact bytes sent.
+ *  JSON.parse followed by JSON.stringify does not reproduce them - key
+ *  order, whitespace and unicode escaping all move - so a signature checked
+ *  against a re-serialised body fails for correct requests and, worse, could
+ *  be made to pass for incorrect ones. */
+export async function readRaw(
+  req: IncomingMessage, limitBytes = 1_048_576,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    total += (chunk as Buffer).length;
+    if (total > limitBytes) throw new HttpError(413, 'Body too large');
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
 export function parseCookies(header: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   if (!header) return out;

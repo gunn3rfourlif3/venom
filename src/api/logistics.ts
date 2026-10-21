@@ -1,0 +1,360 @@
+import { pool } from '../db.js';
+import { HttpError, json, readJson, intParam, enumParam, type Ctx } from './http.js';
+import { requireRole } from './auth.js';
+
+/* The logistics layer's read and write ends.
+ *
+ * ON THE SHAPE OF THE WRITE. The addendum asks for "one form, 4 fields, one
+ * person". What actually lands in front of that person is fifty WhatsApp
+ * lines in one message, every two hours, in the template:
+ *
+ *     10234 med none 3
+ *     10235 long IEC official late 2
+ *
+ * A four-field form means fifty page loads and fifty chances to mistype a
+ * booth number at 07:00. So the form takes the paste whole, parses it, and
+ * shows what each line resolved to BEFORE anything is written. Four fields
+ * for one report is still there underneath - a single line is a valid
+ * paste - but the batch is the real job.
+ *
+ * Nothing is written until the operator has seen the parse, because the
+ * table is append-only: a bad row cannot be edited away afterwards.
+ */
+
+const QUEUE: Record<string, string> = {
+  short: 'short', s: 'short',
+  med: 'medium', medium: 'medium', m: 'medium',
+  long: 'long', l: 'long',
+  none: 'none', no: 'none', empty: 'none',
+};
+
+export interface ParsedLine {
+  line: number;
+  raw: string;
+  stationId: string | null;
+  queue: string | null;
+  problem: string | null;
+  peopleOnSite: number | null;
+  error: string | null;
+}
+
+/** One WhatsApp line. Deliberately forgiving about spacing and case and
+ *  strict about the booth number, because that is the field a wrong value
+ *  silently misfiles rather than visibly breaks. */
+export function parseLine(raw: string, line: number): ParsedLine {
+  const out: ParsedLine = {
+    line, raw, stationId: null, queue: null, problem: null,
+    peopleOnSite: null, error: null,
+  };
+
+  const tokens = raw.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) { out.error = 'empty line'; return out; }
+
+  const [booth, ...rest] = tokens;
+  if (!/^[A-Za-z0-9-]{1,32}$/.test(booth ?? '')) {
+    out.error = `"${booth}" is not a booth number`;
+    return out;
+  }
+  out.stationId = booth!;
+
+  if (rest.length === 0) {
+    out.error = 'nothing after the booth number';
+    return out;
+  }
+
+  const queueWord = (rest[0] ?? '').toLowerCase();
+  const queue = QUEUE[queueWord];
+  if (!queue) {
+    out.error = `"${rest[0]}" is not a queue length (short, med, long, none)`;
+    return out;
+  }
+  out.queue = queue;
+
+  // The trailing head count, if the marshal sent one. Taken from the end so
+  // that a problem description containing a number - "IEC official late 2" -
+  // keeps its words and gives up only the last token.
+  const tail = rest.slice(1);
+  const last = tail[tail.length - 1];
+  if (last !== undefined && /^\d{1,4}$/.test(last)) {
+    out.peopleOnSite = Number(last);
+    tail.pop();
+  }
+
+  const problem = tail.join(' ').trim();
+  const says = problem.toLowerCase();
+  out.problem = problem === '' || says === 'none' || says === 'no' || says === '-'
+    ? null
+    : problem;
+
+  if (out.peopleOnSite === null && out.problem === null) {
+    out.error = 'no head count and no problem - nothing reported';
+  }
+  return out;
+}
+
+export function parseBatch(text: string): ParsedLine[] {
+  return text.split(/\r?\n/)
+    .map((raw, i) => [raw, i + 1] as const)
+    .filter(([raw]) => raw.trim() !== '')
+    .map(([raw, i]) => parseLine(raw, i));
+}
+
+/** A problem with no stated severity. The marshal's template has no severity
+ *  field, so one is inferred from the words and the inference is shown to the
+ *  operator, who can override it per line before committing. Anything not
+ *  recognised is 'medium': not 'low', because an unrecognised complaint is
+ *  not evidence of a small one. */
+const SERIOUS = ['violence', 'fight', 'police', 'gun', 'threat', 'intimidat',
+  'assault', 'stabb', 'shoot', 'riot', 'blocked', 'closed', 'no ballot',
+  'power out', 'no power', 'flood',
+  // Anything involving the IEC at a booth bears on whether that booth can
+  // operate at all, so it outranks the word that usually accompanies it.
+  // "IEC official late" is not a minor delay; it is a station that cannot
+  // open. SERIOUS is tested first, so this wins over 'late' below.
+  'iec', 'presiding officer', 'no ink', 'no scanner', 'no ballots'];
+const MINOR = ['late', 'slow', 'queue', 'parking', 'tent', 'chair', 'table',
+  'water bottle', 'signage', 'poster'];
+
+export function inferSeverity(problem: string): 'low' | 'medium' | 'high' {
+  const low = problem.toLowerCase();
+  if (SERIOUS.some((w) => low.includes(w))) return 'high';
+  if (MINOR.some((w) => low.includes(w))) return 'low';
+  return 'medium';
+}
+
+// ------------------------------------------------------------------- reads
+
+export async function getLogistics(ctx: Ctx): Promise<void> {
+  const municipality = ctx.url.searchParams.get('municipality');
+  const presence = enumParam(ctx.url, 'presence',
+    ['NO_REPORT', 'STALE', 'UNSTAFFED', 'NO_PLAN', 'UNDERSTAFFED', 'STAFFED']);
+  const limit = intParam(ctx.url, 'limit', 400, 1, 2000);
+
+  const [rollup, stations, recent, panel] = await Promise.all([
+    pool.query('SELECT * FROM v_logistics_rollup'),
+    pool.query(
+      `SELECT b.*, w.municipality
+         FROM v_booth_logistics b
+         LEFT JOIN ward w USING (ward_id)
+        WHERE ($1::text IS NULL OR w.municipality = $1)
+          AND ($2::text IS NULL OR b.presence_flag = $2)
+        ORDER BY array_position(
+                   ARRAY['UNSTAFFED','SUPPLY_BROKEN','NO_REPORT','STALE',
+                         'UNDERSTAFFED','NO_PLAN','STAFFED'], b.presence_flag),
+                 b.severity = 'high' DESC,
+                 b.station_id
+        LIMIT $3`,
+      [municipality, presence, limit]),
+    // The last hour of filings, so the operator can see their own typing
+    // land and spot a line they sent twice.
+    pool.query(
+      `SELECT booth_report_id, station_id, reported_at, reported_by,
+              queue, problem, problem_severity, people_on_site
+         FROM booth_report
+        WHERE reported_at > now() - interval '2 hours'
+        ORDER BY reported_at DESC
+        LIMIT 60`),
+    pool.query('SELECT report_stale_minutes, understaffed_ratio FROM control_panel'),
+  ]);
+
+  json(ctx.res, 200, {
+    as_of: new Date().toISOString(),
+    data: {
+      rollup: rollup.rows[0] ?? null,
+      stations: stations.rows,
+      recent: recent.rows,
+      thresholds: panel.rows[0] ?? null,
+    },
+  });
+}
+
+/** The call sheet: marshal contact details for the stations that are dark.
+ *
+ *  Separated from the dashboard read on purpose. This is the one endpoint
+ *  that serves a phone number, it needs a role, and keeping it apart means
+ *  the number is not sitting in the payload of a screen left open on a
+ *  desk all day. */
+export async function getCallSheet(ctx: Ctx): Promise<void> {
+  requireRole(ctx, 'reporter');
+  const result = await pool.query(
+    `SELECT b.station_id, b.name, b.ward_id, b.presence_flag,
+            b.minutes_since_report, s.marshal_name, s.marshal_phone
+       FROM v_booth_logistics b
+       JOIN station s USING (station_id)
+      WHERE b.presence_flag IN ('NO_REPORT','STALE','UNSTAFFED')
+        AND s.marshal_phone IS NOT NULL
+      ORDER BY array_position(
+        ARRAY['UNSTAFFED','NO_REPORT','STALE'], b.presence_flag),
+        b.minutes_since_report DESC NULLS LAST`);
+  json(ctx.res, 200, { as_of: new Date().toISOString(), data: result.rows });
+}
+
+export async function getStationReports(ctx: Ctx, stationId: string): Promise<void> {
+  if (!/^[A-Za-z0-9-]{1,32}$/.test(stationId)) throw new HttpError(400, 'Bad station id');
+  const result = await pool.query(
+    `SELECT booth_report_id, reported_at, reported_by, queue, weather,
+            problem, problem_severity, people_on_site, notes
+       FROM booth_report WHERE station_id = $1
+      ORDER BY reported_at DESC LIMIT 100`, [stationId]);
+  json(ctx.res, 200, { as_of: new Date().toISOString(), data: result.rows });
+}
+
+// ------------------------------------------------------------------ writes
+
+/** Parse a paste and say what it means, writing nothing.
+ *
+ *  Unknown booth numbers are named back rather than left for the foreign key
+ *  to reject at commit: at 07:00 "10324 is not a booth" is a useful sentence
+ *  and "insert or update on table violates foreign key constraint" is not. */
+export async function postParse(ctx: Ctx): Promise<void> {
+  requireRole(ctx, 'reporter');
+  const body = await readJson<{ text?: string }>(ctx.req);
+  if (typeof body.text !== 'string') throw new HttpError(400, 'text required');
+
+  const parsed = parseBatch(body.text);
+  if (parsed.length === 0) { json(ctx.res, 200, { data: { lines: [], known: [] } }); return; }
+
+  const ids = [...new Set(parsed.map((p) => p.stationId).filter((s): s is string => !!s))];
+  const { rows } = await pool.query<{ station_id: string; name: string; ward_id: string }>(
+    'SELECT station_id, name, ward_id FROM station WHERE station_id = ANY($1)', [ids]);
+  const known = new Map(rows.map((r) => [r.station_id, r]));
+
+  const lines = parsed.map((p) => {
+    const station = p.stationId ? known.get(p.stationId) : undefined;
+    return {
+      ...p,
+      stationName: station?.name ?? null,
+      wardId: station?.ward_id ?? null,
+      severity: p.problem ? inferSeverity(p.problem) : null,
+      error: p.error ?? (p.stationId && !station
+        ? `booth ${p.stationId} is not in the register`
+        : null),
+    };
+  });
+
+  json(ctx.res, 200, {
+    data: {
+      lines,
+      ok: lines.filter((l) => l.error === null).length,
+      bad: lines.filter((l) => l.error !== null).length,
+    },
+  });
+}
+
+/** Commit reports. Takes the parsed rows back from the client so that what
+ *  is written is what the operator saw and corrected, not a re-parse that
+ *  might differ. Every row is re-validated here regardless. */
+export async function postReports(ctx: Ctx): Promise<void> {
+  requireRole(ctx, 'reporter');
+  const body = await readJson<{
+    reportedBy?: string;
+    reporterPhone?: string;
+    weather?: string;
+    reports?: Array<{
+      stationId?: string; queue?: string; problem?: string | null;
+      severity?: string | null; peopleOnSite?: number | null; notes?: string;
+    }>;
+  }>(ctx.req);
+
+  const reportedBy = (body.reportedBy ?? '').trim();
+  if (reportedBy === '') throw new HttpError(400, 'reportedBy required');
+  if (reportedBy.length > 120) throw new HttpError(400, 'reportedBy too long');
+
+  const reports = body.reports ?? [];
+  if (reports.length === 0) throw new HttpError(400, 'no reports');
+  if (reports.length > 500) throw new HttpError(413, 'too many reports in one batch');
+
+  const weather = body.weather && ['clear', 'rain', 'heavy rain'].includes(body.weather)
+    ? body.weather : null;
+
+  const client = await pool.connect();
+  const written: number[] = [];
+  const refused: Array<{ stationId: string; reason: string }> = [];
+  try {
+    await client.query('BEGIN');
+    for (const r of reports) {
+      const stationId = (r.stationId ?? '').trim();
+      if (!/^[A-Za-z0-9-]{1,32}$/.test(stationId)) {
+        refused.push({ stationId, reason: 'bad booth number' });
+        continue;
+      }
+      const queue = r.queue && ['short', 'medium', 'long', 'none'].includes(r.queue)
+        ? r.queue : null;
+      const problem = r.problem?.trim() || null;
+      const severity = problem
+        ? (r.severity && ['low', 'medium', 'high'].includes(r.severity)
+            ? r.severity : inferSeverity(problem))
+        : null;
+      const people = typeof r.peopleOnSite === 'number'
+        && Number.isInteger(r.peopleOnSite) && r.peopleOnSite >= 0 && r.peopleOnSite < 10000
+        ? r.peopleOnSite : null;
+
+      // A savepoint per row. One unknown booth number must not lose the
+      // other forty-nine: in Postgres any error aborts the whole
+      // transaction unless there is a savepoint to come back to.
+      await client.query('SAVEPOINT row');
+      try {
+        const { rows } = await client.query<{ booth_report_id: number }>(
+          `INSERT INTO booth_report
+             (station_id, reported_by, reporter_phone, queue, weather,
+              problem, problem_severity, people_on_site, notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           RETURNING booth_report_id`,
+          [stationId, reportedBy, body.reporterPhone?.trim() || null, queue,
+            weather, problem, severity, people, r.notes?.trim() || null]);
+        await client.query('RELEASE SAVEPOINT row');
+        if (rows[0]) written.push(rows[0].booth_report_id);
+      } catch (error) {
+        await client.query('ROLLBACK TO SAVEPOINT row');
+        const code = (error as { code?: string }).code;
+        if (code === '23503') {
+          refused.push({ stationId, reason: 'not in the station register' });
+        } else if (code === '23514') {
+          refused.push({ stationId, reason: 'a value failed a check constraint' });
+        } else throw error;
+      }
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  json(ctx.res, 201, { data: { written: written.length, refused } });
+}
+
+/** Deployment arrival. The supply line's other end: a dispatcher marking
+ *  that the stock reached the ward, or did not. */
+export async function patchDeployment(ctx: Ctx, id: string): Promise<void> {
+  requireRole(ctx, 'reporter');
+  const deploymentId = Number(id);
+  if (!Number.isInteger(deploymentId)) throw new HttpError(400, 'Bad deployment id');
+
+  const body = await readJson<{ status?: string; note?: string }>(ctx.req);
+  const status = body.status ?? '';
+  if (!['pending', 'arrived', 'partial', 'failed'].includes(status)) {
+    throw new HttpError(400, 'status must be pending, arrived, partial or failed');
+  }
+  if ((status === 'partial' || status === 'failed') && !body.note?.trim()) {
+    // A failed drop with no reason is a figure nobody can act on.
+    throw new HttpError(400, 'partial and failed need a note saying what was short');
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE deployment
+        SET arrival_status = $2,
+            arrived_at = CASE WHEN $2 IN ('arrived','partial') THEN now() ELSE arrived_at END,
+            shortfall_note = $3
+      WHERE deployment_id = $1
+      RETURNING deployment_id, ward_id, arrival_status, arrived_at, shortfall_note`,
+    [deploymentId, status, body.note?.trim() || null]);
+  if (!rows[0]) throw new HttpError(404, 'No such deployment');
+  json(ctx.res, 200, { data: rows[0] });
+}
+
+export const logistics = {
+  getLogistics, getCallSheet, getStationReports,
+  postParse, postReports, patchDeployment,
+};
