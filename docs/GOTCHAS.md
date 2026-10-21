@@ -62,13 +62,43 @@ changes it.
 **Do:** PWA for marshals and most providers; native, store-distributed app for
 drivers only. Do not promise driver tracking on a web build.
 
-### G7 · Sideloading an APK from the party website
-Asking supporters to disable Android's install protection and fetch an APK from
-a link trains a political movement to install unsigned software from websites —
-which is precisely the behaviour a hostile actor exploits with a lookalike
-domain.
-**Do:** store distribution for anything native. The website links to the store
-listing.
+### G7 · APK distribution — corrected, and the real trap is updates
+**This entry originally said not to sideload. That advice was weaker than
+stated and is withdrawn.** Recording the correction rather than quietly
+editing it, because a gotchas file that hides its own mistakes is not much of a
+memory.
+
+What is actually true as of October 2026: Google's developer-verification
+enforcement began 30 September 2026 in **Brazil, Indonesia, Singapore and
+Thailand only**, and only for apps from seven participating app stores. Direct
+APK downloads are not subject to it anywhere yet; global expansion is planned
+for 2027 with no announced date. **South Africa is unaffected**, so APK
+distribution works for 4 November.
+
+And there is a positive argument that was missed: Google Play restricts
+background location to apps where it is core functionality, reviews each case,
+and does not guarantee approval. A party app tracking volunteer drivers is
+exactly the submission that draws scrutiny on an unpredictable timeline.
+Sideloading takes that review off the critical path.
+
+**The genuine trap is the update channel, not the install.** A sideloaded APK
+never auto-updates. Ship a bug on 2 November and every device runs it until
+each user manually reinstalls.
+**Do:** build the in-app updater *with* the first release — version endpoint, a
+`minimum supported version` that blocks clients too old to trust, hash
+verification before install. That field is the only kill-switch a sideloaded
+fleet has.
+**Also do:** register as a verified developer now ($25, Android Developer
+Console) ahead of the 2027 expansion, publish the APK's SHA-256 on the download
+page, and pin the signing certificate server-side so a repackaged clone cannot
+talk to the API.
+
+### G7b · Losing the keystore is unrecoverable
+Sign every release with the same key. Lose it and the app can **never** be
+updated again — users would have to uninstall and install a differently-signed
+build, which on a volunteer workforce means losing them.
+**Do:** two copies, one offline, password stored separately. This is the only
+unrecoverable mistake available in the whole provider-app plan.
 
 ### G8 · Scheduled task on the wrong machine
 The database runs on the VPS. A scheduler that fires somewhere else — a

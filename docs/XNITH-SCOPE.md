@@ -228,28 +228,26 @@ project.
 | Taxi-route overlay | **Source does not exist nationally** — see `DATA-SOURCES.md` §5 |
 | Payment export | Verified work → payment instruction file for the party's banking/payroll. **No money moves through Xnith** (your decision, and the right one) |
 
-**Distribution — a real constraint worth knowing now.** The Todo says
-providers download the app from the MKP website. Two problems:
+**Distribution: signed APK from the party website.** Decided — and it is the
+right call, because it takes Google Play's background-location review off the
+critical path. Full spec and the consequences in **`PROVIDER-APP.md`**.
 
-1. **Sideloading an APK from a website** means asking every user to disable a
-   security protection, and it trains a political movement's supporters to
-   install unsigned software from a link — which is precisely the behaviour a
-   hostile actor would exploit with a lookalike site. Strongly advise against
-2. **Background location is not possible in a web app.** A PWA cannot track a
-   driver with the screen off. That is a hard platform limitation, not a
-   framework choice
-
-The split that follows from those two facts:
+One platform fact still shapes the build: **background location is impossible
+in a web app.** A PWA cannot track a driver with the screen off. So:
 
 | Who | What they get | Why |
 |---|---|---|
-| Marshals, reporters, most volunteers | **PWA**, installable from the site | No store review, instant updates, nothing to sideload. Foreground reporting is all they need |
-| **Drivers only** | Native app, **via Play Store / App Store** | Background location requires it. Store distribution is also the only safe distribution |
+| Marshals, reporters, most volunteers | **PWA** from the site | Nothing to install, no update problem. Foreground reporting is all they need |
+| **Drivers only** | Native **APK** from the website | Background location requires native. They are the only group that does |
 
-Build the PWA first; it covers the large majority of providers. The native
-driver app is its own project with its own review timeline — and note that app
-store review of a political party's app has its own policy surface, which is
-`OPEN-QUESTIONS.md` Q8.
+Build the PWA first — it covers the large majority of providers. The APK is for
+the group that genuinely needs it, which keeps install friction off everyone
+else.
+
+**The one requirement that is easy to miss:** a sideloaded APK never
+auto-updates, so the in-app updater ships *with* the first release, including a
+`minimum supported version` that blocks clients too old to trust. It is the
+only kill-switch a sideloaded fleet has.
 
 **Stack:** PWA in the same Node/TS app (one codebase, no SPA framework needed);
 native driver app in React Native or Flutter when it comes; routing via a

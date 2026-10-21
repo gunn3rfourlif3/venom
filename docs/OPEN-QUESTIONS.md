@@ -145,14 +145,24 @@ not for not keeping it — but access and retention need deciding before the
 channel is built, not after it has a year of history.
 **Blocks:** L3 beyond the WhatsApp ingest.
 
-### Q8 · App store policy for a political party's app — `OPEN`
-Both Apple and Google apply additional policy to political and election-related
-apps, and review timelines are unpredictable. The native driver app depends on
-store distribution, because background location requires it.
-**Why it matters:** if review takes six weeks, that must be in the schedule
-rather than discovered in it.
-**Mitigation already in the plan:** PWA covers most providers without any store
-involvement; only drivers need the native app.
+### Q8 · App store policy for a political party's app — `ANSWERED` 2026-10-21
+**Answer:** moot. Distribution is a signed APK from the party website, so there
+is no store review.
+**Reasoning:** and this is the stronger argument for the decision. Google Play
+restricts background location to apps where it is core functionality, reviews
+each case individually, and states explicitly that following its guidance does
+not guarantee approval. A political party's app tracking volunteer drivers'
+location is precisely the submission that attracts scrutiny, on a timeline
+nobody controls. Sideloading removes that from the critical path.
+**Verified as viable:** Google's developer-verification enforcement started
+30 September 2026 in Brazil, Indonesia, Singapore and Thailand only, for apps
+from seven participating stores. Direct APK downloads are not covered anywhere
+yet. South Africa is unaffected.
+**Consequences, now tracked in `PROVIDER-APP.md`:** an in-app updater is
+mandatory rather than optional, because a sideloaded APK never auto-updates;
+register as a verified developer now ahead of the 2027 global expansion; publish
+the APK hash; pin the signing certificate server-side; and guard the keystore,
+which is the one unrecoverable loss in the plan.
 
 ### Q9 · Which maps and routing provider? — `OPEN`
 Routing at national scale is a real recurring cost, and the obvious free
