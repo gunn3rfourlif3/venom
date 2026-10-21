@@ -292,6 +292,34 @@ minor problem still reads low — "no chairs for the queue" scores `low`.
 Expect to revise this list on 29 October, and note that the operator can
 override severity per line before committing.
 
+### G31 · The exceptions table listed 19,803 identical rows
+G4 predicted this; building the screen made it visible. Before the first
+reporting cycle every station in the country is `NO_REPORT`, so "stations
+needing attention" rendered 400 rows (capped from 19,803) that all said the
+same thing. An exception that applies to everything is not an exception, and
+a screen that scrolls forever on election morning is a screen nobody reads.
+**Fixed:** silence is **counted by municipality** in a band above the table —
+"City of Johannesburg, 895 of 895" — and the table lists only stations where
+something has actually happened: somebody reported and the news was bad,
+supply failed, or a problem is serious. Asking for "No report" explicitly
+still lists them, because then it is what the operator went looking for. The
+band hides itself once most stations are reporting, since a silent station is
+a genuine exception then and belongs in the table with the rest.
+**Lesson:** design the empty and the pre-start states, not just the busy one.
+The screen spends the first hours of election day in exactly this condition.
+
+### G32 · The client was downloading 400 rows to discard 397
+The same screen filtered exceptions in the browser after fetching whatever
+sorted first — 172 KB of station rows, of which three qualified.
+**Fixed:** `?mode=exceptions` filters server-side. Payload 172 KB → 6.7 KB.
+**Worth knowing:** the round trip only improved from ~590 ms to ~500 ms,
+because the cost is not the payload — it is three separate full scans of
+`v_booth_logistics` (rollup, matching count, silence rollup), each
+recomputing the `DISTINCT ON` over `booth_report` across 19,803 stations.
+That is above the 400 ms p95 target in `ARCHITECTURE.md`. Acceptable for a
+day with tens of operators; the fix when it matters is to combine those three
+into one scan or to materialise the view.
+
 ### G26 · `registered_voters NOT NULL` would have forced an invented number
 The GIS API serves geography and has no voters' roll, but `ward.registered_voters`
 was `NOT NULL` with no default. Loading a national ward would therefore have

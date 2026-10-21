@@ -91,17 +91,30 @@ const { rows: check } = await pool.query<{ real_wards: number }>(
   `SELECT count(*)::int AS real_wards FROM ward WHERE delimitation = '2026'`);
 const realWards = check[0]?.real_wards ?? 0;
 
-console.log(`Fabricated geography in this database:\n`);
-console.table(targets);
-console.log(`Real 2026 wards loaded: ${realWards}`);
-
 if (realWards < 500) {
-  console.error(`\nRefusing to clean: only ${realWards} real wards are loaded.`);
-  console.error('Run `npm run sources:register` first, or these municipalities');
-  console.error('would be left with no wards at all.');
+  // The list is NOT trustworthy yet, so it is not printed as though it were.
+  //
+  // The predicate is "synthetic geography that the register has not
+  // confirmed". Before sources:register runs, nothing has been confirmed, so
+  // every synthetic ward matches - including the ~354 Gauteng wards whose
+  // ids are real and which the loader will adopt rather than replace.
+  // Printing them under the heading "fabricated" would be a confident wrong
+  // answer, and the sort of thing somebody acts on at 23:00.
+  console.error(`Cannot tell yet which wards are fabricated.`);
+  console.error(`\n${targets.reduce((n, t) => n + t.wards, 0)} wards are synthetic and `
+    + `unconfirmed, but only ${realWards} real 2026 wards are loaded.`);
+  console.error('Many of those synthetic wards carry real IEC identifiers and will be');
+  console.error('adopted by the register rather than deleted - in Gauteng the three');
+  console.error('metros were, and only the six local municipalities were invented.');
+  console.error('\nRun this first, then come back:');
+  console.error('  npm run build && npm run migrate && npm run sources:register');
   await pool.end();
   process.exit(1);
 }
+
+console.log(`Fabricated geography — synthetic wards the register did not confirm:\n`);
+console.table(targets);
+console.log(`Real 2026 wards loaded: ${realWards}`);
 
 if (!commit) {
   console.log('\nDry run. Nothing deleted.');
