@@ -14,8 +14,18 @@ source is linked at the bottom.
 | `local_press` — 22 Gauteng community papers | Open RSS | Municipality | Local press attention to a service in an area |
 | `news` — category-targeted queries | Open | Municipality | National/regional coverage of a service issue |
 | `instagram` — hashtag aggregates | Keyed, aggregate-only | Municipality | Volume of tagged posts. Never per-account |
+| `iec_gis` — IEC GIS API | Open | Ward / VD / station | Where every ward and voting station is, and what the station is called |
 | `municipalmoney` — municipalmoney.gov.za | Open | Municipality | Audited finance: income/expenditure, UIFW, repairs, audit opinion |
 | `SYNTHETIC` | n/a | Ward | Nothing. A clearly-stamped baseline so screens have shape before real data lands |
+
+**A defect in municipalmoney worth knowing about.** Its `municipalities` cube
+is not self-consistent on province codes: the 54 current KwaZulu-Natal
+municipalities carry `province_code = 'KZ'` while the 11 abolished in the 2016
+amalgamations carry `'KZN'`. Limpopo splits the same way — `'LP'` for the 27
+current, `'LIM'` for 6 defunct. Filtering on `'KZN'` therefore returns only
+municipalities that no longer exist, which presents as a province with eleven
+municipalities rather than as a bug. The adapter now fetches all ~292
+unfiltered and derives the code from `province_name`, which is consistent.
 
 Three constraints hold across all of them and do not relax with scale:
 
@@ -76,20 +86,53 @@ system needs.
 
 ---
 
-## 4. Voting districts
+## 4. Voting districts, and the IEC GIS API
 
-For 2026 the MDB handed over **4,488 wards** and the same figure is used for
-voting districts, against **23,699 voting stations** — so a ward typically
-contains several stations, and VD and ward are effectively the same unit for
-this election. The drill-down the Todo asks for is therefore
-**ward → station**, which is the granularity the logistics layer already uses.
+**Correction to an earlier version of this document.** It said VD and ward were
+"effectively the same unit for this election", on the basis of a published
+summary giving 4,488 for both. That is wrong, and measurement settled it:
+Johannesburg ward 1 contains **eight** voting districts, each with one voting
+station. 4,488 wards across 23,699 stations is about five per ward. So ward,
+voting district and station are three distinct levels, and the drill-down is
+**ward → VD → station** — genuinely the three levels the Todo asked for.
 
-- **Results at VD level:** available from the IEC portal (VD is one of the five
-  report levels)
-- **Station register:** the IEC publishes the voting station list; confirming
-  the exact published format is day one of the 14-day plan
-- **Boundaries (geospatial):** MDB publishes ward boundaries; the IEC publishes
-  VD boundaries. Confirming current download formats is `OPEN-QUESTIONS.md` Q4
+### The IEC GIS API — open, and the unblock
+
+`https://api.elections.org.za/IECGIS/Help`
+
+Worth stating plainly: the IEC's **results** API needs credentials that have
+blocked every real election figure in this system since the start. The **GIS**
+service needs none. So the national geography can be built now and the results
+can follow when the keys arrive.
+
+It also accepts **MDB demarcation codes** directly as `MunicCode` — `JHB`,
+`GT421`, `ETH`, `WC011` all work — which is the same key
+municipalmoney.gov.za uses. The two sources therefore join with no translation
+table. That is luck rather than design, and worth not squandering.
+
+The walk the loader uses:
+
+| Call | Returns |
+|---|---|
+| `WardByMunicipality?MunicCode=JHB` | every ward: WardID, WardNo, municipality, province |
+| `VotingDistrictByWard?WardID=79800001` | every VD, each with its station's name, lat/long, street, suburb, town, type |
+
+Two caveats found by using it:
+- **The coordinate-based endpoints are broken.** `Ward?latitude=&longitude=`
+  returns HTTP 500 with a `NullReferenceException` and a stack trace. Only the
+  id-based endpoints are used
+- It returns **500 with a stack trace** rather than a 4xx when something
+  upstream is unhappy, so 500s are treated as retryable
+
+**It serves no voters' roll.** A ward loaded from here has
+`registered_voters` NULL, which is why that column became nullable — see
+`GOTCHAS.md` G26. The roll still has to come from the IEC results data or
+registration statistics.
+
+- **Results at VD level:** available from the IEC results portal (VD is one of
+  the five report levels), as PDF and Excel
+- **Boundaries (geospatial):** the GIS API returns geometry with
+  `returnGeom=true`; the MDB also publishes ward boundaries
 
 ---
 

@@ -64,14 +64,38 @@ changing; a tail running out toward 30% confirms 30%. Exclude the 183 KZN wards
 still under litigation from that inference. Because the tolerance lives in
 `control_panel`, correcting it is one setting rather than a migration.
 
-### Q4 · What exactly does the IEC publish for the station register? — `OPEN`
-Day one of the 14-day plan depends on loading 23,699 stations with their ward
-and municipality. The portal publishes VD-level *results*; the station
-*register* format needs confirming.
-**Why it matters:** it is the first task and the one most likely to hold a
-nasty surprise. Everything in L2 outside Gauteng waits on it.
-**Fallback if unusable:** load Gauteng properly and accept provincial scope for
-4 November. Stated now so it is a decision rather than a discovery.
+### Q4 · What exactly does the IEC publish for the station register? — `ANSWERED` 2026-10-21
+**Answer:** an open JSON API — `https://api.elections.org.za/IECGIS/Help` — not
+the per-province PDFs I expected.
+**Reasoning, and it is the best news in the project so far:** the IEC's
+*results* API needs the credentials that have blocked every real election
+figure here since the start. The **GIS** service needs none. It also accepts
+MDB demarcation codes directly, which is the same key municipalmoney uses, so
+the two sources join with no translation table. The walk is
+`WardByMunicipality` → `VotingDistrictByWard`, and the second call returns each
+station's name, coordinates, street, suburb, town and type.
+**Consequence:** national geography is loadable now rather than after the
+results credentials arrive. `npm run sources:register` does it, resumably.
+**Also corrected a mistake of mine:** ward and voting district are *not* the
+same unit. Johannesburg ward 1 holds eight VDs. The drill-down is
+ward → VD → station, three levels, which is what the Todo actually asked for.
+**Still outstanding:** the GIS API serves no voters' roll, so
+`registered_voters` is NULL for every ward loaded this way. The roll is the
+remaining input the ward-size heatmap and any turnout model need — see Q16.
+
+### Q16 · Where does the voters' roll per ward come from? — `OPEN`
+The national register now has the geography but no registered-voter counts
+outside the Gauteng demo set, whose numbers are synthetic and now labelled as
+such in `ward.roll_source`.
+**Why it matters:** it is the denominator. Without it there is no turnout, no
+ward-size-versus-norm heatmap, and no turnout model — and the 30% tolerance
+band cannot be verified against the data either.
+**Candidates, in order of likely effort:** the IEC's registration statistics
+by ward (published between elections); the ward-level results downloads, which
+carry registered voters alongside votes; the results API once credentials
+arrive.
+**Interim:** `v_register_coverage.wards_with_real_roll` reads 0 outside
+Gauteng, so nothing can quietly present a synthetic denominator as real.
 
 ### Q5 · Who operates the paste form on the day? — `ANSWERED` 2026-10-21
 **Answer:** nobody, as the primary path. Ingest is automated.

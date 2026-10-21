@@ -292,6 +292,68 @@ minor problem still reads low — "no chairs for the queue" scores `low`.
 Expect to revise this list on 29 October, and note that the operator can
 override severity per line before committing.
 
+### G26 · `registered_voters NOT NULL` would have forced an invented number
+The GIS API serves geography and has no voters' roll, but `ward.registered_voters`
+was `NOT NULL` with no default. Loading a national ward would therefore have
+required supplying a count — and 0 is not a missing value, it is a claim. A
+ward with 0 registered voters propagates through every computed view as a
+division by zero or an infinite turnout, and the result looks like data.
+**Fixed:** the column is nullable. NULL means "the roll has not been loaded for
+this ward" and propagates to NULL rather than to a plausible lie.
+**Lesson:** a NOT NULL column on a figure you cannot always obtain is a
+standing instruction to fabricate one.
+
+### G27 · One `source` column could not describe two provenances
+Loading the national register refreshes a ward's *geography* from the IEC while
+its `registered_voters` may still be a synthetic figure from the Gauteng demo
+set. `ward.source` was one column, so it had to claim either that the row was
+real or that it was synthetic, and both were half true. The ward-size heatmap
+divides by that voter count, so a chart built on invented numbers would have
+looked exactly as convincing as a real one.
+**Fixed:** `source` now means the geography and `roll_source` means the voter
+count. `v_register_coverage` counts `wards_with_real_roll` and
+`wards_with_synthetic_roll` separately, because "wards with a voter count"
+would be a comforting number that includes the invented ones.
+**Lesson:** when a row starts acquiring fields from different places,
+provenance belongs per concern, not per row.
+
+### G28 · Fabricated ward identifiers, and duplicate geography
+The Gauteng demo seed invented ward ids for the six local municipalities by
+concatenating the MDB code with a sequence: synthetic Emfuleni ward 1 is
+`42100001`. The real IEC ward is `74201001`. The three metros happened to use
+real ids (798/799/797), so they merged cleanly when the national register
+loaded — but Emfuleni, Midvaal, Lesedi, Mogale City, Merafong City and Rand
+West City then appeared **twice**, once fabricated and once real.
+That left 169 wards and 1,080 voting stations that do not exist, all of them
+ranking in `mv_campaign_extract` beside the real ones. On election day they
+would have sat in the exception list all day as booths nobody could reach,
+because there is nothing there to reach.
+**Fixed:** `npm run clean:synthetic` — dry-run by default, refuses to run
+unless the real register is loaded (otherwise it would leave those
+municipalities with no wards at all), and reversible with `npm run seed`.
+**Lesson:** synthetic data must use identifiers that cannot collide with real
+ones, or it must use the real ones exactly. A plausible-looking invented key is
+the worst of both, because it merges silently.
+
+### G29 · `Number(null)` is `0`, and it cost a whole national run
+The argument parser read `--limit` with `Number.isFinite(Number(opt('limit')))
+? … : Infinity`. When the flag is absent, `opt()` returns `null`,
+`Number(null)` is **0** rather than `NaN`, and `Number.isFinite(0)` is true —
+so the limit defaulted to zero. The station walk reported "2642 wards still
+need voting districts; fetching 0", fetched nothing, and **exited 0**.
+**Fixed:** check for `null` and empty string before converting.
+**Lesson:** `Number()` coerces `null` to zero, `''` to zero and `[]` to zero.
+Any default-value helper built on it has a silent zero in it. And a job that
+does nothing should not exit successfully.
+
+### G30 · A published figure conflating wards with voting districts
+An earlier version of `DATA-SOURCES.md` recorded that VD and ward were
+"effectively the same unit", because a published summary gave 4,488 for both.
+Measurement settled it: Johannesburg ward 1 holds **eight** voting districts,
+and 4,488 wards across 23,699 stations is about five per ward.
+**Lesson:** two identical figures in a summary are a reason to check, not a
+finding. One API call would have caught it, and eventually did.
+
 ### G25 · A source re-guessing a category it already knew
 The news sweep queried per category, so the category was known before the
 response arrived — then scored the text and overwrote it, filing 26 Emfuleni
