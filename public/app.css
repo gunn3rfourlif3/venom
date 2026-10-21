@@ -1608,3 +1608,40 @@ button, input, select { font: inherit; color: inherit; }
   .logi-table td[data-k="Problem"] { display: block; margin-top: 8px; }
   .logi-table td[data-k="Station"] { font-size: var(--step-1); }
 }
+
+/* ------------------------------------------------------------- alerts
+   The band sits above the counts. Colour marks severity, but the kind is
+   spelled out beside it - an alert that is only red is an alert that means
+   nothing in a screenshot, over the phone, or to a colourblind reader. */
+.panel.alerts { border-color: var(--st-bad); }
+.alert-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.alert-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule-hair);
+}
+.alert-item:last-child { border-bottom: 0; }
+.alert-item .ak {
+  font: 500 .68rem/1 'Spline Sans Mono', ui-monospace, monospace;
+  letter-spacing: .06em; text-transform: uppercase;
+  padding: 4px 7px; border-radius: 4px;
+  white-space: nowrap;
+}
+.alert-item.is-serious .ak { background: rgba(244, 63, 94, .16); color: var(--st-bad); }
+.alert-item.is-warn    .ak { background: rgba(251, 146, 60, .16); color: var(--st-warn); }
+.alert-item .ab { color: var(--ink); }
+.alert-item .at {
+  font: 400 .76rem/1 'Spline Sans Mono', ui-monospace, monospace;
+  color: var(--ink-3); white-space: nowrap;
+}
+.alert-item .ack { padding: 4px 10px; font-size: var(--step--1); }
+
+@media (max-width: 680px) {
+  /* Four columns do not fit; the body gets its own line and the controls
+     share the one below it. */
+  .alert-item { grid-template-columns: auto 1fr auto; gap: 6px 9px; }
+  .alert-item .ab { grid-column: 1 / -1; }
+}

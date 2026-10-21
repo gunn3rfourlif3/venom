@@ -1311,7 +1311,59 @@ async function loadLogistics() {
     return;
   }
 
-  /* Silence, by municipality, as a band rather than as rows.
+  /* Open alerts. Fetched separately from the board so that a slow or failing
+   alerts query cannot stop the logistics screen from rendering - the screen
+   is more important than the banner on it. */
+async function loadAlerts() {
+  const host = $('lg-alerts');
+  if (!host) return;
+  let data;
+  try { ({ data } = await api('/api/alerts?limit=20')); }
+  catch { host.hidden = true; return; }
+
+  const list = data.alerts || [];
+  if (list.length === 0) { host.hidden = true; host.innerHTML = ''; return; }
+  host.hidden = false;
+
+  const serious = list.filter((a) => a.severity === 'serious').length;
+  /* A band, not a second table. The engine already caps what it raises;
+     this caps what is shown, for the same reason - past half a dozen, a
+     longer list stops adding anything and starts pushing the board off
+     screen. The count in the header stays truthful about the total. */
+  const SHOW = 6;
+  const shown = list.slice(0, SHOW);
+  const more = list.length - shown.length;
+  host.innerHTML = `
+    <div class="panel-head">
+      <h2 class="viz-title" style="margin:0">Open alerts</h2>
+      <span class="viz-sub" style="margin:0">${fmt(list.length)} unacknowledged${
+        serious ? `, ${fmt(serious)} serious` : ''}</span>
+    </div>
+    <ul class="alert-list">
+      ${shown.map((a) => `
+        <li class="alert-item ${a.severity === 'serious' ? 'is-serious' : 'is-warn'}">
+          <span class="ak">${esc(a.kind.replace(/_/g, ' ').toLowerCase())}</span>
+          <span class="ab">${esc(a.body)}</span>
+          <span class="at">${esc(since((Date.now() - new Date(a.raised_at).getTime()) / 60000))}</span>
+          ${a.delivery_error
+            ? '<span class="pill is-bad" title="' + esc(a.delivery_error) + '">not delivered</span>'
+            : ''}
+          <button class="btn ack" data-ack="${a.alert_id}">Ack</button>
+        </li>`).join('')}
+    </ul>
+    ${more > 0 ? `<p class="viz-sub">…and ${fmt(more)} more open. `
+      + `Acknowledge these to see the rest.</p>` : ''}`;
+}
+
+$('lg-alerts')?.addEventListener('click', async (e) => {
+  const id = e.target?.dataset?.ack;
+  if (!id) return;
+  e.target.disabled = true;
+  try { await api(`/api/alerts/${id}/ack`, { method: 'POST' }); await loadAlerts(); }
+  catch (error) { e.target.disabled = false; toast?.(`Could not acknowledge: ${error.message}`); }
+});
+
+/* Silence, by municipality, as a band rather than as rows.
      Only drawn while silence is widespread: once most stations are
      reporting, a silent one IS an exception and belongs in the table with
      the others, so the band gets out of the way. */
@@ -1416,6 +1468,7 @@ async function loadLogistics() {
         || s.severity === 'high');
 
   renderSilence(data.silence || [], blind, Number(r.stations_total));
+  loadAlerts();
 
   /* Three different numbers here, and conflating them is how a screen
      lies: `shown` is what passed the client filter, `rows.length` is what

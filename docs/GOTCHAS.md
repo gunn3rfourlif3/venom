@@ -292,6 +292,34 @@ minor problem still reads low — "no chairs for the queue" scores `low`.
 Expect to revise this list on 29 October, and note that the operator can
 override severity per line before committing.
 
+### G34 · The silence alert fired at 100% on the day's first report
+G4 keeps returning in new clothes. The widespread-silence rule counted
+stations in `NO_REPORT` **or** `STALE`, guarded only by "has anything ever
+been reported". So the moment the first marshal filed at 07:05, the guard
+passed and the alert announced that 24,829 of 24,831 stations had "not been
+heard from" — at precisely the moment reporting had begun working.
+**Fixed:** the measure is `STALE` alone, against a denominator of stations
+that have reported at least once. A station that has never reported has not
+started; a station that reported at 09:00 and nothing since has gone quiet.
+Only the second is news. Plus a floor of 20 reporting stations, because a
+handful is too small a base to call a trend on.
+**Verified:** 67 of 109 reporting stations stale → fires at 61%; all fresh →
+silent; one report filed nationally → silent.
+**Lesson:** "has it started?" and "is it working?" are different questions,
+and an alert that cannot tell them apart fires hardest at the moment things
+start going right.
+
+### G35 · Dedupe by unique constraint, not by timer
+The alert engine raises at most one alert per condition, per subject, per
+window — enforced by a UNIQUE index on `kind:scope:bucket` and
+`ON CONFLICT DO NOTHING ... RETURNING`. There is no timer, no in-memory set
+of "already sent", and nothing to get out of step after a restart.
+**Why it matters here:** on election day the process may well be restarted,
+and an in-memory dedupe would mean every open condition re-notifying on
+boot. The same pattern makes the WhatsApp webhook safe against Meta's
+at-least-once redelivery (G21), and it is worth reaching for whenever
+"don't do this twice" has to survive a crash.
+
 ### G33 · A file transfer reported success and sent the old version
 Twice in one session, a file was copied to the staging path, confirmed
 identical there by checksum, committed to the machine — and the machine kept
