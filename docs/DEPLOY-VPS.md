@@ -1,0 +1,606 @@
+# Deploying Xnith to `xnith.zaaka.io`
+
+Target: the existing **Cloud VPS 6 — 6 vCPU, 12 GB RAM, 200 GB disk**, already
+serving other sites. The goal is a stack that is as isolated as practical and
+**cannot take your other sites down**, which is the real risk of co-hosting.
+
+Everything below runs on the VPS over SSH unless marked otherwise. This file is
+meant to be followable by someone who is not you — that is deliberate, because
+on 4 November you are the single point of failure (`GOTCHAS.md` G5).
+
+---
+
+## 0. Isolation model
+
+| Concern | How |
+|---|---|
+| Process | Own Docker Compose project, own bridge network, own volumes |
+| Resources | Hard memory and CPU limits, so a runaway query cannot starve zaaka.io |
+| Network | **Postgres publishes no host port.** Reachable only on the internal Docker network |
+| Ingress | App binds `127.0.0.1` only; the existing web server proxies to it |
+| Filesystem | Everything under `/opt/xnith`, owned by a dedicated non-root user |
+| Credentials | Own Postgres role and database, own secrets file at `0600` |
+| Failure | Container restart policy is `unless-stopped`; the stack is a systemd unit |
+
+This is container isolation, not virtualisation. Adequate for staging and for
+4 November. When the provider app ships, the database moves off this box
+first — see `ARCHITECTURE.md` §3, Tier 1.
+
+---
+
+## 1. DNS
+
+At your DNS provider for `zaaka.io`:
+
+```
+Type   Name    Value                TTL
+A      xnith   <your.vps.ipv4>      300
+AAAA   xnith   <your.vps.ipv6>      300    (if the VPS has IPv6)
+```
+
+Keep TTL low until the deploy is settled, then raise it. Verify before going
+further:
+
+```bash
+dig +short xnith.zaaka.io
+```
+
+---
+
+## 2. What already owns ports 80 and 443
+
+**Check this before anything else.** It decides which of two paths you take,
+and getting it wrong takes your existing sites offline.
+
+```bash
+sudo ss -ltnp '( sport = :80 or sport = :443 )'
+```
+
+- **Something is listening** (nginx, Apache, Caddy) → **Path A**. Recommended.
+  Your existing web server keeps owning TLS and proxies to the container.
+  Nothing about your current sites changes.
+- **Nothing is listening** → **Path B**. The stack brings its own Caddy and
+  handles TLS itself.
+
+---
+
+## 3. Prerequisites
+
+```bash
+# Docker Engine + Compose plugin
+curl -fsSL https://get.docker.com | sudo sh
+sudo docker compose version
+
+# a dedicated unprivileged user that can drive Docker
+sudo useradd -r -m -d /opt/xnith -s /usr/sbin/nologin xnith
+sudo usermod -aG docker xnith
+sudo mkdir -p /opt/xnith/{app,backups,secrets}
+sudo chown -R xnith:xnith /opt/xnith
+sudo chmod 700 /opt/xnith/secrets
+```
+
+---
+
+## 4. Code and secrets
+
+```bash
+sudo -u xnith git clone https://github.com/gunn3rfourlif3/venom.git /opt/xnith/app
+cd /opt/xnith/app
+```
+
+Generate the secrets file. **Never commit this; never bake it into the image.**
+
+```bash
+sudo -u xnith bash -c 'umask 077; cat > /opt/xnith/secrets/xnith.env <<EOF
+POSTGRES_PASSWORD=$(openssl rand -base64 36 | tr -d /=+ | cut -c1-40)
+SESSION_SECRET=$(openssl rand -base64 48 | tr -d /=+ | cut -c1-64)
+NODE_ENV=production
+API_PORT=8080
+EOF'
+sudo chmod 600 /opt/xnith/secrets/xnith.env
+```
+
+Then append the connection string, reusing the password just generated:
+
+```bash
+sudo -u xnith bash -c '
+  . /opt/xnith/secrets/xnith.env
+  echo "DATABASE_URL=postgres://xnith:${POSTGRES_PASSWORD}@db:5432/xnith" \
+    >> /opt/xnith/secrets/xnith.env'
+```
+
+Confirm it is not world-readable:
+
+```bash
+ls -l /opt/xnith/secrets/xnith.env   # expect -rw------- xnith xnith
+```
+
+---
+
+## 5. Dockerfile
+
+Create `/opt/xnith/app/Dockerfile`:
+
+```dockerfile
+# ---- build ----
+FROM node:22-bookworm-slim AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build
+
+# ---- runtime ----
+FROM node:22-bookworm-slim
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=build /app/dist ./dist
+COPY public ./public
+COPY db ./db
+# run as the node user, not root
+USER node
+EXPOSE 8080
+CMD ["node", "dist/api/server.js"]
+```
+
+`db/` is copied in because the migrator reads the `.sql` files at runtime.
+
+---
+
+## 6. Compose stack
+
+Create `/opt/xnith/app/compose.yaml`. The resource limits are the part that
+protects your other sites — do not drop them.
+
+```yaml
+name: xnith
+
+services:
+  db:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: xnith
+      POSTGRES_USER: xnith
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # scram, and no trust for host connections
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    # NO ports: section. Deliberate. Postgres is reachable only
+    # on the xnith-internal network, never from the host or the internet.
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [internal]
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=100
+      - -c
+      - statement_timeout=30000
+      - -c
+      - idle_in_transaction_session_timeout=60000
+      - -c
+      - log_min_duration_statement=1000
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.5"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xnith -d xnith"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: /opt/xnith/secrets/xnith.env
+    # bound to loopback only; the host web server proxies to it (Path A)
+    ports:
+      - "127.0.0.1:8090:8080"
+    networks: [internal]
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  db-data:
+
+networks:
+  internal:
+    driver: bridge
+```
+
+Budget: 4 GB Postgres + 2 GB app = **6 GB of 12**, leaving ~6 GB for your
+existing sites and the OS. CPU limits total 4.5 of 6 cores, so the box stays
+responsive under load.
+
+Bring it up:
+
+```bash
+cd /opt/xnith/app
+sudo -u xnith docker compose --env-file /opt/xnith/secrets/xnith.env up -d --build
+sudo -u xnith docker compose ps
+```
+
+Migrate and seed:
+
+```bash
+sudo -u xnith docker compose exec app node dist/cli/migrate.js
+# only on staging — never load test seeds into production
+sudo -u xnith docker compose exec app node dist/cli/seed.js
+```
+
+Create the first admin:
+
+```bash
+sudo -u xnith docker compose exec app node dist/cli/create-user.js
+```
+
+Check it answers locally:
+
+```bash
+curl -fsS http://127.0.0.1:8090/api/health   # {"ok":true,...}
+```
+
+---
+
+## 7. Ingress
+
+### Path A — existing nginx proxies to the container *(recommended)*
+
+Create `/etc/nginx/sites-available/xnith.zaaka.io`:
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name xnith.zaaka.io;
+    location /.well-known/acme-challenge/ { root /var/www/html; }
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name xnith.zaaka.io;
+
+    # certbot fills these in
+    ssl_certificate     /etc/letsencrypt/live/xnith.zaaka.io/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/xnith.zaaka.io/privkey.pem;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    # the paste endpoint writes in bulk; cap the body
+    client_max_body_size 2m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # the live path is SSE: no buffering, long timeout
+    location /api/live {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_http_version 1.1;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 1h;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/xnith.zaaka.io /etc/nginx/sites-enabled/
+sudo nginx -t                         # MUST pass before reload
+sudo systemctl reload nginx
+sudo certbot --nginx -d xnith.zaaka.io
+```
+
+If the box runs **Apache** instead, the equivalent is `ProxyPass / http://127.0.0.1:8090/`
+in a `<VirtualHost *:443>` with `ProxyPass /api/live` given
+`ProxyPass ... flushpackets=on` and a long `ProxyTimeout`. The SSE location is
+the part people forget; without it the live updates buffer and appear frozen.
+
+### Path B — only if nothing owns 80/443
+
+Add Caddy to the compose file and let it terminate TLS:
+
+```yaml
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    networks: [internal]
+    depends_on: [app]
+    deploy:
+      resources:
+        limits: { memory: 256M, cpus: "0.5" }
+```
+
+`Caddyfile`:
+
+```
+xnith.zaaka.io {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+	}
+	reverse_proxy app:8080 {
+		flush_interval -1    # required for SSE
+	}
+}
+```
+
+Then remove the `ports:` mapping from `app` — Caddy reaches it over the
+internal network and nothing needs a host port.
+
+---
+
+## 8. The daily cadence
+
+The database lives on this box, so the scheduler must too. A cloud-side cron or
+an agent session cannot reach it (`GOTCHAS.md` G8).
+
+`/etc/systemd/system/xnith-daily.service`:
+
+```ini
+[Unit]
+Description=Xnith daily source sweep
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=xnith
+WorkingDirectory=/opt/xnith/app
+ExecStart=/usr/bin/docker compose exec -T app node dist/cli/daily.js
+```
+
+`/etc/systemd/system/xnith-daily.timer`:
+
+```ini
+[Unit]
+Description=Run the Xnith daily sweep each morning
+
+[Timer]
+# 04:12 local. Off the hour on purpose: every other scheduled job
+# on every other box runs at :00, and the feeds are slower then.
+OnCalendar=*-*-* 04:12:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now xnith-daily.timer
+sudo systemctl list-timers xnith-daily.timer
+# run it once by hand and read the output
+sudo systemctl start xnith-daily.service
+sudo journalctl -u xnith-daily.service -n 100 --no-pager
+```
+
+`npm run daily` runs the press sweep, the news sweep, the retention purge, then
+refreshes `mv_campaign_extract`, and reports what the day produced. Optional
+steps failing do not fail the run; the extract refresh failing does, because
+that means the dashboard is serving yesterday's numbers.
+
+**`Persistent=true` matters:** if the VPS is down at 04:12, the sweep runs on
+next boot rather than being skipped. Each press feed carries only its ten most
+recent items, so a skipped day is a permanent hole in the series.
+
+### On your Windows machine, for local development
+
+```powershell
+schtasks /Create /TN "Xnith daily" /SC DAILY /ST 04:12 /RL HIGHEST ^
+  /TR "cmd /c cd /d C:\xampp\htdocs\development\venom && npm run daily >> daily.log 2>&1"
+
+# verify, and run it once now
+schtasks /Query /TN "Xnith daily"
+schtasks /Run   /TN "Xnith daily"
+```
+
+---
+
+## 9. Backups, and a rehearsed restore
+
+The database is the only part that cannot be rebuilt from git. **An untested
+backup is not a backup** — the restore rehearsal below is the highest-value
+fifteen minutes in this document.
+
+`/opt/xnith/backup.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+cd /opt/xnith/app
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+OUT=/opt/xnith/backups/xnith-${STAMP}.dump
+
+docker compose exec -T db pg_dump -U xnith -d xnith -Fc > "$OUT"
+# fail loudly on a zero-length dump rather than keeping it
+[ -s "$OUT" ] || { echo "FATAL: empty dump" >&2; rm -f "$OUT"; exit 1; }
+gzip -f "$OUT"
+
+# keep 14 days locally
+find /opt/xnith/backups -name 'xnith-*.dump.gz' -mtime +14 -delete
+
+# OFF-BOX COPY. A backup on the same disk as the database is not a backup.
+# rclone copy "${OUT}.gz" remote:xnith-backups/
+echo "ok ${OUT}.gz"
+```
+
+```bash
+sudo chmod +x /opt/xnith/backup.sh
+sudo chown xnith:xnith /opt/xnith/backup.sh
+```
+
+A timer at 02:30, same pattern as §8.
+
+**Configure the off-box copy.** The commented `rclone` line is the difference
+between a backup and a false sense of one: if the VPS disk fails, a dump on
+that disk goes with it. Any object store will do.
+
+### Rehearse the restore — do this once, now
+
+```bash
+cd /opt/xnith/app
+# restore last night's dump into a scratch database
+sudo -u xnith docker compose exec -T db createdb -U xnith restore_test
+gunzip -c /opt/xnith/backups/xnith-*.dump.gz | tail -1 | \
+  sudo -u xnith docker compose exec -T db pg_restore -U xnith -d restore_test
+
+# verify it is actually a working database, not just bytes
+sudo -u xnith docker compose exec -T db psql -U xnith -d restore_test -c \
+  "SELECT (SELECT count(*) FROM ward)    AS wards,
+          (SELECT count(*) FROM station) AS stations,
+          (SELECT count(*) FROM booth_report) AS reports;"
+
+sudo -u xnith docker compose exec -T db dropdb -U xnith restore_test
+```
+
+If those counts are wrong or the restore errors, **fix it today**, not on
+4 November.
+
+---
+
+## 10. Host hardening
+
+```bash
+# firewall: only SSH and the web
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow OpenSSH
+sudo ufw allow 80,443/tcp
+sudo ufw enable
+sudo ufw status verbose     # confirm 5432 is NOT listed
+
+# automatic security updates
+sudo apt install -y unattended-upgrades fail2ban
+sudo dpkg-reconfigure -plow unattended-upgrades
+sudo systemctl enable --now fail2ban
+
+# SSH: keys only, no root login
+sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sudo sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/'                /etc/ssh/sshd_config
+sudo sshd -t && sudo systemctl reload ssh
+```
+
+Confirm Postgres is genuinely unreachable from outside — this should **fail**:
+
+```bash
+# from your own machine, not the VPS
+nc -zv xnith.zaaka.io 5432
+```
+
+---
+
+## 11. Verification checklist
+
+Run all of it before calling the deploy done.
+
+```bash
+# 1 — TLS valid and the right host
+curl -sSI https://xnith.zaaka.io | head -1
+
+# 2 — health
+curl -sS https://xnith.zaaka.io/api/health
+
+# 3 — auth is actually required
+curl -sS -o /dev/null -w '%{http_code}\n' https://xnith.zaaka.io/api/wards   # expect 401
+
+# 4 — schema complete (the migrator verifies and names anything missing)
+sudo -u xnith docker compose exec app node dist/cli/migrate.js
+
+# 5 — logistics views answer
+sudo -u xnith docker compose exec -T db psql -U xnith -d xnith -c \
+  'SELECT * FROM v_logistics_rollup;'
+
+# 6 — Postgres not exposed
+sudo ss -ltnp | grep 5432 || echo 'good: no host listener on 5432'
+
+# 7 — limits actually applied
+sudo docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}}'
+
+# 8 — survives a reboot
+sudo reboot
+# then, once back:
+curl -sS https://xnith.zaaka.io/api/health
+
+# 9 — the other sites still work
+curl -sSI https://zaaka.io | head -1
+```
+
+Item 9 is not a formality. Co-hosting means your existing sites are part of the
+blast radius, and checking them is how you find out you were wrong about that.
+
+---
+
+## 12. Deploying a change
+
+```bash
+cd /opt/xnith/app
+sudo -u xnith git pull
+
+# see what the migration would do before it does it
+sudo -u xnith docker compose exec app node dist/cli/migrate.js --dry-run
+
+sudo -u xnith docker compose up -d --build app
+sudo -u xnith docker compose exec app node dist/cli/migrate.js
+curl -fsS https://xnith.zaaka.io/api/health
+```
+
+**Rollback:**
+
+```bash
+sudo -u xnith git log --oneline -5
+sudo -u xnith git checkout <previous-sha>
+sudo -u xnith docker compose up -d --build app
+```
+
+Note that code rolls back and **schema does not** — the migrator never
+un-applies. Write migrations additively: add a column, do not rename one; keep
+the old view until nothing reads it. That discipline is what makes a rollback
+at 14:00 on election day survivable.
+
+**From 30 October: feature freeze.** Bug fixes only, and nothing at all is
+deployed on 4 November.
