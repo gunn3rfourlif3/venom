@@ -60,6 +60,14 @@ SELECT
   ROUND((0.55 + random() * 0.4)::numeric, 3)                     AS confidence
 FROM ward_issue i
 CROSS JOIN generate_series(0, 7) AS wk
-ON CONFLICT (ward_id, category, observed_on, source) DO NOTHING;
+-- The WHERE clause is not a filter on what gets inserted - it names the
+-- partial index to arbitrate against. Migration 020 split the old single
+-- unique key into two, one for ward rows and one for municipality rows,
+-- and Postgres will not infer a partial index unless the statement repeats
+-- its predicate. Without it this is "no unique or exclusion constraint
+-- matching the ON CONFLICT specification" and the sentiment screen comes
+-- up empty on a fresh database.
+ON CONFLICT (ward_id, category, observed_on, source)
+  WHERE geo_level = 'WARD' DO NOTHING;
 
 COMMIT;

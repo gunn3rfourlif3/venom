@@ -10,7 +10,26 @@ on 4 November you are the single point of failure (`GOTCHAS.md` G5).
 
 ---
 
-## 0. Isolation model
+## 0. Before anything: take a provider snapshot
+
+**This box carries live services.** The deploy installs Docker, adds a vhost,
+changes the firewall and enables unattended upgrades. A snapshot is the
+difference between "undo" and "rebuild", it costs a few minutes, and it is
+the cheapest insurance in this document.
+
+On Contabo: the instance page → Snapshots → Create snapshot. Do it before
+step 1, not after something goes wrong.
+
+**On sudo:** Contabo provisions these instances with `root` as the default
+user, so there is no sudo password to find and every `sudo` below can be
+dropped when logged in as root. Do **not** reset the instance credentials to
+get one — a reset applies to the running instance and generally needs a
+restart, which takes the live sites down. The provider's password manager
+can reveal a stored password instead.
+
+---
+
+## 0b. Isolation model
 
 | Concern | How |
 |---|---|

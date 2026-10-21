@@ -37,7 +37,14 @@ INSERT INTO source (source_id, label, kind, access, base_url, terms_url,
 CREATE TABLE press_title (
   domain           text PRIMARY KEY,
   label            text NOT NULL,
-  demarcation_code text REFERENCES municipality (demarcation_code),
+  -- Deliberately not a foreign key. This mapping is editorial and fixed -
+  -- the Randburg Sun covers Johannesburg whether or not anyone has loaded
+  -- Johannesburg yet - while the municipality table is populated later by
+  -- sources:official. A foreign key here makes a fresh clone unmigratable:
+  -- the schema would refuse to build until real data had been fetched,
+  -- which is backwards. The join in enabledTitles() is the real gate; a
+  -- title whose municipality is absent simply does not come back.
+  demarcation_code text,
   -- Afrikaans titles are kept and marked: the scorer is weakest on them and
   -- that weakness should be visible rather than buried in a low score.
   language         text NOT NULL DEFAULT 'en',
@@ -78,8 +85,10 @@ INSERT INTO press_title (domain, label, demarcation_code, language) VALUES
   ('carletonvilleherald.com',       'Carletonville Herald',        'GT484', 'en'),
   ('randfonteinherald.co.za',       'Randfontein Herald',          'GT485', 'en');
 
--- A title whose municipality is not loaded yet is switched off rather than
--- dropped, so running sources:official later turns it on without an edit.
-UPDATE press_title p SET enabled = false
- WHERE NOT EXISTS (SELECT 1 FROM municipality m
-                    WHERE m.demarcation_code = p.demarcation_code);
+-- `enabled` is an editorial switch - for turning a title off because its
+-- feed went bad or its coverage stopped being useful - and nothing else
+-- touches it. An earlier cut set it false here for titles whose
+-- municipality was not loaded yet, which had the opposite of the intended
+-- effect: the title stayed off after sources:official ran, because nothing
+-- ever switched it back on. The join in enabledTitles() handles that case
+-- correctly and reversibly, so this does not need to.
