@@ -20,7 +20,11 @@
     "sources:cameras": "node --env-file=.env dist/cli/sources-cameras.js",
     "sources:news": "node --env-file=.env dist/cli/sources-news.js",
     "sources:press": "node --env-file=.env dist/cli/sources-press.js",
-    "sources:instagram": "node --env-file=.env dist/cli/sources-instagram.js"
+    "sources:instagram": "node --env-file=.env dist/cli/sources-instagram.js",
+    "daily": "node --env-file=.env dist/cli/daily.js",
+    "retention:purge": "node --env-file=.env dist/cli/retention-purge.js",
+    "sources:register": "node --env-file=.env dist/cli/sources-register.js",
+    "clean:synthetic": "node --env-file=.env dist/cli/clean-synthetic.js"
   },
   "dependencies": {
     "pg": "8.13.1"
