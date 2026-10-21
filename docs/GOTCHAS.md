@@ -292,6 +292,26 @@ minor problem still reads low — "no chairs for the queue" scores `low`.
 Expect to revise this list on 29 October, and note that the operator can
 override severity per line before committing.
 
+### G33 · A file transfer reported success and sent the old version
+Twice in one session, a file was copied to the staging path, confirmed
+identical there by checksum, committed to the machine — and the machine kept
+the *previous* version. The transfer reported `written` both times.
+
+The first instance cost real time: the KwaZulu-Natal province-name fix in
+`municipalMoney.ts` was "delivered", rebuilt and re-run, and the register
+still came back missing 924 wards. The code was right; the file on disk was
+the old one. The second instance was `public/app.css` and was caught only
+because the checksum was verified afterwards.
+
+**Cause:** re-committing from a staging path already used earlier in the same
+session appears to send a cached copy of what was there the first time.
+**Fix:** stage under a filename not used before — `app-css-v2.txt` landed
+immediately with the right checksum.
+**Rule going forward:** `md5sum` on both sides after every transfer. A tool
+reporting success is a claim, not evidence, and "I sent it" is not the same
+sentence as "it is there". All fourteen transferred files were re-verified
+after this was found.
+
 ### G31 · The exceptions table listed 19,803 identical rows
 G4 predicted this; building the screen made it visible. Before the first
 reporting cycle every station in the country is `NO_REPORT`, so "stations

@@ -1341,6 +1341,12 @@ button, input, select { font: inherit; color: inherit; }
     border: 1px solid var(--rule); border-radius: var(--r-control);
     margin-bottom: 8px; padding: 10px 12px; background: var(--surface);
   }
+  /* The accent moves to the row's left border on a phone, so the desk
+     rule that paints it INSIDE the first cell has to be cleared - with
+     both applying it was drawn over the first label, straight through
+     the "S" of STATION. */
+  .logi-table tr.needs-action td:first-child,
+  .logi-table tr.needs-watch  td:first-child { box-shadow: none; }
   .logi-table tr.needs-action { border-left: 3px solid var(--st-bad); }
   .logi-table tr.needs-watch  { border-left: 3px solid var(--st-warn); }
   .logi-table td { border: 0; padding: 2px 0; }
@@ -1506,3 +1512,99 @@ button, input, select { font: inherit; color: inherit; }
 }
 .rail button.is-current .ri { opacity: 1; }
 .rail button:hover .ri { opacity: .85; }
+
+/* =======================================================================
+   PHONE — the command view
+   =======================================================================
+   Not a reflow of the desk layout. At 390px the desk order put the topbar
+   and the ingest strip across the first two screens, so the thing somebody
+   actually opens the phone for - what is wrong and where - sat below the
+   fold twice over. On the move that is the wrong order, so the order
+   changes rather than the content.
+
+   One codebase: no second page and no duplicated markup. The rows already
+   carry data-k on every cell, which is what makes the table-to-card
+   conversion possible without touching the JS. */
+@media (max-width: 680px) {
+
+  /* --- topbar: keep the status, drop the furniture.
+     Search and the signed-in name are desk things. On a phone they cost
+     about 180px of the first screen and answer nothing urgent. */
+  .topbar .search,
+  .topbar .who { display: none; }
+  .topbar { gap: 8px; padding: 6px 12px; min-height: 0; }
+  .topbar .sysblock { padding: 4px 10px; }
+  .topbar .signout { margin-left: auto; font-size: var(--step--1); padding: 5px 9px; }
+
+  /* --- re-order the screen. Counts, then what is wrong, then the rest. */
+  #view-logistics { display: flex; flex-direction: column; }
+  #view-logistics .page-head { order: 1; }
+  #view-logistics #lg-tiles  { order: 2; margin-top: 10px !important; }
+  #view-logistics .panel:has(#lg-table) { order: 3; }
+  #view-logistics #lg-silence { order: 4; }
+  #view-logistics #lg-statline { order: 5; }
+  #view-logistics .intake { order: 6; }
+
+  .page-head h1 { font-size: 1.5rem; }
+
+  /* --- tiles: a glance, not a billboard. Three up, short. */
+  #lg-tiles { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  #lg-tiles .tile { padding: 10px 6px; }
+  #lg-tiles .tile .n { font-size: 1.5rem; }
+  #lg-tiles .tile .l { font-size: .62rem; letter-spacing: .04em; }
+
+  /* --- the ingest strip scrolls sideways instead of stacking into a wall */
+  #lg-statline { display: flex; overflow-x: auto; gap: 0; scrollbar-width: none; }
+  #lg-statline::-webkit-scrollbar { display: none; }
+  #lg-statline > div { flex: 0 0 auto; padding: 8px 14px; }
+
+  /* The table-to-card conversion lives in the 760px block above and is
+     NOT repeated here - two implementations of the same thing is how one
+     of them silently stops being the one that runs. Its two faults are
+     fixed there instead. */
+
+  /* --- silence: one column, and fewer of them. */
+  .silence-grid { grid-template-columns: 1fr; gap: 0 0; }
+
+  /* --- intake: the textarea is the point, so give it room. */
+  .intake textarea { min-height: 120px; }
+  .intake .row { flex-wrap: wrap; }
+  .intake .row > * { flex: 1 1 auto; }
+
+  /* Touch targets. The filter chips were 24px high, which is a miss on a
+     moving train. */
+  .seg button { min-height: 36px; padding-inline: 11px; }
+}
+
+/* Phone refinements to the card layout defined in the 760px block above.
+   Placed after it deliberately: these override by source order, which is
+   the honest way to do it - bumping specificity to win a fight with your
+   own stylesheet is how a rule becomes impossible to override later. */
+@media (max-width: 680px) {
+  /* A station code under the heading STATION, and a ward number under
+     WARD, are the label repeating the value. On a 390px screen that is
+     several wasted lines per card. */
+  .logi-table td[data-k="Station"]::before,
+  .logi-table td[data-k="Ward"]::before,
+  .logi-table td[data-k="Presence"]::before,
+  .logi-table td[data-k="Supply"]::before,
+  .logi-table td[data-k="Problem"]::before { content: none; }
+
+  /* The supporting facts share wrapping lines instead of taking one each,
+     which halves the height of a card and lets three fit on a screen. */
+  .logi-table td[data-k="Ward"],
+  .logi-table td[data-k="Presence"],
+  .logi-table td[data-k="Supply"],
+  .logi-table td[data-k="People"],
+  .logi-table td[data-k="Queue"],
+  .logi-table td[data-k="Last report"] {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    width: auto;
+    margin: 7px 14px 0 0;
+  }
+  .logi-table td[data-k="Ward"] .sub { display: inline; margin-left: 6px; }
+  .logi-table td[data-k="Problem"] { display: block; margin-top: 8px; }
+  .logi-table td[data-k="Station"] { font-size: var(--step-1); }
+}

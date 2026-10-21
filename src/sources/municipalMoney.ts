@@ -34,19 +34,45 @@ export class MunicipalMoneyError extends Error {
   }
 }
 
-/** province_name -> the code this system uses. The cube's own province_code
- *  disagrees with itself (KZ/KZN, LP/LIM), so the name is the key to trust. */
-export const PROVINCE_CODE: Record<string, string> = {
-  'Eastern Cape': 'EC',
-  'Free State': 'FS',
-  'Gauteng': 'GT',
-  'KwaZulu-Natal': 'KZN',
-  'Limpopo': 'LIM',
-  'Mpumalanga': 'MP',
-  'Northern Cape': 'NC',
-  'North West': 'NW',
-  'Western Cape': 'WC',
+/* province_name -> the code this system uses.
+ *
+ * The cube disagrees with itself twice over, and both had to be found the
+ * hard way. First the code: the 54 current KwaZulu-Natal municipalities carry
+ * 'KZ' and the 11 abolished in 2016 carry 'KZN'; Limpopo splits the same way
+ * between 'LP' (27 current) and 'LIM' (6 defunct). So the code cannot be
+ * trusted and the name has to be the key.
+ *
+ * Then the name turned out to disagree too - 'Kwazulu-Natal' for the current
+ * 54 against 'KwaZulu-Natal' for the defunct 11, differing in the
+ * capitalisation of a single letter. An exact-match lookup therefore dropped
+ * all 54 current KwaZulu-Natal municipalities and kept only the defunct ones,
+ * which presented as a province that simply was not there.
+ *
+ * Hence matching on a squashed key: lowercased, with spaces and hyphens
+ * removed. Nothing about this source justifies assuming a third spelling will
+ * not appear.
+ */
+const squash = (s: string) => s.toLowerCase().replace(/[\s-]+/g, '');
+
+const PROVINCE_BY_NAME: Record<string, string> = {
+  easterncape: 'EC',
+  freestate: 'FS',
+  gauteng: 'GT',
+  kwazulunatal: 'KZN',
+  limpopo: 'LIM',
+  mpumalanga: 'MP',
+  northerncape: 'NC',
+  northwest: 'NW',
+  westerncape: 'WC',
 };
+
+/** The province code for a province name, tolerant of the cube's spellings.
+ *  Returns null rather than guessing, so an unrecognised name is reported
+ *  instead of silently filed under the wrong province. */
+export function provinceCodeFor(name: string | null): string | null {
+  if (!name) return null;
+  return PROVINCE_BY_NAME[squash(name)] ?? null;
+}
 
 export interface MunicipalityRow {
   demarcation_code: string;
@@ -175,7 +201,7 @@ export class MunicipalMoneyClient {
         demarcation_code: String(r['municipality.demarcation_code']),
         name: String(r['municipality.name']),
         category: r['municipality.category'] == null ? null : String(r['municipality.category']),
-        province_code: PROVINCE_CODE[name ?? ''] ?? null,
+        province_code: provinceCodeFor(name),
         province_name: name,
       };
     });
