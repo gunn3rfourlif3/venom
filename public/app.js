@@ -809,28 +809,62 @@ async function loadOverview() {
   const eroding = Number(c.l_total_votes);
   const eo = Number(c.eo_est_votes);
 
+  /* The region came from a hardcoded "Gauteng" that stopped being true when
+     the register went national. */
+  const reg = data.register ?? {};
+  const where = reg.provinces > 1 ? `${num(reg.provinces)} provinces` : (reg.provinces === 1 ? 'one province' : 'the register');
   $('ov-sub').textContent =
-    `${num(c.wards_total)} wards in Gauteng. ${num(c.wards_declared)} declared. `
+    `${num(c.wards_total)} wards across ${where}. ${num(c.wards_declared)} declared. `
     + `leakage charged against ${LEAKAGE_WORDS[c.leakage_basis] ?? c.leakage_basis}`;
 
+  /* A ward with no registered-voter figure cannot contribute to any of the
+     vote arithmetic, so with none of them loaded every number below is zero —
+     and a zero here reads as a forecast of nothing rather than as "we have no
+     basis to forecast". That is the same fault as SUPPLY_OK over wards with
+     no deployments, and NO_PLAN over a NULL expected_people: an absence
+     rendering as a confident value. Say which it is. */
+  const withRoll = Number(reg.wards_with_roll ?? 0);
+  const noBaseline = withRoll === 0 || potential === 0;
+
   const eoEl = $('ov-eo');
-  eoEl.textContent = num(eo);
-  eoEl.classList.toggle('is-negative', eo < 0);
+  if (noBaseline) {
+    /* An em-dash at hero size is a stray horizontal rule, not a value. Say
+       it in words, smaller and muted, so the eye reads it as a state rather
+       than as a number that failed to load. */
+    eoEl.textContent = 'not yet known';
+    eoEl.classList.remove('is-negative');
+    eoEl.classList.add('is-unknown');
+  } else {
+    eoEl.classList.remove('is-unknown');
+    eoEl.textContent = num(eo);
+    eoEl.classList.toggle('is-negative', eo < 0);
+  }
 
   // The bar is the subtraction: the whole width is what could be had, the
   // dimmed part is what is being lost, the accent is what survives it.
   const keep = potential > 0 ? Math.max(0, Math.min(1, eo / potential)) : 0;
-  $('ov-bar').innerHTML =
-    `<i class="is-keep" style="width:${(keep * 100).toFixed(1)}%"></i>`
-    + `<i class="is-lose" style="width:${((1 - keep) * 100).toFixed(1)}%"></i>`;
-  $('ov-legend').innerHTML =
-    `<span><b>${num(potential)}</b>could be had</span>`
-    + `<span><b>&minus;${num(eroding)}</b>eroding</span>`
-    + `<span><b>${num(eo)}</b>expected</span>`;
+  /* An empty bar drawn at full width reads as "all of it is being lost".
+     With no baseline there is no bar to draw. */
+  /* Hidden, not emptied: the bar's own track still reads as a meter sitting
+     at zero, which is the thing this whole change exists to avoid. */
+  $('ov-bar').hidden = noBaseline;
+  $('ov-bar').innerHTML = noBaseline ? ''
+    : `<i class="is-keep" style="width:${(keep * 100).toFixed(1)}%"></i>`
+      + `<i class="is-lose" style="width:${((1 - keep) * 100).toFixed(1)}%"></i>`;
+  $('ov-legend').innerHTML = noBaseline
+    ? `<span class="viz-sub" style="margin:0">No electoral baseline loaded —
+         ${num(reg.wards ?? c.wards_total)} wards have geography but no registered-voter
+         or past-result figures, so there is nothing to project from. This is not a
+         forecast of zero.</span>`
+    : `<span><b>${num(potential)}</b>could be had</span>`
+      + `<span><b>&minus;${num(eroding)}</b>eroding</span>`
+      + `<span><b>${num(eo)}</b>expected</span>`;
 
   $('ov-stats').innerHTML = [
-    ['Without a candidate', num(c.wards_no_candidate), Number(c.wards_no_candidate) > 0],
-    ['People short', num(c.people_gap_total), Number(c.people_gap_total) > 0],
+    ['Without a candidate', noBaseline ? '—' : num(c.wards_no_candidate),
+      !noBaseline && Number(c.wards_no_candidate) > 0],
+    ['People short', noBaseline ? '—' : num(c.people_gap_total),
+      !noBaseline && Number(c.people_gap_total) > 0],
     ['Wards with signal', num(data.sentiment?.wards ?? 0), false],
     ['Act now', num(data.act_now.length), false],
   ].map(([label, value, bad]) =>
@@ -880,8 +914,8 @@ async function loadOverview() {
       <span class="qbar-num">R${(Number(m.value) / 1e9).toFixed(1)}bn</span>
     </div>`).join('')
     : emptyState('No Treasury figures yet',
-        'Municipal Money is open and needs no credentials. This pulls the '
-        + 'Gauteng municipality list and their audited service revenue:',
+        'Municipal Money is open and needs no credentials. This pulls every '
+        + 'municipality in the register and their audited service revenue:',
         'npm run sources:official -- 2023 2024');
 
   // Sources

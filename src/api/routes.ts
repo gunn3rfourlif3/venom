@@ -353,7 +353,7 @@ async function putControlPanel(ctx: Ctx): Promise<void> {
  *  after signing in and it should arrive whole rather than assembling itself
  *  panel by panel. */
 async function getOverview(ctx: Ctx): Promise<void> {
-  const [campaign, act, issues, sources, sentiment, municipal] = await Promise.all([
+  const [campaign, act, issues, sources, sentiment, municipal, scope] = await Promise.all([
     pool.query('SELECT * FROM v_campaign_eo'),
     // target_class and pressure_band are computed in v_ward_target, not
     // carried on the extract, so the two are joined rather than guessed at.
@@ -388,6 +388,15 @@ async function getOverview(ctx: Ctx): Promise<void> {
         WHERE f.metric LIKE 'service_charge_revenue.%'
           AND f.financial_year = (SELECT max(financial_year) FROM service_fact)
         ORDER BY f.value DESC`),
+    /* Scope, and how much of it has an electoral baseline. The Overview used
+       to say "wards in Gauteng" from a hardcoded string, which stopped being
+       true the moment the register went national — and it had no way to tell
+       a genuine zero from a ward it knows nothing about. */
+    pool.query(
+      `SELECT count(DISTINCT province)::int        AS provinces,
+              count(*)::int                        AS wards,
+              count(registered_voters)::int        AS wards_with_roll
+         FROM ward`),
   ]);
 
   json(ctx.res, 200, {
@@ -399,6 +408,7 @@ async function getOverview(ctx: Ctx): Promise<void> {
       sources: sources.rows,
       sentiment: sentiment.rows[0] ?? null,
       municipal: municipal.rows,
+      register: scope.rows[0] ?? null,
     },
   });
 }

@@ -1745,3 +1745,12 @@ button, input, select { font: inherit; color: inherit; }
 .sl-check { margin-top: 10px; }
 .sl-check.is-ok  { color: var(--st-good); }
 .sl-check.is-off { color: var(--st-warn); }
+
+/* The headline when there is no basis for a figure. Smaller and muted, so it
+   reads as a state rather than as a number that failed to arrive. */
+.headline-value.is-unknown,
+#ov-eo.is-unknown {
+  font-size: var(--step-3);
+  color: var(--ink-2);
+  letter-spacing: .01em;
+}
