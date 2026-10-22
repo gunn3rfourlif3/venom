@@ -227,6 +227,17 @@
            pressure and how close the ward is.</p>
         <div class="chips" id="filter-class"></div>
       </div>
+      <!-- Place. Province narrows region narrows municipality, so the lists
+           stay short instead of offering 213 municipalities at once. -->
+      <div class="filter-group">
+        <h2>Province</h2>
+        <select id="filter-province"><option value="">All</option></select>
+      </div>
+      <div class="filter-group">
+        <h2>Region</h2>
+        <p class="filter-note">District municipality. A metro is its own region.</p>
+        <select id="filter-region"><option value="">All</option></select>
+      </div>
       <div class="filter-group">
         <h2>Municipality</h2>
         <select id="filter-munic"><option value="">All</option></select>
@@ -547,6 +558,17 @@
   </aside>
   <div class="scrim" id="scrim" hidden></div>
   <div class="tip" id="tip" hidden role="status"></div>
+
+  <!-- Trending topics. Counts, not headlines - this system stores no article
+       text. Hidden until there is something real to say. -->
+  <div class="ticker" id="ticker" hidden>
+    <span class="ticker-label">TRENDING</span>
+    <div class="ticker-window" id="ticker-window">
+      <div class="ticker-track" id="ticker-track"></div>
+    </div>
+    <button class="ticker-pause" id="ticker-pause" aria-label="Pause the ticker"
+            aria-pressed="false" title="Pause">&#10073;&#10073;</button>
+  </div>
 </div>
 
 <script src="/app.js" type="module"></script>

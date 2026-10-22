@@ -69,19 +69,36 @@ async function getWards(ctx: Ctx): Promise<void> {
   const box = enumParam(ctx.url, 'box', ['Recruit', 'Contest', 'Hold', 'Abandon']);
   const municipality = ctx.url.searchParams.get('municipality');
 
+  /* Province and region come from the municipality join rather than the
+     extract, which carries neither. Joining here avoids rebuilding a
+     materialized view that several other screens read. */
+  const province = ctx.url.searchParams.get('province');
+  const region = ctx.url.searchParams.get('region');
+
+  const where = `
+      WHERE ($1::text IS NULL OR x.recommended_box = $1)
+        AND ($2::text IS NULL OR x.municipality = $2)
+        AND ($3::text IS NULL OR m.province_name = $3)
+        AND ($4::text IS NULL OR m.region_code = $4)`;
+
   const result = await pool.query(
-    `SELECT * FROM mv_campaign_extract
-      WHERE ($1::text IS NULL OR recommended_box = $1)
-        AND ($2::text IS NULL OR municipality = $2)
-      ORDER BY priority_rank
-      LIMIT $3 OFFSET $4`,
-    [box, municipality, limit, offset],
+    `SELECT x.*, m.province_name AS province,
+            m.region_code, m.region_name, m.category AS municipality_category
+       FROM mv_campaign_extract x
+       JOIN ward w        ON w.ward_id = x.ward_id
+       JOIN municipality m ON m.demarcation_code = w.demarcation_code
+      ${where}
+      ORDER BY x.priority_rank
+      LIMIT $5 OFFSET $6`,
+    [box, municipality, province, region, limit, offset],
   );
   const total = await pool.query(
-    `SELECT count(*)::int AS n FROM mv_campaign_extract
-      WHERE ($1::text IS NULL OR recommended_box = $1)
-        AND ($2::text IS NULL OR municipality = $2)`,
-    [box, municipality],
+    `SELECT count(*)::int AS n
+       FROM mv_campaign_extract x
+       JOIN ward w        ON w.ward_id = x.ward_id
+       JOIN municipality m ON m.demarcation_code = w.demarcation_code
+      ${where}`,
+    [box, municipality, province, region],
   );
   json(ctx.res, 200, {
     as_of: await asOf(),
@@ -146,6 +163,16 @@ async function getTargets(ctx: Ctx): Promise<void> {
       LIMIT $2`,
     [targetClass, limit],
   );
+  json(ctx.res, 200, await envelope(result.rows));
+}
+
+/** Trending topics for the ticker. Counts only — no article text exists. */
+async function getTrending(ctx: Ctx): Promise<void> {
+  const result = await pool.query(
+    `SELECT municipality, province, category, recent, prior, change,
+            pct_change, direction, tone
+       FROM v_trending_topics
+      LIMIT 24`);
   json(ctx.res, 200, await envelope(result.rows));
 }
 
@@ -428,5 +455,5 @@ export const routes = {
   postLogin, postLogout, getMe, getWards, getWard, getTargets,
   getCampaign, getFloat, getDecisions, getDocuments, getIngestHealth,
   getSentiment, getSearch, getCameras, getTerrain,
-  getControlPanel, putControlPanel, getOverview, authenticate,
+  getControlPanel, putControlPanel, getOverview, getTrending, authenticate,
 };

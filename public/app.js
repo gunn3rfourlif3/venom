@@ -8,7 +8,7 @@ const state = {
   user: null,
   wards: [],
   targets: new Map(),
-  filters: { box: null, cls: null, munic: '' },
+  filters: { box: null, cls: null, munic: '', province: null, region: null },
   openWard: null,
 };
 
@@ -146,9 +146,7 @@ async function loadWards() {
     state.wardsTotal = Number(wards.total ?? wards.data.length);
     state.targets = new Map(targets.data.map((t) => [t.ward_id, t]));
 
-    const municipalities = [...new Set(state.wards.map((w) => w.municipality))].sort();
-    $('filter-munic').innerHTML = '<option value="">All</option>' +
-      municipalities.map((m) => `<option>${esc(m)}</option>`).join('');
+    refreshPlaceFilters();
 
     document.querySelector('.filters')?.classList.remove('is-waiting');
     renderChips();
@@ -213,6 +211,8 @@ function visibleWards() {
     const target = state.targets.get(w.ward_id);
     if (state.filters.box && w.recommended_box !== state.filters.box) return false;
     if (state.filters.cls && target?.target_class !== state.filters.cls) return false;
+    if (state.filters.province && w.province !== state.filters.province) return false;
+    if (state.filters.region && w.region_code !== state.filters.region) return false;
     if (state.filters.munic && w.municipality !== state.filters.munic) return false;
     return true;
   });
@@ -262,6 +262,56 @@ $('filter-class').addEventListener('click', (e) => {
   state.filters.cls = state.filters.cls === v ? null : v;
   renderChips(); renderLedger();
 });
+/* Province narrows region narrows municipality. Rebuilt from the loaded
+   wards rather than a fixed list, so the options are always things that
+   exist in the data — a filter offering a municipality with no wards in it
+   is a filter that returns an empty screen and looks broken. */
+function refreshPlaceFilters() {
+  const { province, region } = state.filters;
+
+  const inProvince = (w) => !province || w.province === province;
+  const inRegion = (w) => !region || w.region_code === region;
+
+  const fill = (id, values, selected) => {
+    const el = $(id);
+    if (!el) return;
+    el.innerHTML = '<option value="">All</option>'
+      + values.map(([v, label]) =>
+          `<option value="${esc(v)}"${v === selected ? ' selected' : ''}>${esc(label)}</option>`).join('');
+  };
+
+  const provinces = [...new Set(state.wards.map((w) => w.province).filter(Boolean))].sort();
+  fill('filter-province', provinces.map((p) => [p, p]), province);
+
+  const regions = [...new Map(state.wards.filter(inProvince)
+    .filter((w) => w.region_code)
+    .map((w) => [w.region_code, w.region_name])).entries()]
+    .sort((a, b) => String(a[1]).localeCompare(String(b[1])));
+  fill('filter-region', regions, region);
+
+  const munics = [...new Set(state.wards.filter(inProvince).filter(inRegion)
+    .map((w) => w.municipality).filter(Boolean))].sort();
+  fill('filter-munic', munics.map((m) => [m, m]), state.filters.munic);
+}
+
+$('filter-province')?.addEventListener('change', (e) => {
+  state.filters.province = e.target.value || null;
+  /* Narrowing the province can orphan the region and municipality below it,
+     so they are cleared rather than left pointing somewhere that is no
+     longer in the list — a stale selection silently filters everything out. */
+  state.filters.region = null;
+  state.filters.munic = '';
+  refreshPlaceFilters();
+  renderLedger();
+});
+
+$('filter-region')?.addEventListener('change', (e) => {
+  state.filters.region = e.target.value || null;
+  state.filters.munic = '';
+  refreshPlaceFilters();
+  renderLedger();
+});
+
 $('filter-munic').addEventListener('change', (e) => {
   state.filters.munic = e.target.value;
   renderLedger();
@@ -786,6 +836,7 @@ function showView(view) {
   // running behind a hidden pane burns a core for nothing.
   if (view !== 'viewshed') window.VenomViewshed?.hide();
 
+  loadTicker();
   if (view === 'logistics') loadLogistics();
   if (view === 'slips') loadSlips();
   if (view === 'overview') loadOverview();
@@ -1272,6 +1323,11 @@ async function start() {
   // behind it so switching to Wards is instant.
   await loadOverview();
   loadWards();
+  /* The ticker is on every view, so it loads at boot rather than only in
+     showView — showView runs on NAVIGATION, and the first screen after
+     sign-in never goes through it. Hooking it there alone meant the strip
+     stayed hidden until you clicked something. */
+  loadTicker();
   connectLive();
 }
 
@@ -2120,4 +2176,65 @@ $('ht-add')?.addEventListener('click', async () => {
   } finally {
     button.disabled = false;
   }
+});
+
+/* ------------------------------------------------------------- ticker
+ *
+ * Trending topics, along the bottom of every view.
+ *
+ * There are no headlines to show: the news and press adapters score text and
+ * keep counts, and every source has stores_text = false. So this reports
+ * movement — which issue, where, is being written about more than it was.
+ * A standing count would say "Johannesburg has a lot of electricity
+ * coverage", which is true every week and therefore not news.
+ *
+ * It stays hidden when there is nothing real. v_trending_topics excludes
+ * synthetic rows, so an empty result means no genuine trend yet — and an
+ * empty ticker is better than a ticker scrolling invented ones.
+ */
+
+const DIRECTION_MARK = { UP: '▲', DOWN: '▼', NEW: '●', STEADY: '–' };
+
+async function loadTicker() {
+  const el = $('ticker');
+  if (!el) return;
+  let data;
+  try { ({ data } = await api('/api/trending')); }
+  catch (err) {
+    /* A bare catch here hid the reason the ticker never appeared. A failure
+       should still hide the strip — a broken ticker is worse than none — but
+       it must not do so silently. */
+    console.warn('ticker:', err.message);
+    el.hidden = true;
+    return;
+  }
+
+  if (!data || data.length === 0) { el.hidden = true; return; }
+
+  const item = (t) => {
+    const dir = String(t.direction || 'STEADY');
+    const mark = DIRECTION_MARK[dir] ?? '–';
+    const pct = t.pct_change === null || t.pct_change === undefined
+      ? '' : ` ${Number(t.pct_change) > 0 ? '+' : ''}${fmt(t.pct_change)}%`;
+    return `<span class="ticker-item">
+      <span class="dir ${esc(dir.toLowerCase())}">${mark}</span>
+      <b>${esc(t.category)}</b>
+      <span>${esc(t.municipality)}</span>
+      <span>${fmt(t.recent)} mentions${esc(pct)}</span>
+    </span>`;
+  };
+  /* Doubled, because the keyframe translates by -50%: the second copy is
+     what occupies the space the first vacates, so the loop has no gap. */
+  const once = data.map(item).join('');
+  $('ticker-track').innerHTML = once + once;
+  el.hidden = false;
+}
+
+$('ticker-pause')?.addEventListener('click', () => {
+  const el = $('ticker');
+  const paused = el.classList.toggle('is-paused');
+  const b = $('ticker-pause');
+  b.setAttribute('aria-pressed', String(paused));
+  b.setAttribute('aria-label', paused ? 'Resume the ticker' : 'Pause the ticker');
+  b.innerHTML = paused ? '&#9654;' : '&#10073;&#10073;';
 });
