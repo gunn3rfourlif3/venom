@@ -272,6 +272,27 @@
 
       <div class="kpi-row" id="sent-kpis"></div>
 
+      <!-- The hashtag watchlist. Instagram allows thirty unique tags per
+           rolling seven days, so this is a budget, not a search box. -->
+      <section class="panel" id="ht-panel" style="margin-top:18px">
+        <div class="panel-head">
+          <h2 class="viz-title" style="margin:0">Hashtag watchlist</h2>
+          <span class="viz-sub" style="margin:0" id="ht-quota">&mdash;</span>
+        </div>
+        <div id="ht-state"></div>
+        <p class="viz-sub">One per line, as <code>tag, municipality, category</code>.
+           A tag with no municipality is kept but never collected &mdash; Instagram
+           hashtag media carries no location, so a tag that does not name a place
+           cannot be attributed to one.</p>
+        <textarea id="ht-paste" spellcheck="false"
+          placeholder="#JoburgWater, City of Johannesburg, Water&#10;#EmfuleniSewage, Emfuleni, Sanitation"></textarea>
+        <div class="row" style="margin-top:10px;gap:8px;align-items:center">
+          <button id="ht-add" class="btn btn-primary">Add to watchlist</button>
+          <span id="ht-note" class="viz-sub" style="margin:0"></span>
+        </div>
+        <div id="ht-list" style="margin-top:12px"></div>
+      </section>
+
       <figure class="viz-figure">
         <figcaption>
           <h3>Where the pressure is</h3>

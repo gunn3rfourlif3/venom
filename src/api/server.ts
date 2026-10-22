@@ -20,6 +20,7 @@ import { logistics } from './logistics.js';
 import { whatsapp } from './whatsapp.js';
 import { slips } from './slips.js';
 import { transcribe } from './transcribe.js';
+import { hashtags } from './hashtags.js';
 import { purgeExpiredSessions } from './auth.js';
 import { LiveHub } from './live.js';
 import { serveStatic } from './static.js';
@@ -95,6 +96,11 @@ const table: Route[] = [
   { method: 'GET',  pattern: /^\/api\/transcribe\/next$/, handler: transcribe.getNext },
   { method: 'POST', pattern: /^\/api\/transcribe$/,        handler: transcribe.postPass },
   { method: 'GET',  pattern: /^\/api\/slips\/overview$/,  handler: transcribe.getOverview },
+
+  { method: 'GET',   pattern: /^\/api\/hashtags$/, handler: hashtags.getHashtags },
+  { method: 'POST',  pattern: /^\/api\/hashtags$/, handler: hashtags.postHashtags },
+  { method: 'PATCH', pattern: /^\/api\/hashtags\/([A-Za-z0-9_]+)$/,
+    handler: async (ctx, tag) => hashtags.patchHashtag(ctx, tag ?? '') },
 
   { method: 'GET',  pattern: /^\/api\/roster$/,            handler: whatsapp.getRoster },
   { method: 'POST', pattern: /^\/api\/roster$/,            handler: whatsapp.postRoster },

@@ -778,7 +778,7 @@ function showView(view) {
   if (view === 'logistics') loadLogistics();
   if (view === 'slips') loadSlips();
   if (view === 'overview') loadOverview();
-  if (view === 'sentiment') loadSentiment();
+  if (view === 'sentiment') { loadSentiment(); loadHashtags(); }
   if (view === 'decisions') loadDecisions();
   if (view === 'float') loadFloat();
   if (view === 'health') loadHealth();
@@ -1992,5 +1992,121 @@ $('sl-form')?.addEventListener('submit', async (ev) => {
     $('sl-note').textContent = err.message;
   } finally {
     $('sl-save').disabled = false;
+  }
+});
+
+/* ------------------------------------------------------------- hashtags
+ *
+ * A budget, not a search box. Instagram allows thirty unique hashtags per
+ * rolling seven days and the clock starts at a tag's first query, so the
+ * screen's job is to show what is left before someone spends it — and to be
+ * honest that nothing is being collected yet, because the token does not
+ * exist. An empty table with no explanation reads as "no activity", which is
+ * a different and wrong thing.
+ */
+
+async function loadHashtags() {
+  const host = $('ht-list');
+  if (!host) return;
+  let data;
+  try { ({ data } = await api('/api/hashtags')); }
+  catch (err) { host.innerHTML = `<p class="viz-sub">${esc(err.message)}</p>`; return; }
+
+  const q = data.quota || {};
+  const used = Number(q.used ?? 0);
+  const cap = Number(q.cap ?? 30);
+  $('ht-quota').textContent = `${fmt(used)} of ${fmt(cap)} weekly slots in use`;
+
+  /* The connection state is said once, at the top, because every number
+     below it depends on it. */
+  const connected = data.tags.some((t) => t.resolved || t.last_queried_at);
+  $('ht-state').innerHTML = connected ? '' : `<div class="banner-inline">
+      <strong>Not collecting yet.</strong> Instagram hashtag search needs a Meta
+      access token and App Review, which this deployment does not have. Tags added
+      here are a watchlist: nothing is queried, and no counts will appear, until a
+      token exists. The same Meta Business process covers WhatsApp ingest.
+    </div>`;
+
+  const over = Number(q.tags_enabled ?? 0) > cap;
+  const noPlace = Number(q.enabled_without_place ?? 0);
+  const warnings = [
+    over ? `${fmt(q.tags_enabled)} tags are enabled against a cap of ${fmt(cap)} — a single run cannot query them all.` : '',
+    noPlace > 0 ? `${fmt(noPlace)} enabled tag${noPlace === 1 ? '' : 's'} have no municipality and will never be collected.` : '',
+  ].filter(Boolean);
+
+  host.innerHTML = `
+    ${warnings.map((w) => `<div class="banner-inline is-warn">${esc(w)}</div>`).join('')}
+    ${data.tags.length === 0 ? '<p class="viz-sub">No hashtags on the watchlist.</p>' : `
+    <table class="logi-table">
+      <thead><tr><th>Tag</th><th>Municipality</th><th>Issue</th><th>Last seen</th><th>State</th></tr></thead>
+      <tbody>
+        ${data.tags.map((t, i) => `<tr>
+          <td data-k="Tag"><span class="id">#${esc(t.tag)}</span></td>
+          <td data-k="Municipality">${t.municipality
+            ? esc(t.municipality)
+            : '<span class="viz-sub">no place — not collected</span>'}</td>
+          <td data-k="Issue">${esc(t.category ?? '—')}</td>
+          <td data-k="Last seen">${t.last_queried_at
+            ? `${esc(since((Date.now() - new Date(t.last_queried_at).getTime()) / 60000))}`
+              + (t.in_window ? ' <span class="viz-sub">(holding a slot)</span>' : '')
+            : '—'}</td>
+          <td data-k="State">
+            <button class="btn ht-toggle" data-tag="${esc(t.tag)}" data-on="${t.enabled}">
+              ${t.enabled ? 'On' : 'Off'}</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`}`;
+
+  host.querySelectorAll('.ht-toggle').forEach((el) => {
+    el.addEventListener('click', async () => {
+      el.disabled = true;
+      try {
+        const { data: r } = await api(`/api/hashtags/${encodeURIComponent(el.dataset.tag)}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ enabled: el.dataset.on !== 'true' }),
+        });
+        if (r.warning) $('ht-note').textContent = r.warning;
+        await loadHashtags();
+      } catch (err) {
+        $('ht-note').textContent = err.message;
+        el.disabled = false;
+      }
+    });
+  });
+}
+
+$('ht-add')?.addEventListener('click', async () => {
+  const text = $('ht-paste')?.value ?? '';
+  if (text.trim() === '') { $('ht-note').textContent = 'Nothing pasted.'; return; }
+  const button = $('ht-add');
+  button.disabled = true;
+  $('ht-note').textContent = 'Adding…';
+  try {
+    const { data } = await api('/api/hashtags', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const refused = data.refused || [];
+    const parts = [`${fmt(data.added)} added`];
+    if (data.updated > 0) parts.push(`${fmt(data.updated)} updated`);
+    if (refused.length) parts.push(`${fmt(refused.length)} refused`);
+    $('ht-note').textContent = parts.join(', ');
+    if (data.added > 0 || data.updated > 0) $('ht-paste').value = '';
+    await loadHashtags();
+    /* After the reload, for the same reason as the roster refusals: the
+       reload replaces this element and would wipe them. */
+    if (refused.length > 0) {
+      $('ht-list').insertAdjacentHTML('afterbegin',
+        `<div class="roster-refused">
+          <strong>${fmt(refused.length)} not added</strong>
+          ${refused.map((r) => `<div><code>${esc(r.line)}</code> — ${esc(r.reason)}</div>`).join('')}
+        </div>`);
+    }
+  } catch (err) {
+    $('ht-note').textContent = err.message;
+  } finally {
+    button.disabled = false;
   }
 });

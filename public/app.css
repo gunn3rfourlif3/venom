@@ -1754,3 +1754,23 @@ button, input, select { font: inherit; color: inherit; }
   color: var(--ink-2);
   letter-spacing: .01em;
 }
+
+/* Said once, at the top, because everything below depends on it. */
+.banner-inline {
+  padding: 11px 13px; margin-bottom: 12px;
+  border: 1px solid var(--rule); border-radius: var(--r-control);
+  background: var(--surface); font-size: var(--step-0); color: var(--ink-2);
+}
+.banner-inline strong { color: var(--ink); }
+.banner-inline.is-warn { border-color: var(--st-warn); color: var(--st-warn); }
+.banner-inline.is-warn strong { color: var(--st-warn); }
+#ht-paste {
+  display: block; box-sizing: border-box; width: 100%; min-height: 96px;
+  resize: vertical; padding: 10px 12px; margin-top: 4px;
+  border: 1px solid var(--rule); border-radius: var(--r-control);
+  background: var(--paper); color: var(--ink);
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  font-size: var(--step-0); line-height: 1.6;
+}
+#ht-paste:focus { outline: none; border-color: var(--ours); }
+.ht-toggle { padding: 3px 12px; font-size: var(--step--1); }
