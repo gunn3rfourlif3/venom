@@ -37,7 +37,7 @@ can reveal a stored password instead.
 | Resources | Hard memory and CPU limits, so a runaway query cannot starve zaaka.io |
 | Network | **Postgres publishes no host port.** Reachable only on the internal Docker network |
 | Ingress | App binds `127.0.0.1` only; the existing web server proxies to it |
-| Filesystem | Everything under `/opt/xnith`, owned by a dedicated non-root user |
+| Filesystem | Everything under `/home/deploy/xnith`, owned by `deploy` (non-root, in `docker` and `sudo`) |
 | Credentials | Own Postgres role and database, own secrets file at `0600` |
 | Failure | Container restart policy is `unless-stopped`; the stack is a systemd unit |
 
@@ -90,12 +90,17 @@ sudo ss -ltnp '( sport = :80 or sport = :443 )'
 curl -fsSL https://get.docker.com | sudo sh
 sudo docker compose version
 
-# a dedicated unprivileged user that can drive Docker
-sudo useradd -r -m -d /opt/xnith -s /usr/sbin/nologin xnith
-sudo usermod -aG docker xnith
-sudo mkdir -p /opt/xnith/{app,backups,secrets}
-sudo chown -R xnith:xnith /opt/xnith
-sudo chmod 700 /opt/xnith/secrets
+# The deployment runs as `deploy`, the login user created when the VPS was
+# set up — already in the docker group. An earlier draft of this runbook
+# created a separate `xnith` service user under /opt; that user was never
+# made, and every command here referred to it. If you are rebuilding from
+# scratch and `deploy` does not exist:
+#
+#   sudo adduser --disabled-password --gecos '' deploy
+#   sudo usermod -aG docker,sudo deploy
+#
+sudo mkdir -p /home/deploy/xnith/backups
+sudo chown -R deploy:deploy /home/deploy/xnith
 ```
 
 ---
@@ -103,42 +108,42 @@ sudo chmod 700 /opt/xnith/secrets
 ## 4. Code and secrets
 
 ```bash
-sudo -u xnith git clone https://github.com/gunn3rfourlif3/venom.git /opt/xnith/app
-cd /opt/xnith/app
+git clone https://github.com/gunn3rfourlif3/venom.git /home/deploy/xnith
+cd /home/deploy/xnith
 ```
 
 Generate the secrets file. **Never commit this; never bake it into the image.**
 
 ```bash
-sudo -u xnith bash -c 'umask 077; cat > /opt/xnith/secrets/xnith.env <<EOF
+bash -c 'umask 077; cat > /home/deploy/xnith/deploy/.env <<EOF
 POSTGRES_PASSWORD=$(openssl rand -base64 36 | tr -d /=+ | cut -c1-40)
 SESSION_SECRET=$(openssl rand -base64 48 | tr -d /=+ | cut -c1-64)
 NODE_ENV=production
 API_PORT=8080
 EOF'
-sudo chmod 600 /opt/xnith/secrets/xnith.env
+sudo chmod 600 /home/deploy/xnith/deploy/.env
 ```
 
 Then append the connection string, reusing the password just generated:
 
 ```bash
-sudo -u xnith bash -c '
-  . /opt/xnith/secrets/xnith.env
+bash -c '
+  . /home/deploy/xnith/deploy/.env
   echo "DATABASE_URL=postgres://xnith:${POSTGRES_PASSWORD}@db:5432/xnith" \
-    >> /opt/xnith/secrets/xnith.env'
+    >> /home/deploy/xnith/deploy/.env'
 ```
 
 Confirm it is not world-readable:
 
 ```bash
-ls -l /opt/xnith/secrets/xnith.env   # expect -rw------- xnith xnith
+ls -l /home/deploy/xnith/deploy/.env   # expect -rw------- deploy deploy
 ```
 
 ---
 
 ## 5. Dockerfile
 
-Create `/opt/xnith/app/Dockerfile`:
+Create `/home/deploy/xnith/Dockerfile`:
 
 ```dockerfile
 # ---- build ----
@@ -171,7 +176,7 @@ CMD ["node", "dist/api/server.js"]
 
 ## 6. Compose stack
 
-Create `/opt/xnith/app/compose.yaml`. The resource limits are the part that
+Create `/home/deploy/xnith/compose.yaml`. The resource limits are the part that
 protects your other sites — do not drop them.
 
 ```yaml
@@ -225,7 +230,7 @@ services:
   app:
     build: .
     restart: unless-stopped
-    env_file: /opt/xnith/secrets/xnith.env
+    env_file: /home/deploy/xnith/deploy/.env
     # bound to loopback only; the host web server proxies to it (Path A)
     ports:
       - "127.0.0.1:8090:8080"
@@ -259,23 +264,23 @@ responsive under load.
 Bring it up:
 
 ```bash
-cd /opt/xnith/app
-sudo -u xnith docker compose --env-file /opt/xnith/secrets/xnith.env up -d --build
-sudo -u xnith docker compose ps
+cd /home/deploy/xnith/deploy   # compose.yaml and .env live here, not at the repo root
+docker compose up -d --build
+docker compose ps
 ```
 
 Migrate and seed:
 
 ```bash
-sudo -u xnith docker compose exec app node dist/cli/migrate.js
+docker compose exec app node dist/cli/migrate.js
 # only on staging — never load test seeds into production
-sudo -u xnith docker compose exec app node dist/cli/seed.js
+docker compose exec app node dist/cli/seed.js
 ```
 
 Create the first admin:
 
 ```bash
-sudo -u xnith docker compose exec app node dist/cli/create-user.js
+docker compose exec app node dist/cli/create-user.js
 ```
 
 Check it answers locally:
@@ -408,7 +413,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 User=xnith
-WorkingDirectory=/opt/xnith/app
+WorkingDirectory=/home/deploy/xnith
 ExecStart=/usr/bin/docker compose exec -T app node dist/cli/daily.js
 ```
 
@@ -466,31 +471,16 @@ The database is the only part that cannot be rebuilt from git. **An untested
 backup is not a backup** — the restore rehearsal below is the highest-value
 fifteen minutes in this document.
 
-`/opt/xnith/backup.sh`:
+The script lives in the repo at `deploy/backup.sh` and is deployed with
+the rest of the tree — it is **not** reproduced here. An earlier version of
+this runbook carried an inline copy, which drifted from the real one: the
+repo's version refuses a zero-length dump and warns under 100KB, and the
+copy here did neither. Read the file, do not trust a transcription of it.
+
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-cd /opt/xnith/app
-STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-OUT=/opt/xnith/backups/xnith-${STAMP}.dump
-
-docker compose exec -T db pg_dump -U xnith -d xnith -Fc > "$OUT"
-# fail loudly on a zero-length dump rather than keeping it
-[ -s "$OUT" ] || { echo "FATAL: empty dump" >&2; rm -f "$OUT"; exit 1; }
-gzip -f "$OUT"
-
-# keep 14 days locally
-find /opt/xnith/backups -name 'xnith-*.dump.gz' -mtime +14 -delete
-
-# OFF-BOX COPY. A backup on the same disk as the database is not a backup.
-# rclone copy "${OUT}.gz" remote:xnith-backups/
-echo "ok ${OUT}.gz"
-```
-
-```bash
-sudo chmod +x /opt/xnith/backup.sh
-sudo chown xnith:xnith /opt/xnith/backup.sh
+sudo chmod +x /home/deploy/xnith/deploy/backup.sh
+sudo chown deploy:deploy /home/deploy/xnith/deploy/backup.sh
 ```
 
 A timer at 02:30, same pattern as §8.
@@ -576,10 +566,10 @@ curl -sS https://xnith.zaaka.io/api/health
 curl -sS -o /dev/null -w '%{http_code}\n' https://xnith.zaaka.io/api/wards   # expect 401
 
 # 4 — schema complete (the migrator verifies and names anything missing)
-sudo -u xnith docker compose exec app node dist/cli/migrate.js
+docker compose exec app node dist/cli/migrate.js
 
 # 5 — logistics views answer
-sudo -u xnith docker compose exec -T db psql -U xnith -d xnith -c \
+docker compose exec -T db psql -U xnith -d xnith -c \
   'SELECT * FROM v_logistics_rollup;'
 
 # 6 — Postgres not exposed
@@ -604,24 +594,26 @@ blast radius, and checking them is how you find out you were wrong about that.
 
 ## 12. Deploying a change
 
-Every `docker compose` call here needs `--env-file`, because the secrets live
-outside the repo and compose will otherwise start the app with an empty
-password and fail in a way that looks like a database fault (G38).
+`compose.yaml` lives in `deploy/`, not at the repo root, and `.env` sits beside
+it — Compose loads that automatically, so no `--env-file` flag is needed. Run
+every compose command from `~/xnith/deploy` or it will not find the project.
 
 ```bash
-cd /opt/xnith/app
-sudo -u xnith git pull
+cd ~/xnith && git pull
+cd ~/xnith/deploy
 
 # see what the migration would do before it does it
-sudo -u xnith docker compose --env-file /opt/xnith/secrets/xnith.env \
-  exec app node dist/cli/migrate.js --dry-run
+docker compose exec app node dist/cli/migrate.js --dry-run
 
-sudo -u xnith docker compose --env-file /opt/xnith/secrets/xnith.env \
-  up -d --build app
-sudo -u xnith docker compose --env-file /opt/xnith/secrets/xnith.env \
-  exec app node dist/cli/migrate.js
+docker compose up -d --build app
+docker compose exec app node dist/cli/migrate.js   # skip if no new migration
 curl -fsS https://xnith.zaaka.io/api/health
 ```
+
+A passing health check here proves only that *a* container is serving. If the
+`git pull` or the build failed, the old one is still up and will answer
+`{"ok":true}` exactly as before (G33). Check that the build actually ran before
+you believe the change is live.
 
 Static files under `public/` are served from the image, so a change to
 `app.js`, `app.css` or `index.html` still needs the `--build`. Hard-reload the
@@ -631,10 +623,9 @@ concluding the deploy failed.
 **Rollback:**
 
 ```bash
-sudo -u xnith git log --oneline -5
-sudo -u xnith git checkout <previous-sha>
-sudo -u xnith docker compose --env-file /opt/xnith/secrets/xnith.env \
-  up -d --build app
+cd ~/xnith && git log --oneline -5
+git checkout <previous-sha>
+cd ~/xnith/deploy && docker compose up -d --build app
 ```
 
 Note that code rolls back and **schema does not** — the migrator never

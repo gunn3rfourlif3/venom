@@ -504,3 +504,29 @@ the same call arrived intact; only the one the pipeline recognised as an
 image was altered. **Checksum both sides of every transfer** — and note that
 "it renders" is not verification, because a rewritten file usually still
 works. Prefer the device shell for binary or image-adjacent assets.
+
+### G40 · A runbook describing a machine that was never built
+`DEPLOY-VPS.md` was written from the deployment *plan*: a dedicated `xnith`
+service user with the app under `/opt/xnith`. The deployment that actually
+happened ran as `deploy` out of `~/xnith`, with `compose.yaml` and `.env` in
+`deploy/`. Nobody noticed, because the deploy was done by following along
+interactively rather than by reading the document.
+
+29 references to `/opt/xnith` and 17 to `sudo -u xnith`. **Every command in
+the runbook failed** — `cd: no such file or directory`, `sudo: unknown user
+xnith` — and the `curl` at the end still returned `{"ok":true}` from the
+container that was already running, so the deploy looked like it had worked.
+
+Worse: the day before, I had "fixed" section 12 by adding an `--env-file`
+flag to those commands. I corrected a detail in a procedure whose every line
+was wrong, without running it — the same mistake as G36, where the restore
+procedure could never have worked and only a rehearsal found it.
+
+**Fixed:** reconciled the document to the real layout; dropped an inline copy
+of `backup.sh` that had drifted from the repo's version; noted that compose
+must run from `~/xnith/deploy` and auto-loads `.env` there.
+**Lesson:** a runbook is only as good as its last rehearsal. `systemd/` and
+`backup.sh` were right all along because they are *executed*; the prose was
+wrong because it is only *read*. Anything describing a command should be run
+from the document, start to finish, on the real box — and a health check
+that passes after a failed deploy proves nothing.
