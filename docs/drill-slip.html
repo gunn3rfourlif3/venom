@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DRILL mock result slips — not an official document</title>
+<!--
+  Printable mock result slips for the 31 October drill.
+
+  These exist because real result slips do not exist until the 4th, and a
+  capture drill with nothing to photograph tests nothing.
+
+  Deliberately NOT in public/. A page shaped like an election result slip,
+  served from the party's live domain, is a bad idea however it is labelled.
+  Open this file locally and print it.
+
+  Every sheet carries a DRILL watermark, a fictional station, and a date
+  before the election. Keep it that way. Nothing here should be capable of
+  being mistaken for a real declaration — destroy the copies afterwards.
+
+  Sheet 3 does not balance, on purpose: 268 + 9 spoilt = 277, against a
+  stated total of 290. That is seeded fault 3. An operator who "corrects" it
+  so the arithmetic works is the thing the drill is looking for.
+-->
+<style>
+  @page { size: A4; margin: 14mm; }
+  body { font: 13px/1.45 Georgia, 'Times New Roman', serif; color: #111; margin: 0; }
+  .sheet {
+    position: relative; page-break-after: always; overflow: hidden;
+    border: 2px solid #111; padding: 18mm 14mm; min-height: 232mm;
+  }
+  .sheet:last-child { page-break-after: auto; }
+  .mark {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; pointer-events: none;
+  }
+  .mark span {
+    font: 700 64px/1 Arial, sans-serif; color: rgba(200,0,0,.17);
+    transform: rotate(-32deg); letter-spacing: .12em; white-space: nowrap;
+  }
+  .top { text-align: center; border-bottom: 2px solid #111; padding-bottom: 9px; }
+  .top .warn {
+    font: 700 12px/1.3 Arial, sans-serif; color: #c00; letter-spacing: .09em;
+    text-transform: uppercase;
+  }
+  .top h1 { font-size: 17px; margin: 7px 0 3px; letter-spacing: .02em; }
+  .top p { margin: 0; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { border: 1px solid #111; padding: 7px 9px; }
+  th { background: #eee; text-align: left; font: 700 12px Arial, sans-serif; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; width: 24%; }
+  tfoot td { font-weight: 700; background: #f4f4f4; }
+  .sign { margin-top: 20px; display: flex; gap: 28px; }
+  .sign div { flex: 1; border-top: 1px solid #111; padding-top: 5px; font-size: 11px; }
+  .foot {
+    margin-top: 16px; text-align: center; font: 700 11px Arial, sans-serif;
+    color: #c00; letter-spacing: .06em;
+  }
+  @media screen {
+    body { background: #777; padding: 18px; }
+    .sheet { background: #fff; max-width: 190mm; margin: 0 auto 18px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Three sheets = one category B station: the three-ballot trap in paper form. -->
+
+<section class="sheet">
+  <div class="mark"><span>DRILL — NOT A RESULT</span></div>
+  <div class="top">
+    <p class="warn">Drill material · not an official document · no votes were cast</p>
+    <h1>Mock Result Slip — WARD BALLOT</h1>
+    <p>DRILL STATION A · Ward 00000001 · 31 October 2026</p>
+  </div>
+  <table>
+    <thead><tr><th>Candidate / Party</th><th class="n">Votes</th></tr></thead>
+    <tbody>
+      <tr><td>MK PARTY</td><td class="n">214</td></tr>
+      <tr><td>ANC</td><td class="n">186</td></tr>
+      <tr><td>DA</td><td class="n">97</td></tr>
+      <tr><td>EFF</td><td class="n">63</td></tr>
+      <tr><td>INDEPENDENT — T. MOKOENA</td><td class="n">22</td></tr>
+    </tbody>
+    <tfoot>
+      <tr><td>Spoilt ballots</td><td class="n">11</td></tr>
+      <tr><td>Total votes cast</td><td class="n">593</td></tr>
+    </tfoot>
+  </table>
+  <div class="sign"><div>Presiding officer (drill)</div><div>Party agent (drill)</div></div>
+  <p class="foot">DRILL MATERIAL — DESTROY AFTER 31 OCTOBER 2026</p>
+</section>
+
+<section class="sheet">
+  <div class="mark"><span>DRILL — NOT A RESULT</span></div>
+  <div class="top">
+    <p class="warn">Drill material · not an official document · no votes were cast</p>
+    <h1>Mock Result Slip — MUNICIPAL PR BALLOT</h1>
+    <p>DRILL STATION A · Ward 00000001 · 31 October 2026</p>
+  </div>
+  <table>
+    <thead><tr><th>Party</th><th class="n">Votes</th></tr></thead>
+    <tbody>
+      <tr><td>MK PARTY</td><td class="n">201</td></tr>
+      <tr><td>ANC</td><td class="n">190</td></tr>
+      <tr><td>DA</td><td class="n">104</td></tr>
+      <tr><td>EFF</td><td class="n">58</td></tr>
+      <tr><td>ACTIONSA</td><td class="n">19</td></tr>
+    </tbody>
+    <tfoot>
+      <tr><td>Spoilt ballots</td><td class="n">14</td></tr>
+      <tr><td>Total votes cast</td><td class="n">586</td></tr>
+    </tfoot>
+  </table>
+  <div class="sign"><div>Presiding officer (drill)</div><div>Party agent (drill)</div></div>
+  <p class="foot">DRILL MATERIAL — DESTROY AFTER 31 OCTOBER 2026</p>
+</section>
+
+<section class="sheet">
+  <div class="mark"><span>DRILL — NOT A RESULT</span></div>
+  <div class="top">
+    <p class="warn">Drill material · not an official document · no votes were cast</p>
+    <h1>Mock Result Slip — DISTRICT PR BALLOT</h1>
+    <p>DRILL STATION A · Ward 00000001 · 31 October 2026</p>
+  </div>
+  <!-- SEEDED FAULT 3: 128+84+41+15 = 268, +9 spoilt = 277, stated total 290.
+       Out by 13. File it as printed. -->
+  <table>
+    <thead><tr><th>Party</th><th class="n">Votes</th></tr></thead>
+    <tbody>
+      <tr><td>MK PARTY</td><td class="n">128</td></tr>
+      <tr><td>ANC</td><td class="n">84</td></tr>
+      <tr><td>DA</td><td class="n">41</td></tr>
+      <tr><td>EFF</td><td class="n">15</td></tr>
+    </tbody>
+    <tfoot>
+      <tr><td>Spoilt ballots</td><td class="n">9</td></tr>
+      <tr><td>Total votes cast</td><td class="n">290</td></tr>
+    </tfoot>
+  </table>
+  <div class="sign"><div>Presiding officer (drill)</div><div>Party agent (drill)</div></div>
+  <p class="foot">DRILL MATERIAL — DESTROY AFTER 31 OCTOBER 2026</p>
+</section>
+
+</body>
+</html>
