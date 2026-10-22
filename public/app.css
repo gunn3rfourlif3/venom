@@ -1427,7 +1427,20 @@ button, input, select { font: inherit; color: inherit; }
     padding: 7px 11px; border-radius: var(--r-control);
     border: 1px solid var(--rule); background: var(--surface); color: var(--ink);
   }
-  .topbar { padding-left: 76px; }
+  /* The toggle is position:fixed, so it holds the top-left of the VIEWPORT
+     while the page scrolls underneath it. The topbar was static, so it
+     scrolled away and left the button floating over whatever content came
+     next — the first heading of every view ended up struck through by it.
+
+     Making the bar sticky and opaque gives the button something to sit on.
+     Content now scrolls under a bar instead of under a loose button, and
+     the heading clears it. */
+  .topbar {
+    position: sticky; top: 0; z-index: 59;
+    background: var(--surface);
+    padding-left: 76px;
+    min-height: 46px;
+  }
   .sysblock { display: none; }
   .panel-head { align-items: flex-start; }
 }
@@ -1532,7 +1545,15 @@ button, input, select { font: inherit; color: inherit; }
      about 180px of the first screen and answer nothing urgent. */
   .topbar .search,
   .topbar .who { display: none; }
-  .topbar { gap: 8px; padding: 6px 12px; min-height: 0; }
+  /* The 760px block sets padding-left and min-height so the fixed Menu
+     button has a bar to sit on. This block is LATER, so its shorthand
+     `padding` and `min-height: 0` silently cancelled both and the button
+     floated over the content instead — two mobile blocks disagreeing, with
+     the second one winning. The clearance is restated here rather than
+     added as a third competing rule.
+     76px left = 8px offset + the button + breathing room.
+     46px tall = enough for the button (y 8–41) to sit inside the bar. */
+  .topbar { gap: 8px; padding: 6px 12px 6px 76px; min-height: 46px; }
   .topbar .sysblock { padding: 4px 10px; }
   .topbar .signout { margin-left: auto; font-size: var(--step--1); padding: 5px 9px; }
 
