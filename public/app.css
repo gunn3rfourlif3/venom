@@ -1418,8 +1418,22 @@ button, input, select { font: inherit; color: inherit; }
     position: fixed; inset: 0 auto 0 0; width: 76vw; max-width: 280px;
     z-index: 60; transform: translateX(-100%); transition: transform .18s ease;
     background: var(--surface); border-right: 1px solid var(--rule);
+    /* The toggle is fixed above the drawer (z-index 61), so an open drawer
+       starting at y=0 puts the wordmark underneath the word "Menu". Clear
+       the band the button occupies. */
+    padding-top: 52px;
+    overflow-y: auto;
   }
   .rail.is-open { transform: none; }
+
+  /* The 1080px block collapses the rail to a 64px icon strip, which is right
+     for a tablet. A phone is also under 1080px, so the drawer inherited it:
+     280px of open drawer showing nine unlabelled glyphs and no section
+     headings. An icon strip is legible because it is narrow and the icons
+     sit in a known column; the same icons loose in a wide drawer name
+     nothing. Labels come back here, with the headings that group them. */
+  .rail .wordmark, .rail .scope, .rail-group { display: block; }
+  .rail button span { display: block; }
   @media (prefers-reduced-motion: reduce) { .rail { transition: none } }
   .railtoggle {
     position: fixed; top: 8px; left: 8px; z-index: 61;
