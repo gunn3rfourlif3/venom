@@ -204,11 +204,12 @@ front-page story, in a way that a party simply not having that data is not.
 **What to do instead**, for the question the scraper was meant to answer
 (*what are people locally angry about?*):
 
-- **Local press is the better instrument anyway.** The 22 connected Gauteng
-  titles cover single suburbs — Pimville, Katlehong, Meyerton, Ga-Rankuwa — at
-  a finer geography than any hashtag gives. A hashtag is province-wide at best
-  and carries no reliable location. Expanding to ~100+ titles nationally uses
-  the adapter that already works
+- ~~**Local press is the better instrument anyway.**~~ **Closed 22 October —
+  see §6b.** This was the strongest answer here and it is gone. The reasoning
+  still stands: single-suburb titles reach a geography no hashtag does. There
+  is simply no longer a way to read them without circumventing bot
+  protection, so the recommendation to expand to ~100+ titles is void until
+  someone asks the publisher
 - **Aggregate-only social**, as the Instagram adapter already does: counts per
   hashtag per area, no account-level data, no comment text
 - **Ward-level grievance intake from our own people** — the marshals and
@@ -216,6 +217,52 @@ front-page story, in a way that a party simply not having that data is not.
   our own wards than any platform
 - **Service-delivery facts** from municipalmoney.gov.za and Stats SA: slower
   than sentiment, and causal rather than correlated
+
+---
+
+## 6b. Local press — closed 22 October
+
+The 22 Gauteng community titles were the finest-grained source in the
+project. All 22 now return HTTP 403. Traced:
+
+```
+albertonrecord.co.za/feed/                      301
+  -> www.citizen.co.za/alberton-record/feed/    403
+```
+
+The Caxton titles have been consolidated onto `citizen.co.za`, which is
+behind Cloudflare bot management. The project's own user-agent, a plain
+identifying one, and no user-agent at all all return 403. **`robots.txt`
+itself cannot be read** — it returns a managed challenge demanding
+JavaScript and cookies.
+
+So the publisher's machine-readable policy is unreadable by machines, and
+the only route to the feeds is to solve a bot challenge.
+
+**That is circumvention, and it is declined for the same reason as §6.**
+A headless browser would pass the challenge. So would a residential proxy.
+Both are going around an access-control decision rather than through it, and
+the decision does not bend because this source is more useful to us than
+Facebook was. Consistency is the whole point: a rule that holds only for
+sources we do not want is not a rule.
+
+**The open route is a conversation.** Caxton / The Citizen can grant feed or
+syndication access, and a political party asking a publisher for its RSS is
+an ordinary request that can be made in the open and on the record. Nobody
+has asked. That is the next step, not a client-side workaround.
+
+**One trap worth noting.** The old domains still serve a `robots.txt` saying
+`Allow: /`. Those hosts now only issue redirects — a robots.txt on a domain
+that no longer serves content describes nothing, and reading it as
+permission for the host it redirects to would be self-serving. The policy
+that governs is the destination's, and the destination will not show it to
+us.
+
+**What this costs.** Google News still covers municipalities, but at
+municipality granularity — a city, not a suburb. The ward-level grievance
+picture now rests on first-party intake from marshals and canvassers, which
+is consented and more accurate about our own wards, and on service-delivery
+facts from Municipal Money and Stats SA. Those are the remaining instruments.
 
 ---
 
