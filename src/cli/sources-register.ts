@@ -277,12 +277,27 @@ try {
 
   // A run with failures is still a run that moved the register forward, so it
   // is recorded as ok and the failures are counted. A run that threw is not.
+  /* items_seen and items_kept are a SUBSET pair: how many records were
+     attempted, and how many survived. Wards and stations are not that - they
+     are two different things counted separately - so passing (wards,
+     stations) meant kept 23,696 against seen 4,485, which violates
+     kept_within_seen.
+
+     The UPDATE threw, control fell into the catch below, and the run was
+     recorded as FAILED. Every register load has reported failure while
+     succeeding: the dashboard showed IEC GIS as "Failing" with the full
+     national register sitting in the table, and the cause was read for weeks
+     as a credentials or connectivity problem.
+
+     The constraint was right. The call was wrong. Attempted is everything
+     written plus everything that failed; kept is what was written. */
+  const written = wards + stations;
   await client.query(
     `UPDATE source_run
         SET finished_at = now(), ok = true, items_seen = $2, items_kept = $3,
             error = $4
       WHERE source_run_id = $1`,
-    [runId, wards, stations,
+    [runId, written + failures.length, written,
       failures.length > 0 ? `${failures.length} partial failures` : null]);
   await client.query(
     `UPDATE source SET last_ok_at = now(), last_error = $1 WHERE source_id = 'iec_gis'`,
