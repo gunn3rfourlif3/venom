@@ -711,6 +711,58 @@ blast radius, and checking them is how you find out you were wrong about that.
 
 ---
 
+## 11b. Verifying what is actually running
+
+Three times in one day the repo held the fix and the running system did not,
+and every status check in between reported health. **A deployment is not
+verified by checking the thing you edited.** Run this after any deploy:
+
+```bash
+echo "=== commit the server is on ==="
+git -C ~/xnith log --oneline -1
+
+echo "=== the unit systemd is running (not the one in the repo) ==="
+grep -c EnvironmentFile /etc/systemd/system/xnith-backup.service \
+  || echo "MISSING - re-copy from deploy/systemd and daemon-reload"
+
+echo "=== when the running container was built ==="
+docker inspect --format '{{.Created}}' xnith-app:local
+
+echo "=== the live site, from outside ==="
+curl -s -o /dev/null -w "slip.html %{http_code}\n"      https://xnith.zaaka.io/slip.html
+curl -s -o /dev/null -w "stations  %{http_code} (want 401)\n" https://xnith.zaaka.io/api/slip/stations
+
+echo "=== the newest encrypted backup ==="
+ls -t ~/xnith/backups/*.age 2>/dev/null | head -1 || echo "NONE - off-box copy is not running"
+```
+
+Each line answers a question the obvious check does not:
+
+| This looks fine | While this is wrong |
+|---|---|
+| The site serves and `/api/health` says `ok` | The container is running code from a week ago |
+| `git pull` was run | It failed on a local modification and the shell moved on |
+| The unit file in the repo is correct | systemd is running the copy installed before the pull |
+| `backup.sh` succeeds nightly | It is writing unencrypted dumps because `AGE_RECIPIENT` never reached it |
+
+**Things that do not restart or reload anything, however they sound:**
+`git pull`, `cp`, editing a file in the repo. And `systemctl daemon-reload`
+re-reads unit files but does **not** re-run the job, so a fixed unit proves
+nothing until the service is started again.
+
+### The specific traps hit so far
+
+- **A file mode blocked seven commits.** `backup.sh` was committed `100644`
+  and made executable by hand, leaving a permanent local modification that
+  `git pull` refused to overwrite. Fixed by recording the bit in the repo.
+- **The unit file was installed before the pull.** `EnvironmentFile=` was
+  added to the repo copy; `/etc/systemd/system/` kept the old one, so
+  `AGE_RECIPIENT` was never read and the backup silently stayed unencrypted.
+- **Caddy held a stale inode** while `validate` and `reload` both reported
+  success (G37).
+
+---
+
 ## 12. Deploying a change
 
 `compose.yaml` lives in `deploy/`, not at the repo root, and `.env` sits beside

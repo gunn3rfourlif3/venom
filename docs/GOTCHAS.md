@@ -601,3 +601,40 @@ from "what is in the database", because a backup is read somewhere else, by
 someone else, later. Credentials that are harmless in a running system
 because they are behind an application become the whole attack surface once
 they are a file on a disk.
+
+### G44 · A file mode blocked seven commits from reaching production
+`deploy/backup.sh` was committed `100644` and made executable by hand on the
+server during setup, as the runbook said to. That left a permanent
+uncommitted modification, and `git pull` refuses to overwrite one — so every
+pull after it failed, and the VPS sat on week-old code.
+
+**Nothing visible said so.** The site served, `/api/health` returned
+`{"ok":true}`, and the nightly dumps ran. The migrations, the capture page
+and the transcription screen were all in GitHub and none of them were on the
+server. It was only found by asking the server which commit it was on.
+
+Discarding the local change would have fixed the pull and broken the backup,
+because systemd execs that file directly.
+**Fixed:** `git update-index --chmod=+x deploy/backup.sh`. The bit belongs in
+version control, not in a setup instruction.
+
+### G45 · systemd kept the unit file from before the pull
+`EnvironmentFile=` was added to `xnith-backup.service` so the backup could
+read `AGE_RECIPIENT`. The units had been copied to `/etc/systemd/system/`
+earlier — while the server was still on the old commit — and nobody re-copied
+them after the pull. systemd went on running the old unit, the environment
+file was never read, and the job wrote unencrypted dumps while reporting
+success.
+
+The warning it printed was accurate and misleading at once: "AGE_RECIPIENT is
+not set" was true of the process, and the operator had just set it in a file
+that process could not see.
+**Fixed:** re-copy the unit, `daemon-reload`, start. The `.age` file appeared
+immediately.
+**Lesson:** G44, G45 and G37 are one failure wearing three coats — **the repo
+held the fix and the running system did not.** `git pull` restarts nothing,
+`cp` reloads nothing, `daemon-reload` re-runs nothing, and every health check
+in between answers about the old thing while sounding like it answers about
+the new one. Section 11b of DEPLOY-VPS.md now checks the deployed artifacts:
+the running commit, the installed unit, the container's build time, the live
+URL from outside.
