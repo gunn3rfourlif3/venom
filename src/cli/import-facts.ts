@@ -1,10 +1,24 @@
 /**
  * Import municipality-level facts from a CSV you downloaded.
  *
+ * Locally:
  *   npm run import:facts -- --file ghs2024.csv --source datafirst \
  *     --publisher "DataFirst (UCT), General Household Survey 2024" \
  *     --url https://www.datafirst.uct.ac.za/dataportal/... --year 2024
  *   npm run import:facts -- ... --commit
+ *
+ * On the server the app runs in a container, so npm is not the entry point
+ * and the file has to get inside first. Copy it in, then exec:
+ *
+ *   cd ~/xnith/deploy
+ *   docker compose cp ghs2024.csv app:/tmp/ghs2024.csv
+ *   docker compose exec app node dist/cli/import-facts.js \
+ *     --file /tmp/ghs2024.csv --source datafirst \
+ *     --publisher "DataFirst (UCT), General Household Survey 2024" --year 2024
+ *
+ * /tmp inside the container is deliberate: the file is evidence of a licence
+ * a person accepted, not something to leave lying in a mounted volume where
+ * a later rebuild would carry it along without anyone deciding to.
  *
  * WHY A FILE AND NOT A FETCHER.
  *
