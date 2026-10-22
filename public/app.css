@@ -1809,3 +1809,125 @@ button, input, select { font: inherit; color: inherit; }
 }
 #ht-paste:focus { outline: none; border-color: var(--ours); }
 .ht-toggle { padding: 3px 12px; font-size: var(--step--1); }
+
+/* ------------------------------------------------------------- ticker
+   Trending topics along the bottom.
+
+   Moving content that starts on its own and runs longer than five seconds
+   needs a way to stop it (WCAG 2.2.2), so there is a pause button and the
+   animation does not run at all under prefers-reduced-motion. The strip is
+   also hand-scrollable, because a marquee you cannot control is a marquee
+   you read by waiting. */
+.ticker {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 58;
+  display: flex; align-items: center; gap: 10px;
+  height: var(--ticker-h);
+  padding: 0 10px 0 0;
+  background: var(--surface); border-top: 1px solid var(--rule);
+  font-size: var(--step--1);
+}
+:root { --ticker-h: 34px; }
+.ticker-label {
+  flex: none; align-self: stretch; display: flex; align-items: center;
+  padding: 0 12px; background: var(--ours); color: #1a1500;
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  font-weight: 600; letter-spacing: .1em; font-size: 10px;
+}
+.ticker-window { flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.ticker-window::-webkit-scrollbar { display: none; }
+.ticker-track {
+  display: inline-flex; gap: 26px; white-space: nowrap; padding-right: 26px;
+  animation: ticker-roll 60s linear infinite;
+}
+.ticker.is-paused .ticker-track { animation-play-state: paused; }
+@keyframes ticker-roll { from { transform: translateX(0) } to { transform: translateX(-50%) } }
+@media (prefers-reduced-motion: reduce) { .ticker-track { animation: none } }
+
+.ticker-item { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-2); }
+.ticker-item b { color: var(--ink); font-weight: 600; }
+.ticker-item .dir { font-family: 'Spline Sans Mono', ui-monospace, monospace; font-size: 11px; }
+.ticker-item .dir.up   { color: var(--st-warn); }
+.ticker-item .dir.new  { color: var(--ours); }
+.ticker-item .dir.down { color: var(--st-good); }
+.ticker-pause {
+  flex: none; min-width: 30px; height: 22px; cursor: pointer;
+  background: transparent; color: var(--ink-3);
+  border: 1px solid var(--rule); border-radius: var(--r-control);
+  font-size: 9px; line-height: 1;
+}
+.ticker-pause:hover { color: var(--ink); }
+
+/* The stage scrolls internally, so a fixed strip would sit over its last
+   rows rather than below them. Give the scroll area the height back. */
+body:has(.ticker:not([hidden])) .stage { padding-bottom: var(--ticker-h); }
+
+@media (max-width: 680px) {
+  :root { --ticker-h: 30px; }
+  .ticker-label { padding: 0 8px; font-size: 9px; }
+}
+
+/* ---- Station readiness / gap maps ------------------------------- */
+.rd-controls {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 10px 14px; margin: 14px 0 10px;
+}
+.rd-controls label { font-size: 12px; color: var(--ink-muted, #9aa0a6); }
+.rd-controls select { min-width: 160px; }
+.rd-modes { display: flex; gap: 0; }
+.rd-mode {
+  background: transparent; color: var(--ink-muted, #9aa0a6);
+  border: 1px solid var(--line, #2a2a2a); padding: 6px 14px;
+  font: inherit; font-size: 13px; cursor: pointer;
+}
+.rd-mode:first-child { border-radius: 4px 0 0 4px; }
+.rd-mode:last-child { border-radius: 0 4px 4px 0; border-left: 0; }
+.rd-mode.is-on {
+  background: var(--accent, #f0b429); color: #16161a; border-color: var(--accent, #f0b429);
+}
+.rd-stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 14px; }
+.rd-stat {
+  border: 1px solid var(--line, #2a2a2a); border-radius: 6px;
+  padding: 10px 14px; min-width: 110px;
+}
+.rd-stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.rd-stat span { font-size: 11px; color: var(--ink-muted, #9aa0a6); text-transform: uppercase; letter-spacing: .04em; }
+.rd-stat-warn b { color: var(--accent, #f0b429); }
+.rd-canvas-wrap {
+  border: 1px solid var(--line, #2a2a2a); border-radius: 8px;
+  background: rgba(255,255,255,.015); padding: 4px; overflow: hidden;
+}
+#rd-canvas { display: block; width: 100%; }
+.rd-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 12px 0 6px; }
+.rd-key { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink-muted, #9aa0a6); }
+.rd-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.rd-dot-hollow { border: 1px solid #5a5a5a; background: transparent; }
+
+@media (max-width: 680px) {
+  .rd-controls select { min-width: 0; flex: 1 1 130px; }
+  .rd-stat { flex: 1 1 calc(50% - 10px); min-width: 0; padding: 8px 10px; }
+  .rd-stat b { font-size: 18px; }
+}
+
+/* ---- Register completeness panel -------------------------------- */
+.rc-panel { margin: 22px 0 6px; border-top: 1px solid var(--line, #2a2a2a); padding-top: 18px; }
+.rc-title { font-size: 14px; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 4px; }
+.rc-sub { font-size: 12px; color: var(--ink-muted, #9aa0a6); margin: 0 0 14px; max-width: 70ch; }
+.rc-rows { display: flex; flex-direction: column; gap: 6px; }
+.rc-row {
+  display: grid; grid-template-columns: 130px 1fr 64px 76px auto;
+  align-items: center; gap: 12px; font-size: 12px;
+}
+.rc-prov { color: var(--ink, #e8e8e8); }
+.rc-bar { height: 7px; border-radius: 4px; background: rgba(255,255,255,.07); overflow: hidden; }
+.rc-bar i { display: block; height: 100%; background: #22c55e; border-radius: 4px; }
+.rc-incomplete .rc-bar i { background: var(--accent, #f0b429); }
+.rc-unverified .rc-bar i { background: #3b82f6; }
+.rc-num, .rc-rate { font-variant-numeric: tabular-nums; color: var(--ink-muted, #9aa0a6); text-align: right; }
+.rc-state { color: var(--ink-muted, #9aa0a6); text-transform: uppercase; letter-spacing: .04em; font-size: 11px; }
+.rc-incomplete .rc-state { color: var(--accent, #f0b429); }
+
+@media (max-width: 680px) {
+  .rc-row { grid-template-columns: 96px 1fr 54px; row-gap: 2px; }
+  .rc-rate { display: none; }
+  .rc-state { grid-column: 1 / -1; }
+}

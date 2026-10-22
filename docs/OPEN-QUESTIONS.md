@@ -283,3 +283,81 @@ the same inputs on 5 November as it does on 3 November. This one does not.
 and transcribe slips on the night, because the feature is worthless without
 that behaviour.
 </details>
+
+### Q16 · How does a marshal get attached to a station? — `OPEN`
+Surfaced by the readiness map (`036_station_readiness.sql`), which reports
+**0 of 21,385 real stations staffed** — not because the roster is empty, but
+because nothing writes `station.marshal_name`.
+
+**Corrected 22 Oct:** the mechanism exists and the map was reading the wrong
+column. `reporter_roster` is the marshal record — phone, display name,
+`station_id`, `capture_token` — and it is what the roster screen and the
+capture tokens already write. `station.marshal_name` is written by nothing.
+Migration 037 repoints the view.
+
+What is actually missing is one field: **`reporter_roster.station_id` is null
+on every row.** The seven people on the roster are not attached to a station.
+
+`deployment` (67 rows) is keyed on `ward_id`, and a ward holds several
+stations, so it cannot stand in for this.
+
+**Why it blocks the drill.** On 29 October a volunteer photographs a slip and
+the system has to record who captured it, at which station. `capture_token`
+(migration 030) authenticates the marshal but the link from that marshal to a
+station has to exist first. Without it the drill produces slips that cannot be
+attributed, and the readiness map keeps reading 0% while people are standing
+in polling stations.
+
+**Needs deciding:** whether assignment is ward-level with station chosen at
+capture time, or station-level and assigned in advance. Ward-level is less
+work and matches `deployment` as built; station-level is what the coverage
+figure actually means. Until this is answered the map is honest but the
+number is unreachable.
+
+### Q17 · Registered voters per voting station — `OPEN`
+The readiness map cannot say how many voters sit behind an uncovered station,
+because `registered_voters` is null on all 21,385 IEC GIS stations. The 2,366
+that do carry a figure are synthetic. The same gap holes any turnout-weighted
+prioritisation — a station with 4,000 registered voters and one with 300 are
+currently ranked identically.
+
+**Candidate sources, cheapest first:**
+
+1. **The certified voters' roll already in hand.** Its cover pages carry the
+   VD-level summary — voting district, ward, station, and the registered
+   count. That is exactly this field and it is already lawfully held. Only the
+   summary is usable; the per-voter pages stay out of the system entirely.
+2. **IEC registration statistics.** The IEC publishes registration totals by
+   voting district around registration weekends and before an election. Needs
+   checking whether the 2026 set is out and in what format.
+3. **The IEC API**, if the credentials request lands (see the API access
+   question above). Cleanest and refreshable, but not under our control.
+
+Route 1 is available now and costs nothing. Worth doing before the 29th so
+the drill picks stations by weight rather than by convenience.
+
+
+### Q18 · 2,366 stations missing from the register, all in Gauteng — `OPEN`
+Removing the synthetic stations (migration 037) revealed what they had been
+covering. The arithmetic is exact:
+
+- The register should hold **23,751** stations — 5,070 metro and 18,681 local
+  (see Q14).
+- The IEC GIS import delivered **21,385**.
+- The deleted synthetic rows numbered **2,366**. 21,385 + 2,366 = 23,751.
+
+They were not test fixtures scattered for convenience. They were standing in
+for stations the import never retrieved, and they were all in one place:
+**354 Gauteng wards now have no voting station at all.** Every other province
+is complete.
+
+Gauteng is the campaign. The readiness map currently shows 525 real stations
+there when the province should have roughly 2,900, so both the coverage
+figure and the slip total understate the work — the national slip count falls
+from 66,183 to 61,451 purely because those stations are absent, not because
+there is less to do.
+
+**Next step:** re-run the IEC GIS register ingest scoped to Gauteng and find
+out whether the gap is a failed fetch, a pagination limit, or municipalities
+the source does not serve. Until it is closed, no Gauteng coverage percentage
+on the readiness map is trustworthy.

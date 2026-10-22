@@ -176,6 +176,105 @@ async function getTrending(ctx: Ctx): Promise<void> {
   json(ctx.res, 200, await envelope(result.rows));
 }
 
+/**
+ * Points for the readiness and gap maps.
+ *
+ * 23,751 stations as JSON objects is several megabytes and most of it is
+ * repeated key names, so the payload is parallel arrays instead: latitude and
+ * longitude as integers scaled by 1e4 (about 11 metres, far finer than
+ * anything drawn at national zoom), and one character per station carrying
+ * both its readiness and whether it is a real station.
+ *
+ * The counts are computed here rather than in the browser. A map that tallies
+ * its own dots reports on what it managed to draw, which is not the same as
+ * what exists - and the difference is exactly what a coverage figure must not
+ * hide.
+ */
+async function getStationMap(ctx: Ctx): Promise<void> {
+  const province = ctx.url.searchParams.get('province');
+  const region = ctx.url.searchParams.get('region');
+  const municipality = ctx.url.searchParams.get('municipality');
+
+  const where = `WHERE ($1::text IS NULL OR province = $1)
+                   AND ($2::text IS NULL OR region_code = $2)
+                   AND ($3::text IS NULL OR demarcation_code = $3)`;
+  const params = [province, region, municipality];
+
+  const rows = await pool.query(
+    `SELECT round(latitude::numeric  * 10000)::int AS y,
+            round(longitude::numeric * 10000)::int AS x,
+            readiness, is_real
+       FROM v_station_readiness ${where}`, params);
+
+  /* 0 unstaffed+real, 1 unstaffed+synthetic, 2 people_only, 3 staffed.
+     Real unstaffed stations are the subject of the gap map, so they get
+     their own code and are never merged with the synthetic ones. */
+  const code = (r: { readiness: string; is_real: boolean }): string =>
+    /* Provenance is checked FIRST and beats readiness. A synthetic station
+       carrying development staffing is still synthetic, and colouring it as
+       covered would draw invented coverage over a real gap - which is the
+       one thing this map must never do. */
+    !r.is_real ? '1'
+      : r.readiness === 'staffed' ? '3'
+        : r.readiness === 'people_only' ? '2'
+          : '0';
+
+  const totals = await pool.query(
+    `SELECT count(*)::int                                      AS stations,
+            count(*) FILTER (WHERE is_real)::int               AS real_stations,
+            count(*) FILTER (WHERE readiness = 'staffed')::int AS staffed,
+            count(*) FILTER (WHERE readiness = 'unstaffed'
+                               AND is_real)::int               AS real_gaps,
+            sum(ballots_expected)::int                         AS slips_expected,
+            sum(ballots_captured)::int                         AS slips_captured,
+            sum(registered_voters) FILTER (
+              WHERE readiness = 'unstaffed' AND is_real)::bigint AS voters_uncovered
+       FROM v_station_readiness ${where}`, params);
+
+  /* The map carries its own place lists rather than borrowing the ward
+     directory's. It is otherwise empty until that screen happens to have
+     been visited, and - more importantly - these options are derived from
+     the stations actually plottable, so the filter can never offer a
+     province that would draw nothing. */
+  const places = await pool.query(
+    `SELECT DISTINCT province, region_code, region_name
+       FROM v_station_readiness
+      WHERE province IS NOT NULL
+        AND ($1::text IS NULL OR province = $1)
+      ORDER BY province, region_name`, [province]);
+  const allProvinces = await pool.query(
+    `SELECT DISTINCT province FROM v_station_readiness
+      WHERE province IS NOT NULL ORDER BY province`);
+
+  json(ctx.res, 200, await envelope({
+    y: rows.rows.map((r) => r.y),
+    x: rows.rows.map((r) => r.x),
+    state: rows.rows.map(code).join(''),
+    scale: 10000,
+    totals: totals.rows[0] ?? null,
+    provinces: allProvinces.rows.map((r) => r.province),
+    regions: places.rows
+      .filter((r) => r.region_code)
+      .map((r) => ({ code: r.region_code, name: r.region_name })),
+  }));
+}
+
+/** Per-province register completeness, for the panel under the map. */
+async function getRegisterCompleteness(ctx: Ctx): Promise<void> {
+  const rows = await pool.query('SELECT * FROM v_register_completeness');
+  const national = await pool.query(
+    `SELECT count(*)::int                             AS wards,
+            count(*) FILTER (WHERE NOT EXISTS (
+              SELECT 1 FROM station s WHERE s.ward_id = w.ward_id))::int
+                                                      AS wards_without_stations,
+            (SELECT count(*)::int FROM station)       AS stations
+       FROM ward w`);
+  json(ctx.res, 200, await envelope({
+    provinces: rows.rows,
+    national: national.rows[0] ?? null,
+  }));
+}
+
 async function getCampaign(ctx: Ctx): Promise<void> {
   const result = await pool.query('SELECT * FROM v_campaign_eo');
   json(ctx.res, 200, await envelope(result.rows[0] ?? null));
@@ -455,5 +554,6 @@ export const routes = {
   postLogin, postLogout, getMe, getWards, getWard, getTargets,
   getCampaign, getFloat, getDecisions, getDocuments, getIngestHealth,
   getSentiment, getSearch, getCameras, getTerrain,
-  getControlPanel, putControlPanel, getOverview, getTrending, authenticate,
+  getControlPanel, putControlPanel, getOverview, getTrending,
+  getStationMap, getRegisterCompleteness, authenticate,
 };

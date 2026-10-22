@@ -825,7 +825,256 @@ async function loadHealth() {
 const WARD_LIMIT = 6000;
 
 const VIEWS = ['logistics', 'slips', 'overview', 'wards', 'sentiment', 'decisions',
-               'viewshed', 'float', 'health', 'settings'];
+               'viewshed', 'readiness', 'float', 'health', 'settings'];
+
+/* ------------------------------------------------------------------ *
+ * Station readiness and gap maps.
+ *
+ * Canvas, not SVG: 23,751 points is 23,751 DOM nodes, which is a locked
+ * tab on a war-room laptop. One canvas element draws the lot in a few
+ * milliseconds.
+ *
+ * The two maps are the same data with the draw order inverted. On the
+ * readiness map, covered stations draw last so coverage is legible. On
+ * the gap map, only the uncovered real stations draw at all - the rest
+ * are not dimmed, they are absent, because a gap map that still shows
+ * everything else invites the eye to read the dense areas as progress.
+ * ------------------------------------------------------------------ */
+const RD = {
+  data: null,
+  mode: 'all',
+  colours: {
+    0: { fill: '#f0b429', label: 'No one assigned' },      // real + unstaffed
+    1: { fill: 'transparent', stroke: '#5a5a5a',
+         label: 'Synthetic station (not counted)' },
+    2: { fill: '#3b82f6', label: 'People, no named marshal' },
+    3: { fill: '#22c55e', label: 'Marshal assigned' },
+  },
+};
+
+/* South Africa, equirectangular with a cosine correction at the mid
+   latitude. Good enough for a national dot map and it needs no library,
+   no tiles and no network call to a third party. */
+function rdProject(xs, ys, w, h) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < xs.length; i++) {
+    if (xs[i] < minX) minX = xs[i];
+    if (xs[i] > maxX) maxX = xs[i];
+    if (ys[i] < minY) minY = ys[i];
+    if (ys[i] > maxY) maxY = ys[i];
+  }
+  const midLat = ((minY + maxY) / 2) / 10000;
+  const kx = Math.cos(midLat * Math.PI / 180);
+  const spanX = (maxX - minX) * kx || 1;
+  const spanY = (maxY - minY) || 1;
+  const pad = 18;
+  const scale = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY);
+  const offX = (w - spanX * scale) / 2;
+  const offY = (h - spanY * scale) / 2;
+  return (x, y) => [
+    offX + (x - minX) * kx * scale,
+    // latitude is negative in SA and y grows downward on a canvas, so the
+    // axis is flipped here rather than by negating the data.
+    offY + (maxY - y) * scale,
+  ];
+}
+
+function rdDraw() {
+  const cv = $('rd-canvas');
+  const d = RD.data;
+  if (!cv || !d || !d.x.length) return;
+
+  const wrap = cv.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const w = wrap.clientWidth;
+  const h = Math.max(360, Math.round(w * 0.62));
+  cv.width = w * dpr; cv.height = h * dpr;
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+
+  const project = rdProject(d.x, d.y, w, h);
+  const gapsOnly = RD.mode === 'gaps';
+
+  /* Worst state first so better states paint over it on the readiness
+     map; on the gap map nothing paints over anything. */
+  const order = gapsOnly ? ['0'] : ['1', '0', '2', '3'];
+  const r = d.x.length > 12000 ? 1.4 : 2.2;
+
+  for (const code of order) {
+    const spec = RD.colours[code];
+    g.beginPath();
+    for (let i = 0; i < d.x.length; i++) {
+      if (d.state[i] !== code) continue;
+      const [px, py] = project(d.x[i], d.y[i]);
+      g.moveTo(px + r, py);
+      g.arc(px, py, r, 0, Math.PI * 2);
+    }
+    if (spec.fill === 'transparent') {
+      g.strokeStyle = spec.stroke; g.lineWidth = 0.7; g.stroke();
+    } else {
+      g.fillStyle = spec.fill;
+      g.globalAlpha = gapsOnly ? 0.85 : 0.72;
+      g.fill();
+      g.globalAlpha = 1;
+    }
+  }
+}
+
+function rdRenderLegend() {
+  const el = $('rd-legend');
+  if (!el) return;
+  /* Only states actually present are listed. A legend offering "synthetic
+     station" when the register holds none invites the reader to go looking
+     for a category that is not on the map. */
+  const present = new Set(RD.data?.state ?? '');
+  const codes = (RD.mode === 'gaps' ? ['0'] : ['3', '2', '0', '1'])
+    .filter((c) => present.has(c));
+  el.innerHTML = codes.map((c) => {
+    const s = RD.colours[c];
+    const swatch = s.fill === 'transparent'
+      ? `<span class="rd-dot rd-dot-hollow"></span>`
+      : `<span class="rd-dot" style="background:${s.fill}"></span>`;
+    return `<span class="rd-key">${swatch}${s.label}</span>`;
+  }).join('');
+}
+
+function rdRenderStats(t) {
+  const el = $('rd-stats');
+  if (!el || !t) return;
+  const pct = t.real_stations
+    ? ((t.staffed / t.real_stations) * 100).toFixed(1) : '0.0';
+  el.innerHTML = `
+    <div class="rd-stat"><b>${fmt(t.real_stations)}</b><span>Real stations</span></div>
+    <div class="rd-stat"><b>${fmt(t.staffed)}</b><span>With a marshal</span></div>
+    <div class="rd-stat rd-stat-warn"><b>${fmt(t.real_gaps)}</b><span>No one assigned</span></div>
+    <div class="rd-stat"><b>${pct}%</b><span>Covered</span></div>
+    <div class="rd-stat"><b>${fmt(t.slips_expected)}</b><span>Slips to capture</span></div>`;
+
+  /* voters_uncovered comes back null when the register carries no voter
+     counts for these stations, which is currently true of every real one.
+     Null is not zero: printing "0 registered voters" under a map of 21,385
+     uncovered stations would read as "nothing at stake there". Say which
+     it is. */
+  const voters = t.voters_uncovered == null
+    ? 'voter counts not yet in the register'
+    : `${fmt(Number(t.voters_uncovered))} registered voters`;
+
+  $('rd-note').textContent = t.real_gaps
+    ? `${fmt(t.real_gaps)} of ${fmt(t.real_stations)} real stations have nobody `
+      + `assigned (${voters}). `
+      + `${fmt(t.slips_captured)} of ${fmt(t.slips_expected)} slips captured.`
+    : `Every real station in this selection has someone assigned.`;
+}
+
+/* Filled from the map payload itself, so the options always match the
+   stations that can actually be drawn, and the screen works even if the
+   ward directory has never been opened. */
+function rdFillFilters(d) {
+  const prov = $('rd-province'); const reg = $('rd-region');
+  if (!prov || !reg || !d) return;
+
+  const chosenP = prov.value; const chosenR = reg.value;
+  prov.innerHTML = '<option value="">All</option>' + (d.provinces ?? []).map((p) =>
+    `<option value="${esc(p)}"${p === chosenP ? ' selected' : ''}>${esc(p)}</option>`).join('');
+
+  const seen = new Map();
+  for (const r of d.regions ?? []) if (!seen.has(r.code)) seen.set(r.code, r.name);
+  reg.innerHTML = '<option value="">All</option>' + [...seen.entries()].map(([v, l]) =>
+    `<option value="${esc(v)}"${v === chosenR ? ' selected' : ''}>${esc(l)}</option>`).join('');
+}
+
+function rdSetMode(mode) {
+  RD.mode = mode;
+  const all = $('rd-mode-all'); const gaps = $('rd-mode-gaps');
+  all?.classList.toggle('is-on', mode === 'all');
+  gaps?.classList.toggle('is-on', mode === 'gaps');
+  all?.setAttribute('aria-pressed', String(mode === 'all'));
+  gaps?.setAttribute('aria-pressed', String(mode === 'gaps'));
+  rdRenderLegend();
+  rdDraw();
+}
+
+$('rd-mode-all')?.addEventListener('click', () => rdSetMode('all'));
+$('rd-mode-gaps')?.addEventListener('click', () => rdSetMode('gaps'));
+$('rd-province')?.addEventListener('change', () => {
+  $('rd-region').value = '';   // a new province orphans the region below it
+  loadReadiness();
+});
+$('rd-region')?.addEventListener('change', () => loadReadiness());
+
+let rdResizeTimer = null;
+window.addEventListener('resize', () => {
+  if (!$('view-readiness') || $('view-readiness').hidden) return;
+  clearTimeout(rdResizeTimer);
+  rdResizeTimer = setTimeout(rdDraw, 120);
+});
+
+/* The completeness panel. A bar per province showing the share of its wards
+   that have at least one voting station, with any ward that has none called
+   out in words rather than left to be inferred from a nearly-full bar. */
+async function loadCompleteness() {
+  const rows = $('rc-rows');
+  if (!rows) return;
+  try {
+    const res = await api('/api/register-completeness');
+    const d = res.data ?? res;
+    const max = Math.max(...d.provinces.map((p) => p.stations_per_ward), 1);
+
+    rows.innerHTML = d.provinces.map((p) => {
+      const covered = p.wards - p.wards_without_stations;
+      const pct = p.wards ? (covered / p.wards) * 100 : 0;
+      return `<div class="rc-row rc-${esc(p.status)}">
+        <span class="rc-prov">${esc(p.province)}</span>
+        <span class="rc-bar"><i style="width:${pct.toFixed(1)}%"></i></span>
+        <span class="rc-num">${fmt(p.stations)}</span>
+        <span class="rc-rate" title="Stations per ward">${p.stations_per_ward}/ward</span>
+        <span class="rc-state">${p.wards_without_stations
+          ? fmt(p.wards_without_stations) + ' wards with no station'
+          : esc(p.status)}</span>
+      </div>`;
+    }).join('');
+
+    const n = d.national;
+    $('rc-note').textContent = n.wards_without_stations
+      ? `${fmt(n.wards_without_stations)} of ${fmt(n.wards)} wards nationally `
+        + `have no voting station in the register. Re-run the register ingest `
+        + `for the affected province before trusting any coverage figure.`
+      : `All ${fmt(n.wards)} wards have at least one station. `
+        + `${fmt(n.stations)} stations in the register.`;
+  } catch (e) {
+    rows.innerHTML = '';
+    $('rc-note').textContent =
+      'Could not load register completeness: ' + (e?.message ?? e);
+  }
+}
+
+async function loadReadiness() {
+  const p = new URLSearchParams();
+  const prov = $('rd-province')?.value;
+  const reg = $('rd-region')?.value;
+  if (prov) p.set('province', prov);
+  if (reg) p.set('region', reg);
+
+  try {
+    const res = await api('/api/station-map?' + p.toString());
+    const d = res.data ?? res;
+    RD.data = d;
+    rdFillFilters(d);
+    rdRenderStats(d.totals);
+    rdRenderLegend();
+    rdDraw();
+  } catch (e) {
+    /* Never leave the map showing a stale picture that looks current. */
+    RD.data = null;
+    const cv = $('rd-canvas');
+    if (cv) cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+    $('rd-note').textContent =
+      'Could not load station positions: ' + (e?.message ?? e);
+  }
+}
 
 function showView(view) {
   document.querySelectorAll('.views button').forEach((b) =>
@@ -844,6 +1093,7 @@ function showView(view) {
   if (view === 'decisions') loadDecisions();
   if (view === 'float') loadFloat();
   if (view === 'health') loadHealth();
+  if (view === 'readiness') { loadReadiness(); loadCompleteness(); }
   if (view === 'viewshed') loadViewshed();
   if (view === 'settings') loadControlPanel();
 }

@@ -97,6 +97,10 @@ const table: Route[] = [
   { method: 'POST', pattern: /^\/api\/transcribe$/,        handler: transcribe.postPass },
   { method: 'GET',  pattern: /^\/api\/slips\/overview$/,  handler: transcribe.getOverview },
 
+  { method: 'GET',   pattern: /^\/api\/trending$/, handler: routes.getTrending },
+  { method: 'GET',   pattern: /^\/api\/station-map$/, handler: routes.getStationMap },
+  { method: 'GET',   pattern: /^\/api\/register-completeness$/,
+    handler: routes.getRegisterCompleteness },
   { method: 'GET',   pattern: /^\/api\/hashtags$/, handler: hashtags.getHashtags },
   { method: 'POST',  pattern: /^\/api\/hashtags$/, handler: hashtags.postHashtags },
   { method: 'PATCH', pattern: /^\/api\/hashtags\/([A-Za-z0-9_]+)$/,

@@ -67,6 +67,7 @@
     <p class="rail-group">Intelligence</p>
     <button data-view="sentiment"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v8H6l-4 3z"/></svg><span>Social sentiment</span></button>
     <button data-view="viewshed"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="1.8"/></svg><span>Viewshed analysis</span></button>
+    <button data-view="readiness"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5c2.5 0 4.5 2 4.5 4.4 0 3.2-4.5 8.6-4.5 8.6S3.5 9.1 3.5 5.9C3.5 3.5 5.5 1.5 8 1.5z"/><circle cx="8" cy="5.8" r="1.6"/></svg><span>Station readiness</span></button>
 
     <p class="rail-group">System</p>
     <button data-view="health"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12V4m4 8V7m4 5V2m4 10V6"/></svg><span>Data sources</span></button>
@@ -349,6 +350,51 @@
 
   <main class="pane pane-single" id="view-float" hidden>
     <section class="panel-body"><div id="float-list"></div></section>
+  </main>
+
+  <main class="pane pane-single" id="view-readiness" hidden>
+    <section class="panel-body">
+      <h2 class="viz-title">Station readiness</h2>
+      <p class="viz-sub">Every voting station, placed on its real IEC
+         coordinates. Switch to <em>Gaps only</em> to see where we have
+         nobody &mdash; which is the map that matters before polling day.</p>
+
+      <div class="rd-controls">
+        <div class="rd-modes" role="group" aria-label="Map mode">
+          <button type="button" id="rd-mode-all" class="rd-mode is-on"
+                  aria-pressed="true">Readiness</button>
+          <button type="button" id="rd-mode-gaps" class="rd-mode"
+                  aria-pressed="false">Gaps only</button>
+        </div>
+        <label for="rd-province">Province</label>
+        <select id="rd-province"><option value="">All</option></select>
+        <label for="rd-region">Region</label>
+        <select id="rd-region"><option value="">All</option></select>
+      </div>
+
+      <p class="provenance" id="rd-note"></p>
+      <div class="rd-stats" id="rd-stats"></div>
+
+      <div class="rd-canvas-wrap">
+        <canvas id="rd-canvas" role="img"
+                aria-label="Map of South African voting stations by staffing readiness"></canvas>
+      </div>
+
+      <div class="rd-legend" id="rd-legend"></div>
+
+      <section class="rc-panel" aria-labelledby="rc-h">
+        <h3 id="rc-h" class="rc-title">Register completeness</h3>
+        <p class="rc-sub">Whether the register holds voting stations for every
+           ward. On 22 October it was short 2,366 stations across 354 Gauteng
+           wards and nothing reported it &mdash; this panel is here so that
+           cannot happen quietly again.</p>
+        <div class="rc-rows" id="rc-rows"></div>
+        <p class="provenance" id="rc-note"></p>
+      </section>
+      <p class="vs-attrib">Station coordinates from the IEC geospatial
+         register. Any station not sourced from that register is drawn hollow
+         and is never counted in a coverage figure.</p>
+    </section>
   </main>
 
   <main class="pane pane-single" id="view-viewshed" hidden>
