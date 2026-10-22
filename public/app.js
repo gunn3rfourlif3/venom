@@ -763,7 +763,7 @@ async function loadHealth() {
 
 /* ------------------------------------------------------------ views */
 
-const VIEWS = ['logistics', 'overview', 'wards', 'sentiment', 'decisions',
+const VIEWS = ['logistics', 'slips', 'overview', 'wards', 'sentiment', 'decisions',
                'viewshed', 'float', 'health', 'settings'];
 
 function showView(view) {
@@ -776,6 +776,7 @@ function showView(view) {
   if (view !== 'viewshed') window.VenomViewshed?.hide();
 
   if (view === 'logistics') loadLogistics();
+  if (view === 'slips') loadSlips();
   if (view === 'overview') loadOverview();
   if (view === 'sentiment') loadSentiment();
   if (view === 'decisions') loadDecisions();
@@ -1761,3 +1762,201 @@ function setRailStats(stationsTotal, provinces) {
   const region = $('rs-region');
   if (region && where) region.textContent = where;
 }
+
+
+/* ---------------------------------------------------------------- slips
+ *
+ * Transcription and coverage.
+ *
+ * The one rule the screen must not break: on a second pass the operator
+ * never sees the first pass's numbers. They get the party NAMES — which are
+ * printed on the photograph in front of them, so this gives nothing away —
+ * and empty boxes. Showing the first set would turn a check into a
+ * confirmation, and two people agreeing because one copied the other is
+ * indistinguishable from two people agreeing because the slip says so.
+ */
+
+let slipNow = null;          // the slip currently on screen
+
+function slipRow(party = '', votes = '', locked = false) {
+  return `<tr>
+    <td data-k="Party"><input class="sl-party" value="${esc(party)}"
+      ${locked ? 'readonly' : ''} placeholder="Party as written"></td>
+    <td data-k="Votes"><input class="sl-num" type="number" min="0"
+      inputmode="numeric" value="${esc(votes)}"></td>
+    <td><button type="button" class="btn sl-del" title="Remove this line">&times;</button></td>
+  </tr>`;
+}
+
+function slipBindRows() {
+  $('sl-rows').querySelectorAll('.sl-del').forEach((b) => {
+    b.addEventListener('click', () => { b.closest('tr').remove(); slipRecheck(); });
+  });
+  $('sl-rows').querySelectorAll('input').forEach((i) =>
+    i.addEventListener('input', slipRecheck));
+}
+
+/* Live arithmetic, shown but never enforced. The slip on the door is the
+   record; if it does not add up, that is a finding, not a typo to be
+   corrected into agreement. Blocking submission here would quietly destroy
+   exactly the evidence this system exists to capture. */
+function slipRecheck() {
+  let sum = 0;
+  $('sl-rows').querySelectorAll('.sl-num').forEach((i) => { sum += Number(i.value) || 0; });
+  const spoilt = Number($('sl-spoilt').value) || 0;
+  const total = Number($('sl-total').value) || 0;
+  const el = $('sl-check');
+  if (!total) { el.textContent = `Party votes so far: ${fmt(sum)}`; el.className = 'sl-check viz-sub'; return; }
+  const diff = sum + spoilt - total;
+  el.textContent = diff === 0
+    ? `Adds up: ${fmt(sum)} + ${fmt(spoilt)} spoilt = ${fmt(total)}.`
+    : `Does not add up — out by ${fmt(Math.abs(diff))}. File it as the slip reads; this is recorded, not corrected.`;
+  el.className = diff === 0 ? 'sl-check is-ok' : 'sl-check is-off';
+}
+
+async function loadSlipWork() {
+  const { data } = await api('/api/transcribe/next');
+  slipNow = data.slip;
+  $('sl-queue').textContent = data.remaining
+    ? `${fmt(data.remaining)} awaiting a pass` : 'queue clear';
+
+  if (!slipNow) { $('sl-card').hidden = true; $('sl-empty').hidden = false; return; }
+  $('sl-empty').hidden = true;
+  $('sl-card').hidden = false;
+
+  const note = $('sl-passnote');
+  if (slipNow.pass === 1) {
+    note.className = 'sl-pass is-first';
+    note.textContent = 'PASS 1 — you are the first person to read this slip. Type exactly what is printed.';
+  } else {
+    note.className = 'sl-pass is-second';
+    note.textContent = 'PASS 2 — the first reading is hidden from you on purpose. '
+      + 'Type what you see; do not try to match anyone.';
+  }
+
+  $('sl-img').src = `/api/slip/${slipNow.slipId}/image`;
+  /* Full resolution in a new tab. The capped height makes most slips
+     readable; the ones that are not are exactly the ones worth enlarging. */
+  $('sl-img').onclick = () => window.open(`/api/slip/${slipNow.slipId}/image`, '_blank', 'noopener');
+  $('sl-where').textContent =
+    `${slipNow.stationId} · ${slipNow.stationName} · ${slipNow.municipality} · ${slipNow.ballot.replace(/_/g, ' ')}`;
+
+  /* Pass 2 gets the names, locked, and blank numbers. Pass 1 gets three
+     empty lines to start. */
+  $('sl-rows').innerHTML = slipNow.pass === 2 && slipNow.parties.length
+    ? slipNow.parties.map((p) => slipRow(p, '', true)).join('')
+    : slipRow() + slipRow() + slipRow();
+  $('sl-spoilt').value = '';
+  $('sl-total').value = '';
+  $('sl-note').textContent = '';
+  slipBindRows();
+  slipRecheck();
+}
+
+async function loadSlipOverview() {
+  const { data } = await api('/api/slips/overview');
+  const t = data.totals || {};
+  $('sl-sub').textContent =
+    `${fmt(t.photographed || 0)} of ${fmt(t.expected || 0)} slips photographed · ${fmt(t.verified || 0)} verified`;
+
+  const d = data.disagreements || [];
+  $('sl-dispute-count').textContent = d.length ? `${fmt(d.length)} to resolve` : 'none';
+  const recon = data.reconciliation || [];
+  $('sl-dispute-list').innerHTML = (d.length === 0 && recon.length === 0)
+    ? '<p class="viz-sub">Nothing disputed.</p>'
+    : `${d.length ? `<table class="logi-table">
+        <thead><tr><th>Station</th><th>Ballot</th><th>Party</th><th>Pass 1</th><th>Pass 2</th></tr></thead>
+        <tbody>${d.map((r) => `<tr>
+          <td data-k="Station"><span class="id">${esc(r.station_id)}</span></td>
+          <td data-k="Ballot">${esc(String(r.ballot).replace(/_/g, ' '))}</td>
+          <td data-k="Party">${esc(r.party)}</td>
+          <td data-k="Pass 1">${r.pass_1 === null ? '<em>missing</em>' : fmt(r.pass_1)}</td>
+          <td data-k="Pass 2">${r.pass_2 === null ? '<em>missing</em>' : fmt(r.pass_2)}</td>
+        </tr>`).join('')}</tbody></table>` : ''}
+       ${recon.length ? `<p class="viz-sub" style="margin-top:12px">Slips that do not add up:</p>
+        <table class="logi-table">
+        <thead><tr><th>Station</th><th>Ballot</th><th>Pass</th><th>Party total</th><th>Spoilt</th><th>Cast</th><th>Out by</th></tr></thead>
+        <tbody>${recon.map((r) => `<tr>
+          <td data-k="Station"><span class="id">${esc(r.station_id)}</span></td>
+          <td data-k="Ballot">${esc(String(r.ballot).replace(/_/g, ' '))}</td>
+          <td data-k="Pass">${esc(r.pass)}</td>
+          <td data-k="Party total">${fmt(r.party_total)}</td>
+          <td data-k="Spoilt">${r.spoilt === null ? '—' : fmt(r.spoilt)}</td>
+          <td data-k="Cast">${r.total_votes_cast === null ? '—' : fmt(r.total_votes_cast)}</td>
+          <td data-k="Out by">${fmt(r.discrepancy)}</td>
+        </tr>`).join('')}</tbody></table>` : ''}`;
+
+  const cov = data.coverage || [];
+  $('sl-cov-sub').textContent = cov.length ? `${fmt(cov.length)} municipalities reporting` : 'nothing yet';
+  $('sl-cov-list').innerHTML = cov.length === 0
+    ? '<p class="viz-sub">No slips received yet.</p>'
+    : `<table class="logi-table">
+      <thead><tr><th>Municipality</th><th>Province</th><th>Expected</th><th>Photographed</th><th>Verified</th><th>Outstanding</th></tr></thead>
+      <tbody>${cov.map((r) => `<tr>
+        <td data-k="Municipality">${esc(r.municipality)}</td>
+        <td data-k="Province">${esc(r.province)}</td>
+        <td data-k="Expected">${fmt(r.slips_expected)}</td>
+        <td data-k="Photographed">${fmt(r.photographed)} <span class="viz-sub">(${esc(r.pct_photographed ?? 0)}%)</span></td>
+        <td data-k="Verified">${fmt(r.verified)}</td>
+        <td data-k="Outstanding">${fmt(r.outstanding)}</td>
+      </tr>`).join('')}</tbody></table>`;
+}
+
+async function loadSlips() {
+  try { await Promise.all([loadSlipWork(), loadSlipOverview()]); }
+  catch (err) { $('sl-sub').textContent = err.message; }
+}
+
+/* The totals are part of the sum, so they must recheck like any vote field.
+   Without this the arithmetic line never leaves "Party votes so far" and the
+   does-it-add-up check — the whole point of asking for the totals — silently
+   never runs. */
+$('sl-spoilt')?.addEventListener('input', slipRecheck);
+$('sl-total')?.addEventListener('input', slipRecheck);
+
+$('sl-addrow')?.addEventListener('click', () => {
+  $('sl-rows').insertAdjacentHTML('beforeend', slipRow());
+  slipBindRows();
+});
+
+$('sl-skip')?.addEventListener('click', async () => { await loadSlipWork(); });
+
+$('sl-form')?.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!slipNow) return;
+  const votes = [];
+  $('sl-rows').querySelectorAll('tr').forEach((tr) => {
+    const party = tr.querySelector('.sl-party')?.value.trim();
+    const n = tr.querySelector('.sl-num')?.value;
+    if (party && n !== '') votes.push({ party, votes: Number(n) });
+  });
+  if (votes.length === 0) { $('sl-note').textContent = 'Nothing entered.'; return; }
+
+  $('sl-save').disabled = true;
+  $('sl-note').textContent = 'Filing…';
+  try {
+    const { data } = await api('/api/transcribe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        slipId: slipNow.slipId,
+        spoilt: $('sl-spoilt').value === '' ? null : Number($('sl-spoilt').value),
+        totalVotesCast: $('sl-total').value === '' ? null : Number($('sl-total').value),
+        votes,
+      }),
+    });
+    const said = data.status === 'DISPUTED'
+      ? `Filed. The two passes disagree on ${fmt(data.disagreements)} — it is in "Needs a decision".`
+      : `Filed — ${esc(data.status.toLowerCase())}. Next slip below.`;
+    /* Written AFTER the reload, because loadSlipWork clears this field while
+       setting up the next slip. Written before, the operator files a pass and
+       sees nothing happen — and on a night of several hundred, "did that
+       save?" is the question that makes people file twice. */
+    await loadSlips();
+    $('sl-note').textContent = said;
+  } catch (err) {
+    $('sl-note').textContent = err.message;
+  } finally {
+    $('sl-save').disabled = false;
+  }
+});

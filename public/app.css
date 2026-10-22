@@ -1692,3 +1692,56 @@ button, input, select { font: inherit; color: inherit; }
 
 /* Compact enough to sit in a table row without stretching it. */
 .roster-copy { padding: 4px 10px; font-size: var(--step--1); }
+
+/* ------------------------------------------------------------- slips */
+
+/* The pass banner is the most important text on the screen: it tells the
+   operator whether anyone has read this slip before them. */
+.sl-pass {
+  padding: 10px 13px; border-radius: var(--r-control); margin-bottom: 14px;
+  font-size: var(--step-0); font-weight: 500; border: 1px solid;
+}
+.sl-pass.is-first  { color: var(--ours); border-color: var(--ours); background: rgba(245,197,24,.07); }
+.sl-pass.is-second { color: var(--st-good); border-color: var(--st-good); background: rgba(52,211,153,.07); }
+
+.sl-split { display: grid; grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); gap: 18px; }
+@media (max-width: 900px) { .sl-split { grid-template-columns: 1fr; } }
+
+.sl-photo { margin: 0; }
+.sl-form { position: sticky; top: 12px; align-self: start; }
+@media (max-width: 900px) { .sl-form { position: static; } }
+/* Capped to the viewport so the entry fields stay reachable without
+   scrolling. A slip photographed in portrait is otherwise 1,100px tall and
+   pushes every input below the fold — on a night of several hundred slips
+   that is a scroll per slip, each one a chance to lose your place. Click
+   opens the full-resolution image for the lines that are hard to read. */
+.sl-photo img {
+  width: 100%; max-height: 72vh; object-fit: contain; object-position: top;
+  border-radius: var(--r-control); border: 1px solid var(--rule);
+  background: var(--paper); display: block; cursor: zoom-in;
+}
+.sl-photo figcaption { margin-top: 8px; }
+
+.sl-votes input {
+  width: 100%; padding: 7px 9px; font-size: var(--step-0);
+  background: var(--paper); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: var(--r-control);
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+}
+.sl-votes input:focus { outline: none; border-color: var(--ours); }
+/* A locked party name on pass 2 is given by the first pass, not typed. It
+   reads as a label rather than a field so nobody tries to correct it. */
+.sl-votes input[readonly] { background: transparent; border-color: transparent; color: var(--ink-2); }
+.sl-del { padding: 3px 9px; }
+
+.sl-totals { display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.sl-totals label { flex: 1; min-width: 130px; font-size: var(--step--1); color: var(--ink-2); }
+.sl-totals input {
+  display: block; width: 100%; margin-top: 5px; padding: 8px 10px;
+  background: var(--paper); color: var(--ink); font-size: var(--step-0);
+  border: 1px solid var(--rule); border-radius: var(--r-control);
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+}
+.sl-check { margin-top: 10px; }
+.sl-check.is-ok  { color: var(--st-good); }
+.sl-check.is-off { color: var(--st-warn); }

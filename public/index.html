@@ -58,6 +58,7 @@
          the screen that changes a decision inside the hour; Overview tells
          you how the campaign is going, which can wait until the evening. -->
     <button data-view="logistics"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4h9v7H1z"/><path d="M10 6h3l2 2v3h-5z"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="12.5" r="1.5"/></svg><span>Logistics</span></button>
+    <button data-view="slips"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 1.5h7l3 3v10H3z"/><path d="M6 7h5M6 10h5M6 4h2"/></svg><span>Result slips</span></button>
     <button data-view="overview" class="is-current"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 13V7m4 6V3m4 10V8m4 5V5"/></svg><span>Overview</span></button>
     <button data-view="wards"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z"/></svg><span>Wards directory</span></button>
     <button data-view="decisions"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v4M8 11v4M3.5 8H1M15 8h-2.5"/><circle cx="8" cy="8" r="3"/></svg><span>Decisions engine</span></button>
@@ -445,6 +446,77 @@
       <div id="lg-roster-list" style="margin-top:12px"></div>
     </section>
   </main>
+
+  <!-- Result slips. Two jobs on one screen: transcribing the queue (the work)
+       and seeing what is still outstanding (the picture). -->
+  <main class="pane pane-single" id="view-slips" hidden>
+    <div class="page-head">
+      <h1>Result slips</h1>
+      <p id="sl-sub">Loading…</p>
+    </div>
+
+    <section class="panel" id="sl-work">
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Transcribe</h2>
+        <span class="viz-sub" style="margin:0" id="sl-queue">&mdash;</span>
+      </div>
+
+      <div id="sl-empty" class="viz-sub">Nothing waiting. Photographs appear here as marshals send them.</div>
+
+      <div id="sl-card" hidden>
+        <div class="sl-pass" id="sl-passnote"></div>
+
+        <div class="sl-split">
+          <figure class="sl-photo">
+            <img id="sl-img" alt="Photograph of the result slip">
+            <figcaption class="viz-sub" id="sl-where"></figcaption>
+          </figure>
+
+          <form class="sl-form" id="sl-form" autocomplete="off">
+            <table class="logi-table sl-votes">
+              <thead><tr><th>Party</th><th style="width:34%">Votes</th><th></th></tr></thead>
+              <tbody id="sl-rows"></tbody>
+            </table>
+            <button type="button" class="btn" id="sl-addrow" style="margin-top:8px">Add a party line</button>
+
+            <div class="sl-totals">
+              <label>Spoilt<input type="number" min="0" id="sl-spoilt" inputmode="numeric"></label>
+              <label>Total votes cast<input type="number" min="0" id="sl-total" inputmode="numeric"></label>
+            </div>
+
+            <div class="sl-check viz-sub" id="sl-check"></div>
+
+            <div class="row" style="margin-top:12px;gap:8px;align-items:center">
+              <button type="submit" class="btn btn-primary" id="sl-save">File this pass</button>
+              <button type="button" class="btn" id="sl-skip">Skip</button>
+              <span class="viz-sub" id="sl-note" style="margin:0"></span>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="sl-disputes" style="margin-top:14px">
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Needs a decision</h2>
+        <span class="viz-sub" style="margin:0" id="sl-dispute-count">&mdash;</span>
+      </div>
+      <p class="viz-sub">Where the two passes disagree, or where a slip does not add up.
+        Neither is resolved by editing — a correction is a further pass.</p>
+      <div id="sl-dispute-list"></div>
+    </section>
+
+    <section class="panel" id="sl-coverage" style="margin-top:14px">
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Coverage</h2>
+        <span class="viz-sub" style="margin:0" id="sl-cov-sub">&mdash;</span>
+      </div>
+      <p class="viz-sub">Counted per ballot, not per station: a metro station owes two slips
+        and a local-municipality station three.</p>
+      <div id="sl-cov-list"></div>
+    </section>
+  </main>
+
 
   </div><!-- /.stage -->
 

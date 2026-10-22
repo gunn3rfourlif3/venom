@@ -19,6 +19,7 @@ import { routes } from './routes.js';
 import { logistics } from './logistics.js';
 import { whatsapp } from './whatsapp.js';
 import { slips } from './slips.js';
+import { transcribe } from './transcribe.js';
 import { purgeExpiredSessions } from './auth.js';
 import { LiveHub } from './live.js';
 import { serveStatic } from './static.js';
@@ -90,6 +91,10 @@ const table: Route[] = [
     handler: slips.getCaptureStations },
   { method: 'GET',  pattern: /^\/api\/slip\/([0-9]+)\/image$/,
     handler: async (ctx, id) => slips.getSlipImage(ctx, id ?? '') },
+
+  { method: 'GET',  pattern: /^\/api\/transcribe\/next$/, handler: transcribe.getNext },
+  { method: 'POST', pattern: /^\/api\/transcribe$/,        handler: transcribe.postPass },
+  { method: 'GET',  pattern: /^\/api\/slips\/overview$/,  handler: transcribe.getOverview },
 
   { method: 'GET',  pattern: /^\/api\/roster$/,            handler: whatsapp.getRoster },
   { method: 'POST', pattern: /^\/api\/roster$/,            handler: whatsapp.postRoster },
