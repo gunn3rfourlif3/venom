@@ -840,88 +840,195 @@ const VIEWS = ['logistics', 'slips', 'overview', 'wards', 'sentiment', 'decision
  * are not dimmed, they are absent, because a gap map that still shows
  * everything else invites the eye to read the dense areas as progress.
  * ------------------------------------------------------------------ */
+/* MK Party palette, sampled from the party logo rather than approximated:
+   green #56AA48, gold #F8C030. Green reads as covered, gold as needing
+   attention, which is also how the rest of the dashboard already uses the
+   accent. */
+const MK = { green: '#56AA48', greenPale: '#9CCC8F', gold: '#F8C030' };
+
 const RD = {
   data: null,
   mode: 'all',
+  map: null,
+  layer: null,
+  L: null,
   colours: {
-    0: { fill: '#f0b429', label: 'No one assigned' },      // real + unstaffed
-    1: { fill: 'transparent', stroke: '#5a5a5a',
-         label: 'Synthetic station (not counted)' },
-    2: { fill: '#3b82f6', label: 'People, no named marshal' },
-    3: { fill: '#22c55e', label: 'Marshal assigned' },
+    0: { fill: MK.gold,      label: 'No one assigned' },
+    1: { fill: 'transparent', stroke: '#6b6b6b',
+         label: 'Not from the IEC register (not counted)' },
+    2: { fill: MK.greenPale, label: 'People, no named marshal' },
+    3: { fill: MK.green,     label: 'Marshal assigned' },
   },
 };
 
-/* South Africa, equirectangular with a cosine correction at the mid
-   latitude. Good enough for a national dot map and it needs no library,
-   no tiles and no network call to a third party. */
-function rdProject(xs, ys, w, h) {
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (let i = 0; i < xs.length; i++) {
-    if (xs[i] < minX) minX = xs[i];
-    if (xs[i] > maxX) maxX = xs[i];
-    if (ys[i] < minY) minY = ys[i];
-    if (ys[i] > maxY) maxY = ys[i];
+/* Leaflet, pinned, loaded only when this screen is opened - the same pattern
+   viewshed.js uses for three.js. It is a global script rather than a module
+   because Leaflet 1.x does not ship an ES build. */
+const LEAFLET_JS  = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js';
+const LEAFLET_CSS = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css';
+
+/* A basemap carrying roads, place names and routes.
+
+   THE BASEMAP IS A THIRD PARTY AND ELECTION DAY IS NOT THE DAY TO DISCOVER
+   THAT. If these tiles fail - rate limit, outage, a network that blocks the
+   host - the station layer still draws, on the dark background, exactly as
+   it did before there was a basemap. The operational picture degrades to
+   what it was yesterday rather than to a blank screen. The tile URL is kept
+   in one place so it can be repointed at a self-hosted set without touching
+   anything else.
+
+   CARTO's dark tiles were the obvious choice and are not usable: they now
+   require an API key and serve a watermarked image with HTTP 200, so a
+   tile-error handler never fires and an automated check counts them as
+   successes. This one was caught by looking at the render, not by the test.
+
+   OpenStreetMap's own tiles are keyless, ODbL, and carry roads and place
+   names. They are light, so the tile pane is darkened in CSS - which also
+   keeps the station dots out of the filter, since they live on a separate
+   canvas above it. OSM ask heavy users to self-host; a war room is not
+   heavy use, but election day is the moment to have a local set ready. */
+const BASEMAP_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const BASEMAP_ATTRIB =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (!document.querySelector('link[data-leaflet]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet'; link.href = LEAFLET_CSS;
+    link.setAttribute('data-leaflet', '1');
+    document.head.appendChild(link);
   }
-  const midLat = ((minY + maxY) / 2) / 10000;
-  const kx = Math.cos(midLat * Math.PI / 180);
-  const spanX = (maxX - minX) * kx || 1;
-  const spanY = (maxY - minY) || 1;
-  const pad = 18;
-  const scale = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY);
-  const offX = (w - spanX * scale) / 2;
-  const offY = (h - spanY * scale) / 2;
-  return (x, y) => [
-    offX + (x - minX) * kx * scale,
-    // latitude is negative in SA and y grows downward on a canvas, so the
-    // axis is flipped here rather than by negating the data.
-    offY + (maxY - y) * scale,
-  ];
+  return new Promise((resolve, reject) => {
+    const sc = document.createElement('script');
+    sc.src = LEAFLET_JS;
+    sc.onload = () => resolve(window.L);
+    sc.onerror = () => reject(new Error('Leaflet could not be loaded'));
+    document.head.appendChild(sc);
+  });
 }
 
-function rdDraw() {
-  const cv = $('rd-canvas');
-  const d = RD.data;
-  if (!cv || !d || !d.x.length) return;
+/* The station layer is a single canvas rather than 23,696 Leaflet markers,
+   which would be 23,696 DOM nodes and an unusable tab. It redraws on every
+   move using Leaflet's own projection, so the dots stay registered against
+   the roads underneath at any zoom. */
+function rdMakeLayer(L) {
+  return L.Layer.extend({
+    onAdd(map) {
+      this._map = map;
+      this._canvas = L.DomUtil.create('canvas', 'rd-overlay');
+      map.getPanes().overlayPane.appendChild(this._canvas);
+      map.on('move zoom resize zoomend moveend', this._draw, this);
+      this._draw();
+    },
+    onRemove(map) {
+      map.off('move zoom resize zoomend moveend', this._draw, this);
+      this._canvas.remove();
+    },
+    _draw() {
+      const map = this._map; const d = RD.data;
+      if (!map || !d || !d.x.length) return;
 
-  const wrap = cv.parentElement;
-  const dpr = window.devicePixelRatio || 1;
-  const w = wrap.clientWidth;
-  const h = Math.max(360, Math.round(w * 0.62));
-  cv.width = w * dpr; cv.height = h * dpr;
-  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+      const size = map.getSize();
+      const dpr = window.devicePixelRatio || 1;
+      const cv = this._canvas;
+      if (cv.width !== size.x * dpr || cv.height !== size.y * dpr) {
+        cv.width = size.x * dpr; cv.height = size.y * dpr;
+        cv.style.width = size.x + 'px'; cv.style.height = size.y + 'px';
+      }
+      /* The overlay pane is translated as the map moves; cancel that so the
+         canvas sits still against the viewport and every dot is placed by
+         container coordinates. */
+      const corner = map.containerPointToLayerPoint([0, 0]);
+      L.DomUtil.setPosition(cv, corner);
 
-  const g = cv.getContext('2d');
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.clearRect(0, 0, w, h);
+      const g = cv.getContext('2d');
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, size.x, size.y);
 
-  const project = rdProject(d.x, d.y, w, h);
-  const gapsOnly = RD.mode === 'gaps';
+      const z = map.getZoom();
+      const r = Math.max(1.3, Math.min(7, 1.3 * Math.pow(1.38, z - 5)));
+      const gapsOnly = RD.mode === 'gaps';
+      const order = gapsOnly ? ['0'] : ['1', '0', '2', '3'];
 
-  /* Worst state first so better states paint over it on the readiness
-     map; on the gap map nothing paints over anything. */
-  const order = gapsOnly ? ['0'] : ['1', '0', '2', '3'];
-  const r = d.x.length > 12000 ? 1.4 : 2.2;
-
-  for (const code of order) {
-    const spec = RD.colours[code];
-    g.beginPath();
-    for (let i = 0; i < d.x.length; i++) {
-      if (d.state[i] !== code) continue;
-      const [px, py] = project(d.x[i], d.y[i]);
-      g.moveTo(px + r, py);
-      g.arc(px, py, r, 0, Math.PI * 2);
-    }
-    if (spec.fill === 'transparent') {
-      g.strokeStyle = spec.stroke; g.lineWidth = 0.7; g.stroke();
-    } else {
-      g.fillStyle = spec.fill;
-      g.globalAlpha = gapsOnly ? 0.85 : 0.72;
-      g.fill();
-      g.globalAlpha = 1;
-    }
-  }
+      /* Anything off-screen is skipped rather than drawn and clipped - at
+         city zoom that is almost the whole country. */
+      const pad = 40;
+      for (const code of order) {
+        const spec = RD.colours[code];
+        g.beginPath();
+        let drew = false;
+        for (let i = 0; i < d.x.length; i++) {
+          if (d.state[i] !== code) continue;
+          const pt = map.latLngToContainerPoint([d.y[i] / d.scale, d.x[i] / d.scale]);
+          if (pt.x < -pad || pt.y < -pad || pt.x > size.x + pad || pt.y > size.y + pad) continue;
+          g.moveTo(pt.x + r, pt.y);
+          g.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+          drew = true;
+        }
+        if (!drew) continue;
+        if (spec.fill === 'transparent') {
+          g.strokeStyle = spec.stroke; g.lineWidth = 0.9; g.stroke();
+        } else {
+          /* A thin dark ring keeps dots separable where they pile up in a
+             metro, and keeps them legible over pale road casings. */
+          g.fillStyle = spec.fill;
+          g.globalAlpha = gapsOnly ? 0.9 : 0.8;
+          g.fill();
+          g.globalAlpha = 1;
+          if (r >= 3) { g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 1; g.stroke(); }
+        }
+      }
+    },
+  });
 }
+
+async function rdEnsureMap() {
+  if (RD.map) return RD.map;
+  const host = $('rd-map');
+  if (!host) return null;
+
+  const L = RD.L ?? (RD.L = await loadLeaflet());
+
+  RD.map = L.map(host, {
+    zoomAnimation: false,        // the overlay is redrawn, not tweened
+    attributionControl: true,
+    worldCopyJump: false,
+  }).setView([-28.8, 24.7], 5);
+
+  /* If the tiles never arrive the map still works: the station layer is
+     added regardless and the background stays dark. */
+  L.tileLayer(BASEMAP_URL, {
+    attribution: BASEMAP_ATTRIB, maxZoom: 19, minZoom: 4,
+  }).on('tileerror', () => {
+    const n = $('rd-basemap-note');
+    if (n) n.textContent =
+      'Road basemap unavailable - station positions are still accurate.';
+  }).addTo(RD.map);
+
+  const StationLayer = rdMakeLayer(L);
+  RD.layer = new StationLayer().addTo(RD.map);
+  return RD.map;
+}
+
+/* Fit the view to whatever is currently selected, so choosing a province
+   actually takes you there instead of leaving you at national zoom. */
+function rdFit() {
+  const d = RD.data; const L = RD.L;
+  if (!RD.map || !L || !d || !d.x.length) return;
+  let minY = Infinity, maxY = -Infinity, minX = Infinity, maxX = -Infinity;
+  for (let i = 0; i < d.x.length; i++) {
+    if (d.y[i] < minY) minY = d.y[i];
+    if (d.y[i] > maxY) maxY = d.y[i];
+    if (d.x[i] < minX) minX = d.x[i];
+    if (d.x[i] > maxX) maxX = d.x[i];
+  }
+  RD.map.fitBounds(
+    [[minY / d.scale, minX / d.scale], [maxY / d.scale, maxX / d.scale]],
+    { padding: [24, 24], animate: false });
+}
+
+function rdDraw() { RD.layer?._draw(); }
 
 function rdRenderLegend() {
   const el = $('rd-legend');
@@ -1009,7 +1116,7 @@ let rdResizeTimer = null;
 window.addEventListener('resize', () => {
   if (!$('view-readiness') || $('view-readiness').hidden) return;
   clearTimeout(rdResizeTimer);
-  rdResizeTimer = setTimeout(rdDraw, 120);
+  rdResizeTimer = setTimeout(() => { RD.map?.invalidateSize(); rdDraw(); }, 120);
 });
 
 /* The completeness panel. A bar per province showing the share of its wards
@@ -1065,12 +1172,16 @@ async function loadReadiness() {
     rdFillFilters(d);
     rdRenderStats(d.totals);
     rdRenderLegend();
+    await rdEnsureMap();
+    /* The pane is hidden until the view opens, and a Leaflet map built in a
+       hidden container measures itself at zero. Re-measure every time. */
+    RD.map?.invalidateSize();
+    rdFit();
     rdDraw();
   } catch (e) {
     /* Never leave the map showing a stale picture that looks current. */
     RD.data = null;
-    const cv = $('rd-canvas');
-    if (cv) cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+    rdDraw();
     $('rd-note').textContent =
       'Could not load station positions: ' + (e?.message ?? e);
   }

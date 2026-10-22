@@ -1931,3 +1931,40 @@ body:has(.ticker:not([hidden])) .stage { padding-bottom: var(--ticker-h); }
   .rc-rate { display: none; }
   .rc-state { grid-column: 1 / -1; }
 }
+
+/* ---- Readiness map: MK palette over a dark road basemap --------- */
+:root { --mk-green: #56AA48; --mk-gold: #F8C030; }
+
+.rd-map-wrap {
+  border: 1px solid var(--line, #2a2a2a); border-radius: 8px;
+  overflow: hidden; background: #0b0d0b;
+}
+#rd-map { width: 100%; height: 540px; background: #0b0d0b; }
+canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
+
+/* Leaflet's own chrome, restyled to match the dashboard rather than sitting
+   on it as a white box. */
+#rd-map .leaflet-control-attribution {
+  background: rgba(11,13,11,.82); color: #8a8f8a; font-size: 10px;
+  border-top-left-radius: 4px;
+}
+#rd-map .leaflet-control-attribution a { color: var(--mk-green); }
+#rd-map .leaflet-bar a {
+  background: #151815; color: #e8e8e8; border-bottom-color: #2a2a2a;
+}
+#rd-map .leaflet-bar a:hover { background: #1f241f; }
+#rd-map .leaflet-bar a.leaflet-disabled { background: #111311; color: #4a4a4a; }
+
+.rd-mode.is-on { background: var(--mk-gold); color: #16161a; border-color: var(--mk-gold); }
+.rc-bar i { background: var(--mk-green); }
+.rc-incomplete .rc-bar i { background: var(--mk-gold); }
+.rc-incomplete .rc-state { color: var(--mk-gold); }
+
+@media (max-width: 680px) { #rd-map { height: 380px; } }
+
+/* OSM tiles are light; darken the tile pane only. The station canvas sits
+   above this pane and is deliberately outside the filter, so MK green and
+   gold stay true while the roads underneath go dark. */
+#rd-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88) saturate(.72);
+}
