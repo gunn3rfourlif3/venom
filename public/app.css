@@ -1689,3 +1689,6 @@ button, input, select { font: inherit; color: inherit; }
   outline: none;
   border-color: var(--ours);
 }
+
+/* Compact enough to sit in a table row without stretching it. */
+.roster-copy { padding: 4px 10px; font-size: var(--step--1); }

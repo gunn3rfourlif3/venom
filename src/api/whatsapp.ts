@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { pool } from '../db.js';
 import { HttpError, json, readJson, readRaw, type Ctx } from './http.js';
 import { requireRole } from './auth.js';
@@ -299,10 +299,17 @@ export async function postWebhook(ctx: Ctx): Promise<void> {
 // ------------------------------------------------------------ roster admin
 
 export async function getRoster(ctx: Ctx): Promise<void> {
+  /* The capture token is a credential, so it goes only to admins and is never
+     rendered on screen — the UI puts it behind a "copy link" button. The
+     roster panel deliberately shows four digits of a phone number; printing a
+     live upload token beside it would undo that care. */
+  const admin = (ctx.role ?? '') === 'admin';
   const { rows } = await pool.query(
     `SELECT phone, display_name, station_id, enabled,
-            last_message_at, added_by, added_at
-       FROM reporter_roster ORDER BY enabled DESC, display_name`);
+            last_message_at, added_by, added_at,
+            CASE WHEN $1 THEN capture_token END AS capture_token,
+            (capture_token IS NOT NULL)        AS has_link
+       FROM reporter_roster ORDER BY enabled DESC, display_name`, [admin]);
   json(ctx.res, 200, { as_of: new Date().toISOString(), data: rows });
 }
 
@@ -352,14 +359,23 @@ export async function postRoster(ctx: Ctx): Promise<void> {
          the same list twice is told it loaded twice — which, when the list is
          several hundred names, is the difference between believing the roster
          is complete and knowing it is. */
+      /* A capture token is issued with the row rather than later, so there is
+         never a marshal on the roster who cannot upload. COALESCE on the
+         conflict path keeps an existing token: re-pasting a list must not
+         invalidate links already sent to people's phones. */
       const r = await pool.query<{ inserted: boolean }>(
-        `INSERT INTO reporter_roster (phone, display_name, added_by, enabled)
-         VALUES ($1,$2,$3,$4)
+        `INSERT INTO reporter_roster
+           (phone, display_name, added_by, enabled, capture_token, token_issued_at)
+         VALUES ($1,$2,$3,$4,$5,now())
          ON CONFLICT (phone) DO UPDATE
-           SET display_name = EXCLUDED.display_name,
-               enabled      = EXCLUDED.enabled
+           SET display_name   = EXCLUDED.display_name,
+               enabled        = EXCLUDED.enabled,
+               capture_token  = COALESCE(reporter_roster.capture_token,
+                                         EXCLUDED.capture_token),
+               token_issued_at = COALESCE(reporter_roster.token_issued_at, now())
          RETURNING (xmax = 0) AS inserted`,
-        [phone, name, ctx.userId ?? 'unknown', body.enabled !== false]);
+        [phone, name, ctx.userId ?? 'unknown', body.enabled !== false,
+         randomBytes(24).toString('base64url')]);
       if (r.rows[0]?.inserted) added.push(phone); else updated.push(phone);
     } catch (error) {
       refused.push({ line: trimmed, reason: (error as Error).message });

@@ -1345,9 +1345,10 @@ async function loadRoster() {
   const shown = rows.slice(0, 40);
   host.innerHTML = `
     <table class="logi-table">
-      <thead><tr><th>Name</th><th>Number</th><th>Last heard</th><th>State</th></tr></thead>
+      <thead><tr><th>Name</th><th>Number</th><th>Last heard</th><th>State</th>
+        <th>Slip link</th></tr></thead>
       <tbody>
-        ${shown.map((r) => `<tr>
+        ${shown.map((r, i) => `<tr>
           <td data-k="Name">${esc(r.display_name)}</td>
           <td data-k="Number"><span class="id">…${esc(String(r.phone).slice(-4))}</span></td>
           <td data-k="Last heard">${r.last_message_at
@@ -1355,11 +1356,37 @@ async function loadRoster() {
             : '—'}</td>
           <td data-k="State">${r.enabled
             ? pill('is-good', 'enabled') : pill('is-unknown', 'off')}</td>
+          <td data-k="Slip link">${r.capture_token
+            ? `<button class="btn roster-copy" data-i="${i}">Copy</button>`
+            : (r.has_link ? '<span class="viz-sub">issued</span>'
+                          : '<span class="viz-sub">—</span>')}</td>
         </tr>`).join('')}
       </tbody>
     </table>
     ${rows.length > shown.length
       ? `<p class="viz-sub">…and ${fmt(rows.length - shown.length)} more.</p>` : ''}`;
+
+  /* The token is never printed on screen. HQ screens are shared and left
+     open; a live upload credential sitting in a table is the same mistake as
+     printing full phone numbers, which this panel already avoids. The button
+     puts the link on the clipboard so it can be pasted straight into the
+     marshal's WhatsApp thread. */
+  host.querySelectorAll('.roster-copy').forEach((el) => {
+    el.addEventListener('click', async () => {
+      const r = shown[Number(el.dataset.i)];
+      const link = `${location.origin}/slip.html#t=${r.capture_token}`;
+      try {
+        await navigator.clipboard.writeText(link);
+        el.textContent = 'Copied';
+      } catch {
+        /* Clipboard access is refused on an insecure origin and in some
+           embedded browsers. Falling back to a prompt is ugly but leaves the
+           operator with the link rather than a button that did nothing. */
+        window.prompt(`Link for ${r.display_name}:`, link);
+      }
+      setTimeout(() => { el.textContent = 'Copy'; }, 2000);
+    });
+  });
 }
 
 /* Only the last four digits are ever shown. HQ needs to recognise a marshal,

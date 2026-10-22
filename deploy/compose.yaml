@@ -76,6 +76,14 @@ services:
     image: xnith-app:local
     restart: unless-stopped
     env_file: .env
+    environment:
+      # Result-slip photographs. Must point at the mounted volume below: the
+      # default is a directory inside the container, so without this every
+      # photograph would be destroyed by the next `up -d --build` — silently,
+      # because the database rows would survive and only the images would go.
+      SLIP_STORE: /var/lib/xnith/slips
+    volumes:
+      - slip-store:/var/lib/xnith/slips
     # No published host port either: Caddy reaches this container by name over
     # deploy_default. One less thing listening on the host.
     networks:
@@ -101,6 +109,11 @@ services:
 
 volumes:
   db-data:
+  # The photographs. Separate from db-data because they have a different
+  # backup story: the nightly pg_dump does not contain them, and at ~300KB
+  # across up to 66,183 slips this is tens of gigabytes that must not go
+  # anywhere near a dump that has to restore quickly.
+  slip-store:
 
 networks:
   # Ours. app <-> db, and nothing else on this box can see it.

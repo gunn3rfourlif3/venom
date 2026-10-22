@@ -218,7 +218,29 @@ See `GOTCHAS.md` G1. My recommendation is to rename *after* 4 November: GitHub
 redirects old remotes, so it is safe, but it is pointless churn during a
 freeze.
 
-### Q14 · Result-slip capture on election night — `OPEN`
+### Q14 · Result-slip capture on election night — `ANSWERED 22 Oct`
+**Answer:** yes — the ground operation will realistically photograph and
+transcribe slips on the night. Promoted out of `[POST]` and into the build.
+
+Scoping it surfaced something the question itself had not: **a station does
+not produce one slip.** A metro station produces two (ward + municipal PR) and
+a local-municipality station three (plus district PR). Against the register
+that is 5,070 metro and 18,681 local stations — **66,183 slips**, not 23,751.
+A capture flow accepting "the slip" per station would have lost two of every
+three counts across most of the country, and would have reported full coverage
+while doing it.
+
+Schema is in `029_result_slips.sql`: photographs kept separately from
+transcriptions, every slip transcribed **twice by different operators**,
+disagreements and failed reconciliations surfaced as views. What remains is
+the upload path, the transcription screen, and the coverage screen.
+
+Still open underneath it: marshals cannot send photographs through the
+WhatsApp API while Meta is uncleared (Q15), so the capture path must not
+depend on it — a page they open on a phone, with WhatsApp as an addition
+later rather than the foundation.
+
+<details><summary>Original question</summary>
 Currently a `[POST]` candidate that could be promoted into the fortnight if
 week one finishes early.
 **Why it is time-critical in a way nothing else here is:** it is the only item
@@ -227,3 +249,4 @@ the same inputs on 5 November as it does on 3 November. This one does not.
 **Needs from you:** whether the ground operation will realistically photograph
 and transcribe slips on the night, because the feature is worthless without
 that behaviour.
+</details>

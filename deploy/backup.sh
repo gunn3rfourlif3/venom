@@ -49,6 +49,21 @@ echo "ok ${OUT}.gz ($(stat -c %s "${OUT}.gz") bytes)"
 find "$BACKUP_DIR" -name 'xnith-*.dump.gz' -mtime +"$KEEP_DAYS" -delete
 
 # ---------------------------------------------------------------------------
+# WHAT THIS DOES NOT COVER
+#
+# Result-slip photographs. They live in the `slip-store` volume, not in
+# Postgres, so nothing above touches them. The database keeps the path and the
+# SHA-256 of each image; if the volume is lost, those rows point at nothing and
+# the one piece of evidence that cannot be re-collected is gone.
+#
+# They are excluded from the dump on purpose - tens of gigabytes would make the
+# nightly restore unusable, and the restore is the thing that has to work - but
+# excluded is not the same as backed up. Copy the volume separately:
+#
+#   docker run --rm -v xnith_slip-store:/s -v "$BACKUP_DIR":/b alpine \
+#     tar czf /b/slips-$(date -u +%Y%m%d).tar.gz -C /s .
+#
+# ---------------------------------------------------------------------------
 # OFF-BOX COPY — the line between a backup and a false sense of one.
 #
 # Everything above writes to the same disk as the database. If that disk
