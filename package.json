@@ -14,22 +14,24 @@
     "ingest:baseline": "node --env-file=.env dist/cli/ingest-baseline.js",
     "promote": "node --env-file=.env dist/cli/promote.js",
     "verify:promotion": "node --env-file=.env dist/cli/verify-promotion.js",
-    "api": "node --env-file=.env dist/api/server.js",
-    "create-user": "node --env-file=.env dist/cli/create-user.js",
     "sources:official": "node --env-file=.env dist/cli/sources-official.js",
-    "sources:cameras": "node --env-file=.env dist/cli/sources-cameras.js",
     "sources:news": "node --env-file=.env dist/cli/sources-news.js",
     "sources:press": "node --env-file=.env dist/cli/sources-press.js",
     "sources:instagram": "node --env-file=.env dist/cli/sources-instagram.js",
+    "sources:cameras": "node --env-file=.env dist/cli/sources-cameras.js",
     "daily": "node --env-file=.env dist/cli/daily.js",
     "retention:purge": "node --env-file=.env dist/cli/retention-purge.js",
+    "api": "node --env-file=.env dist/api/server.js",
+    "create-user": "node --env-file=.env dist/cli/create-user.js",
     "sources:register": "node --env-file=.env dist/cli/sources-register.js",
     "clean:synthetic": "node --env-file=.env dist/cli/clean-synthetic.js",
     "coverage": "node --env-file=.env dist/cli/coverage.js",
-    "alerts:check": "node --env-file=.env dist/cli/alerts-check.js"
+    "alerts:check": "node --env-file=.env dist/cli/alerts-check.js",
+    "import:facts": "node --env-file=.env dist/cli/import-facts.js"
   },
   "dependencies": {
-    "pg": "8.13.1"
+    "pg": "8.13.1",
+    "playwright": "^1.49.1"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
