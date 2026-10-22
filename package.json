@@ -30,8 +30,7 @@
     "import:facts": "node --env-file=.env dist/cli/import-facts.js"
   },
   "dependencies": {
-    "pg": "8.13.1",
-    "playwright": "^1.49.1"
+    "pg": "8.13.1"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
