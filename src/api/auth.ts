@@ -101,7 +101,15 @@ const RANK: Record<string, number> = { viewer: 0, reporter: 1, treasurer: 2, adm
 
 export function requireRole(ctx: Ctx, minimum: string): void {
   const have = RANK[ctx.role ?? 'viewer'] ?? 0;
-  const need = RANK[minimum] ?? 0;
+  const need = RANK[minimum];
+  /* An unknown role name used to resolve to rank 0, which meant that
+     requireRole(ctx, 'operator') - a role that does not exist - admitted
+     every signed-in viewer while reading like a restriction. A guard whose
+     failure mode is "allow" is worse than no guard, because it is believed.
+     Fail loudly instead: this is a programming error, not a user error. */
+  if (need === undefined) {
+    throw new HttpError(500, `Unknown role "${minimum}"`);
+  }
   if (have < need) throw new HttpError(403, 'Insufficient role');
 }
 

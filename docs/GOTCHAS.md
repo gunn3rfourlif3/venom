@@ -530,3 +530,38 @@ must run from `~/xnith/deploy` and auto-loads `.env` there.
 wrong because it is only *read*. Anything describing a command should be run
 from the document, start to finish, on the real box — and a health check
 that passes after a failed deploy proves nothing.
+
+### G41 · A 64KB body limit that only a too-small test image survived
+`readJson` defaults to a 64,000-byte limit, which is right for every other
+endpoint in the API and wrong for the one that carries a photograph. The slip
+upload inherited the default. Every rejection path tested correctly — bad
+token, wrong ballot for the station's category, non-image bytes, bogus
+station — because the test image was a 2.5KB synthetic JPEG of a flat colour.
+
+A real downscaled slip photograph is 200-400KB, and base64 adds a third
+again. **Every genuine upload would have been refused** with "Body too large",
+and the ten-case test suite said the endpoint was sound.
+
+Found by re-running the same tests with a 1600×1200 image carrying
+photographic noise, so JPEG could not compress it away: 991KB, and an
+immediate 413.
+**Fixed:** the limit is passed explicitly and derived from MAX_BYTES rather
+than inherited.
+**Lesson:** a synthetic fixture that is smaller, cleaner or more regular than
+the real thing tests the code against a world that does not exist. Size is
+part of the input. The same mistake in a different coat as G29, where a job
+that fetched nothing exited 0 — the test agreed with the code, and both were
+wrong about reality.
+
+### G42 · requireRole admitted everyone for a role that did not exist
+`requireRole(ctx, 'operator')` reads like a restriction. There is no
+`operator` role — the ranks are viewer, reporter, treasurer, admin — and the
+lookup resolved the unknown name to rank 0 via `?? 0`, so the check passed for
+every signed-in user including a plain viewer. It was guarding the endpoint
+that serves marshal-captured photographs.
+**Fixed:** an unknown role name now throws 500. A typo fails loudly instead of
+opening the door.
+**Lesson:** this is the `?? 0` family again (G29) and the SUPPLY_OK else-branch
+(028): **a default that means "permit" or "fine" will eventually be reached by
+input nobody considered.** A guard whose failure mode is "allow" is worse than
+no guard, because it is believed.

@@ -18,6 +18,7 @@ import { HttpError, json, type Ctx } from './http.js';
 import { routes } from './routes.js';
 import { logistics } from './logistics.js';
 import { whatsapp } from './whatsapp.js';
+import { slips } from './slips.js';
 import { purgeExpiredSessions } from './auth.js';
 import { LiveHub } from './live.js';
 import { serveStatic } from './static.js';
@@ -78,9 +79,18 @@ const table: Route[] = [
   { method: 'GET',  pattern: /^\/api\/alerts$/,            handler: logistics.getAlerts },
   { method: 'POST', pattern: /^\/api\/alerts\/([^/]+)\/ack$/,
     handler: async (ctx, id) => logistics.postAlertAck(ctx, id ?? '') },
-  { method: 'GET',  pattern: /^\/api\/alerts$/,            handler: logistics.getAlerts },
-  { method: 'POST', pattern: /^\/api\/alerts\/([^/]+)\/ack$/,
-    handler: async (ctx, id) => logistics.postAlertAck(ctx, id ?? '') },
+
+  /* Result-slip capture. The marshal's two routes carry no session — they are
+     authenticated by the token in the request, because a marshal has no
+     account (migration 030). The image route is session-authenticated and
+     role-gated like everything else. */
+  { method: 'POST', pattern: /^\/api\/slip$/,              open: true,
+    handler: slips.postSlip },
+  { method: 'GET',  pattern: /^\/api\/slip\/stations$/,    open: true,
+    handler: slips.getCaptureStations },
+  { method: 'GET',  pattern: /^\/api\/slip\/([0-9]+)\/image$/,
+    handler: async (ctx, id) => slips.getSlipImage(ctx, id ?? '') },
+
   { method: 'GET',  pattern: /^\/api\/roster$/,            handler: whatsapp.getRoster },
   { method: 'POST', pattern: /^\/api\/roster$/,            handler: whatsapp.postRoster },
   { method: 'GET',  pattern: /^\/api\/ingest-exceptions$/, handler: whatsapp.getExceptions },
