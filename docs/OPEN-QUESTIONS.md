@@ -90,12 +90,45 @@ such in `ward.roll_source`.
 **Why it matters:** it is the denominator. Without it there is no turnout, no
 ward-size-versus-norm heatmap, and no turnout model — and the 30% tolerance
 band cannot be verified against the data either.
-**Candidates, in order of likely effort:** the IEC's registration statistics
-by ward (published between elections); the ward-level results downloads, which
-carry registered voters alongside votes; the results API once credentials
-arrive.
 **Interim:** `v_register_coverage.wards_with_real_roll` reads 0 outside
 Gauteng, so nothing can quietly present a synthetic denominator as real.
+
+#### Checked, 22 October — the three candidates are not equal
+
+The first candidate does not exist in the form assumed. **The IEC's voter
+registration statistics page is a screen, not a dataset.** It offers province
+and municipality selectors and age/gender breakdowns, publishes a national
+total (29,230,808 as at 29 September 2026), and provides **no ward or
+voting-district breakdown and no file download of any kind**.
+<https://www.elections.org.za/pw/StatsData/Voter-Registration-Statistics>
+
+The second is real but manual. **Past results are downloadable without
+credentials**, in Excel and PDF, and the local-government detailed results go
+down to voting-district level.
+<https://results.elections.org.za/home/Downloads/ME-Results>
+The page needs a year selected before it lists reports, so this is a
+browser-and-click job rather than a fetch, and it would have to be done per
+municipality. Whether those files carry registered population per VD alongside
+the votes is **unconfirmed** — turnout is calculated from a registered
+population, so it is likely present, but nobody has opened one and looked.
+
+The third — the results API — needs credentials, which are issued by emailing
+`webmaster@elections.org.za`. There is no self-service signup and no published
+turnaround. Requested 22 October.
+
+**What this means for planning.** Past results have a public fallback that
+costs effort and no permission. **The registered-voter denominator does not.**
+If the API credentials do not arrive, Q16 stays open unless one of the
+downloadable reports turns out to carry registered population — so the single
+highest-value hour anyone can spend on this is **downloading one
+local-government detailed result file and looking at its columns.** That
+answers whether this question has a fallback at all, and it needs no
+credentials, no code and no permission.
+
+**Not on the critical path for 4 November.** Logistics, result-slip capture
+and transcription all run on the register as it stands. Q16 gates the
+projection and targeting layer — valuable, but it is not what the night
+depends on.
 
 ### Q5 · Who operates the paste form on the day? — `ANSWERED` 2026-10-21
 **Answer:** nobody, as the primary path. Ingest is automated.
