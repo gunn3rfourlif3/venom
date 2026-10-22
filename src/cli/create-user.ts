@@ -33,9 +33,22 @@ async function main(): Promise<void> {
     [userId, email, displayName, role, passwordHash],
   );
 
+  /* A password reset that leaves existing sessions alive is half a rotation.
+     session_id is a raw random token matched directly against the cookie, so
+     a session created with the OLD password keeps working until it expires -
+     which means that if the reason for rotating is "the old password was
+     exposed", anyone already holding a session is untouched by the reset.
+     Revoking them here makes the rotation mean what people assume it means.
+     The cost is that this user is signed out of their own browsers, which is
+     the correct trade and is said out loud below. */
+  const revoked = await pool.query('DELETE FROM session WHERE user_id = $1', [userId]);
+
   console.log(`user_id : ${userId}`);
   console.log(`role    : ${role}`);
   console.log(`password: ${password}`);
+  if ((revoked.rowCount ?? 0) > 0) {
+    console.log(`sessions: ${revoked.rowCount} revoked - this user must sign in again everywhere`);
+  }
   console.log('\nShown once. It is not stored anywhere in readable form.');
 }
 
