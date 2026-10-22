@@ -137,10 +137,13 @@ async function loadWards() {
   document.querySelector('.filters')?.classList.add('is-waiting');
   return whileLoading('view-wards', async () => {
     const [wards, targets] = await Promise.all([
-      api('/api/wards?limit=1000'),
+      api(`/api/wards?limit=${WARD_LIMIT}`),
       api('/api/targets?limit=1000'),
     ]);
     state.wards = wards.data;
+    /* The server counts the whole set separately, so the label can report
+       what exists rather than what arrived. */
+    state.wardsTotal = Number(wards.total ?? wards.data.length);
     state.targets = new Map(targets.data.map((t) => [t.ward_id, t]));
 
     const municipalities = [...new Set(state.wards.map((w) => w.municipality))].sort();
@@ -218,7 +221,11 @@ function visibleWards() {
 function renderLedger() {
   const rows = visibleWards();
   $('filter-count').textContent =
-    `${rows.length} of ${state.wards.length} wards`;
+    `${fmt(rows.length)} of ${fmt(state.wardsTotal ?? state.wards.length)} wards`
+    /* If fewer arrived than exist, say so. The old label read "28 of 1000
+       wards" on a register of 4,485 — a truncation presented as a total. */
+    + ((state.wardsTotal ?? 0) > state.wards.length
+        ? ` — only ${fmt(state.wards.length)} loaded` : '');
   $('ledger-empty').hidden = rows.length > 0;
 
   $('ledger').innerHTML = rows.map((w) => {
@@ -762,6 +769,10 @@ async function loadHealth() {
 }
 
 /* ------------------------------------------------------------ views */
+
+/* Above the national register of 4,485 so the directory holds all of it.
+   Named rather than inline so the label below can test against it. */
+const WARD_LIMIT = 6000;
 
 const VIEWS = ['logistics', 'slips', 'overview', 'wards', 'sentiment', 'decisions',
                'viewshed', 'float', 'health', 'settings'];

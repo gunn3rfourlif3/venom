@@ -58,7 +58,13 @@ async function getMe(ctx: Ctx): Promise<void> {
 /** The ranked ward list. Ordered by priority_rank, which is box first and
  *  score within box, so the top of this list is the work. */
 async function getWards(ctx: Ctx): Promise<void> {
-  const limit = intParam(ctx.url, 'limit', 100, 1, 1000);
+  /* The ceiling was 1000 against a national register of 4,485 wards. The
+     directory loads the whole list and filters in the browser, so the cap
+     silently hid 3,485 wards AND limited the municipality dropdown to
+     municipalities appearing in the first 1000 by priority_rank. The
+     response has always carried a true `total` from a separate count; the
+     label just was not using it. Both halves are fixed. */
+  const limit = intParam(ctx.url, 'limit', 100, 1, 10000);
   const offset = intParam(ctx.url, 'offset', 0, 0, 100000);
   const box = enumParam(ctx.url, 'box', ['Recruit', 'Contest', 'Hold', 'Abandon']);
   const municipality = ctx.url.searchParams.get('municipality');
@@ -124,7 +130,12 @@ async function getWard(ctx: Ctx, wardId: string): Promise<void> {
 async function getTargets(ctx: Ctx): Promise<void> {
   const targetClass = enumParam(ctx.url, 'class',
     ['ACT NOW', 'WATCH', 'PRESSURE ONLY', 'QUIET']);
-  const limit = intParam(ctx.url, 'limit', 200, 1, 1000);
+  /* The ceiling was 1000 against a national register of 4,485 wards, so the
+     directory silently showed the first 1000 and the municipality filter
+     could only offer municipalities that appeared among them. Raised past
+     the register so the whole thing fits; the client is told the ceiling it
+     asked for so it can say when it has hit one. */
+  const limit = intParam(ctx.url, 'limit', 200, 1, 10000);
   const result = await pool.query(
     `SELECT * FROM v_ward_target
       WHERE ($1::text IS NULL OR target_class = $1)
