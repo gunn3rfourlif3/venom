@@ -7,4 +7,9 @@ Requires=docker.service
 Type=oneshot
 User=deploy
 WorkingDirectory=/home/deploy/xnith/deploy
+# AGE_RECIPIENT lives here, not in .env, because .env is read by the app
+# container and the backup key has nothing to do with the application. It is
+# a PUBLIC key: there is no secret on this box to protect, which is the whole
+# reason for using public-key mode.
+EnvironmentFile=-/home/deploy/xnith/deploy/backup.env
 ExecStart=/home/deploy/xnith/deploy/backup.sh

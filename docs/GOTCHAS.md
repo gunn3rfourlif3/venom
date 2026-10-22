@@ -565,3 +565,39 @@ opening the door.
 (028): **a default that means "permit" or "fine" will eventually be reached by
 input nobody considered.** A guard whose failure mode is "allow" is worse than
 no guard, because it is believed.
+
+### G43 · The nightly dump is a credential file, not just a database
+Setting up the off-box copy meant asking what is actually in a dump. The
+answer changed the design:
+
+- `reporter_roster.capture_token` — live upload links, stored in plaintext
+  because they are looked up directly. Anyone holding one can file result
+  slips as that marshal.
+- `session.session_id` — session cookies, generated with `randomBytes(32)`
+  and stored **raw**, matched directly against the cookie. Every unexpired
+  row in that table is a working login. There were 44 of them in a dev
+  database.
+- Phone numbers across five tables: `reporter_roster`, `booth_report`,
+  `inbound_message`, `alert_recipient`, `station`.
+
+A plain `.gz` of that sitting on any other disk is not "a backup containing
+some personal data". It is a file that grants access.
+
+**Fixed:** `age` in **public-key** mode. The server holds only the recipient
+public key, so it encrypts copies it cannot itself read — a compromised box
+does not surrender its own backup history, and the private key never touches
+the server. Verified: the round trip restores byte-identically, and the
+public key alone cannot decrypt.
+
+Two consequences worth stating:
+- **The workstation pulls; the server never pushes.** No SSH server on the
+  home machine, no forwarded port, no home credential on a public-facing box
+  — and a compromised VPS cannot delete copies already pulled.
+- **Losing the private key destroys every backup**, with no recovery. It
+  needs a second copy somewhere that is not the machine holding the backups.
+
+**Lesson:** "what is in the backup" is a question with a different answer
+from "what is in the database", because a backup is read somewhere else, by
+someone else, later. Credentials that are harmless in a running system
+because they are behind an application become the whole attack surface once
+they are a file on a disk.

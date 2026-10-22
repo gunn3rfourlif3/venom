@@ -518,6 +518,125 @@ docker compose exec -T db dropdb -U xnith restore_test
 If those counts are wrong or the restore errors, **fix it today**, not on
 4 November.
 
+### 9b. The off-box copy
+
+Everything above writes to the same disk as the database. Until a copy leaves
+the machine, these dumps protect against a bad migration and not against
+losing the machine.
+
+**The workstation pulls; the server never pushes.** That direction means no
+SSH server on the home machine, no port forwarded to it from the internet, no
+credential for the home network stored on a public-facing box — and, the part
+that matters, a compromised VPS cannot reach in and delete the copies already
+pulled.
+
+**The dump is encrypted before it leaves, and this is not a formality.** It
+contains working credentials: `reporter_roster.capture_token` (live upload
+links — anyone holding one can file slips as that marshal), `session.session_id`
+(session cookies, stored raw and matched directly, usable until they expire),
+and phone numbers across five tables. A plain `.gz` of that on any other disk
+is a credential file.
+
+`age` is used in **public-key mode**, so the server holds only the public key
+and cannot read back what it has written.
+
+#### One-time setup
+
+**1 — On the workstation, make the keypair.** Not on the server.
+
+```powershell
+age-keygen -o $env:USERPROFILE\.ssh\xnith-backup.key
+# prints: Public key: age1........
+```
+
+> **Keep a second copy of that private key somewhere that is not this
+> machine** — a password manager entry, or printed in a drawer. If it is lost,
+> every backup is scrap. Not difficult to recover: impossible. A disk failure
+> that takes the key and the copies together leaves nothing.
+
+**2 — On the VPS, install age and record the public key.**
+
+```bash
+sudo apt-get update && sudo apt-get install -y age
+printf 'AGE_RECIPIENT=age1........\n' > /home/deploy/xnith/deploy/backup.env
+chmod 600 /home/deploy/xnith/deploy/backup.env
+sudo systemctl daemon-reload
+sudo systemctl start xnith-backup.service
+ls -l /home/deploy/xnith/backups/*.age
+```
+
+The last line is the test. No `.age` file means `AGE_RECIPIENT` was not picked
+up, and `backup.sh` will have said so on stderr — check
+`journalctl -u xnith-backup.service -n 20`.
+
+**3 — On the workstation, schedule the pull.**
+
+```powershell
+# run it once by hand first, and read the output
+cd C:\xampp\htdocs\development\venom\deploy
+.\pull-backups.ps1
+
+# then daily at 03:30, an hour and a half after the server's dump
+$a = New-ScheduledTaskAction -Execute 'powershell.exe' `
+  -Argument '-NoProfile -ExecutionPolicy Bypass -File "C:\xampp\htdocs\development\venom\deploy\pull-backups.ps1"'
+$t = New-ScheduledTaskTrigger -Daily -At 3:30am
+Register-ScheduledTask -TaskName 'Xnith backup pull' -Action $a -Trigger $t `
+  -Description 'Pulls encrypted nightly Xnith backups from the VPS'
+```
+
+The machine must be awake at 03:30. If it is not, nothing is lost — the server
+keeps encrypted copies for 28 days and the next run collects whatever it
+missed. What *is* a problem is the machine being off for a month, so the
+script warns when the newest copy it holds is over two days old.
+
+#### Restoring from an encrypted copy
+
+**This procedure was rehearsed end to end, not written from memory.** The dump
+was taken, encrypted, moved off-box, decrypted, restored, and the row counts
+checked: 4,485 wards, 23,751 stations, 6 users, 7 roster.
+
+On the workstation, decrypt and send it back up:
+
+```powershell
+cd $env:USERPROFILE\xnith-backups
+$latest = Get-ChildItem *.dump.gz.age | Sort-Object LastWriteTime -Desc | Select -First 1
+age -d -i $env:USERPROFILE\.ssh\xnith-backup.key $latest.Name > restored.dump.gz
+# -> scp restored.dump.gz to the server, then the block below
+```
+
+On the server:
+
+```bash
+gunzip -f restored.dump.gz
+cd /home/deploy/xnith/deploy
+docker compose exec -T db dropdb -U xnith --if-exists restore_test
+docker compose exec -T db createdb -U xnith restore_test
+docker compose exec -T db pg_restore -U xnith -d restore_test < restored.dump
+
+docker compose exec -T db psql -U xnith -d restore_test -c \
+  "SELECT (SELECT count(*) FROM ward) AS wards,
+          (SELECT count(*) FROM station) AS stations,
+          (SELECT count(*) FROM app_user) AS users;"
+docker compose exec -T db dropdb -U xnith restore_test
+```
+
+`pg_restore` reporting "errors ignored on restore: 3" is normal — those are
+ownership statements for roles that do not exist in a scratch database. The
+row counts are what decide whether the restore worked.
+
+#### What is still not backed up
+
+Result-slip photographs, in the `slip-store` volume. Tens of gigabytes, so
+they are deliberately out of the nightly dump — but the database keeps only
+the path and SHA-256 of each image, so losing that volume means those rows
+point at nothing, and the one piece of evidence that cannot be re-collected is
+gone. Copy it separately, at least once after election night:
+
+```bash
+docker run --rm -v xnith_slip-store:/s -v /home/deploy/xnith/backups:/b alpine \
+  tar czf /b/slips-$(date -u +%Y%m%d).tar.gz -C /s .
+```
+
 ---
 
 ## 10. Host hardening

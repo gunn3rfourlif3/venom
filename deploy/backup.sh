@@ -15,6 +15,11 @@ DEPLOY_DIR="${DEPLOY_DIR:-/home/deploy/xnith/deploy}"
 BACKUP_DIR="${BACKUP_DIR:-/home/deploy/xnith/backups}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
 
+# The PUBLIC age key that nightly dumps are encrypted to. Encrypt-only: this
+# box cannot read back what it has written, which is the point. Unset means
+# no off-box copy is prepared, and the script says so loudly.
+AGE_RECIPIENT="${AGE_RECIPIENT:-}"
+
 cd "$DEPLOY_DIR"
 mkdir -p "$BACKUP_DIR"
 
@@ -67,14 +72,67 @@ find "$BACKUP_DIR" -name 'xnith-*.dump.gz' -mtime +"$KEEP_DAYS" -delete
 # OFF-BOX COPY — the line between a backup and a false sense of one.
 #
 # Everything above writes to the same disk as the database. If that disk
-# fails, the dumps go with it, and the Contabo snapshot is a point-in-time
-# image of the whole VPS rather than a database you can restore selectively.
+# fails, the dumps go with it, and the Contabo snapshot is an image of the
+# whole VPS rather than a database you can restore selectively.
 #
-# Configure one of these and uncomment it:
+# THIS SERVER DOES NOT PUSH. It encrypts a copy and leaves it here; the
+# workstation pulls it (deploy/pull-backups.ps1, run by Task Scheduler).
+# That direction is deliberate:
 #
-#   rclone copy "${OUT}.gz" remote:xnith-backups/
-#   scp "${OUT}.gz" user@elsewhere:/backups/
+#   - no SSH server on the home machine, and no port forwarded to it
+#   - the VPS holds no credential for the home network
+#   - a compromised VPS cannot reach the copies already pulled, so it cannot
+#     destroy the backup history along with the live database
 #
-# Until this is on, the backups protect against a bad migration or a dropped
-# table, and not against losing the machine.
+# The dump is encrypted before it is left anywhere, and not as a formality.
+# It contains working credentials, not merely personal data:
+#
+#   reporter_roster.capture_token  live upload links - anyone holding one can
+#                                  file result slips as that marshal
+#   session.session_id             live session cookies, stored raw and
+#                                  matched directly, usable until they expire
+#   phone numbers                  in reporter_roster, booth_report,
+#                                  inbound_message, alert_recipient, station
+#
+# age is used in PUBLIC KEY mode. This box holds only the recipient's public
+# key, so a box that is compromised does not hand over its own backup
+# history, and the private key never touches the server.
 # ---------------------------------------------------------------------------
+
+if [ -z "$AGE_RECIPIENT" ]; then
+  echo "WARNING: AGE_RECIPIENT is not set - no encrypted copy was prepared." >&2
+  echo "         This dump protects against a bad migration, not against losing the machine." >&2
+  exit 0
+fi
+
+command -v age >/dev/null || { echo "FATAL: age is not installed" >&2; exit 1; }
+
+ENC="${OUT}.gz.age"
+age -r "$AGE_RECIPIENT" -o "$ENC" "${OUT}.gz"
+
+# Refuse to keep something that is not actually an age file. A truncated or
+# empty encryption is the worst outcome here: it looks like a backup for
+# months and cannot be opened on the day it is needed.
+if [ ! -s "$ENC" ] || ! head -c 22 "$ENC" | grep -q 'age-encryption.org'; then
+  echo "FATAL: encryption produced something that is not an age file" >&2
+  rm -f "$ENC"
+  exit 1
+fi
+
+# The header check alone would pass a file that starts correctly and then
+# stops. This box cannot decrypt to verify properly - that is the whole point
+# of public-key mode - but age never shrinks its input, so an encrypted file
+# smaller than the plaintext is wrong on its face.
+PLAIN_BYTES=$(stat -c %s "${OUT}.gz")
+ENC_BYTES=$(stat -c %s "$ENC")
+if [ "$ENC_BYTES" -lt "$PLAIN_BYTES" ]; then
+  echo "FATAL: encrypted file is ${ENC_BYTES} bytes against ${PLAIN_BYTES} plaintext - truncated" >&2
+  rm -f "$ENC"
+  exit 1
+fi
+
+echo "encrypted ${ENC} ($(stat -c %s "$ENC") bytes) - awaiting pull"
+
+# Encrypted copies are kept a little longer than the plain ones, because they
+# are the ones that leave. Still bounded: this is not an archive.
+find "$BACKUP_DIR" -name 'xnith-*.dump.gz.age' -mtime +"$((KEEP_DAYS * 2))" -delete
