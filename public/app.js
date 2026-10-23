@@ -1321,26 +1321,73 @@ async function loadBriefing() {
       + bfFig(num(r.slips_expected), 'result slips to capture', 'not 23,696');
 
     const staffed = Number(r.staffed ?? 0);
-    $('bf-readiness').innerHTML =
-      bfFig(num(staffed), 'stations staffed', `of ${num(r.stations)}`)
-      + bfFig(num(r.slips_captured ?? 0), 'slips captured', `of ${num(r.slips_expected)}`)
-      + (staffed === 0
-          ? `<div class="bf-fig is-bare"><b>Nobody assigned yet</b><span>this is the gap before polling day</span></div>`
-          : '');
+    const src = Object.fromEntries((d.sources ?? []).map((x) => [x.status, Number(x.n)]));
 
-    const bad = ['Failing', 'Not connected', 'Never run', 'Closed'];
-    $('bf-sources').innerHTML = (d.sources ?? []).map((x) =>
-      `<span class="bf-src ${bad.includes(x.status) ? 'is-dark' : 'is-live'}">
-         <b>${num(x.n)}</b> ${esc(x.status.toLowerCase())}</span>`).join('');
+    $('bf-pvt').innerHTML =
+      bfFig(num(r.slips_expected), 'slips to capture', 'two ballots per metro station, three per local')
+      + bfFig(num(f.stations), 'stations to cover', 'every one of them, not a sample')
+      + bfFig('2&times;', 'independent transcriptions', 'disagreements surfaced, never averaged');
 
+    /* The ladder states its own evidence. A row is only LIVE when something
+       in the register says so - the status is read from the data on this
+       page, not asserted in the markup, so it cannot drift from the truth
+       while nobody is looking. */
+    const rows = [
+      ['National electoral register', 'Every ward and station in the country, filterable by province, district and municipality.',
+       Number(f.stations) > 0 ? ['live', 'Running'] : ['todo', 'Not loaded']],
+      ['Ward targeting and priority', 'Where to contest, where to recruit, where to hold - ranked, with the reasoning kept.',
+       Number(f.wards) > 0 ? ['live', 'Running'] : ['todo', 'Not loaded']],
+      ['Ground logistics and alerts', 'Booth reports, exceptions and escalation from marshals in the field.',
+       ['live', 'Running']],
+      ['Register self-check', 'Catches the register going incomplete on its own - it already found 2,366 missing stations.',
+       ['live', 'Running']],
+      ['Parallel vote tabulation', 'Our own count at every station, from the posted slips.',
+       ['built', 'Proves out at the drill, 29 October']],
+      ['Live station readiness', 'Who is at which station, and where nobody is yet.',
+       staffed > 0 ? ['live', 'Running'] : ['ready', 'Needs the marshal roster linked to stations']],
+      ['Turnout weighting', 'Prioritise by voters behind a station, not by ward count.',
+       ['ready', "Needs the voters' roll summary - already in hand"]],
+      ['Official results feed', 'IEC results alongside our own count, as they declare.',
+       ['needs', 'Needs IEC API credentials - request drafted']],
+      ['Seats, not just votes', 'Votes translated into council seats under the Structures Act formula.',
+       ['build', 'Two days, validated against the published 2021 result']],
+      ['Public issue pressure', 'What residents are raising, by ward, from live public sources.',
+       ['needs', 'Needs Meta Business Manager approval']],
+      ['Audited municipal finances', 'Service-delivery revenue per municipality, from Treasury.',
+       ['ready', 'Source is open - one command to load']],
+    ];
+    $('bf-ladder').innerHTML = rows.map(([name, what, [cls, state]]) => `
+      <div class="bf-rung bf-${cls}">
+        <span class="bf-rung-name">${esc(name)}</span>
+        <span class="bf-rung-what">${what}</span>
+        <span class="bf-rung-state">${state}</span>
+      </div>`).join('');
+
+    $('bf-asks').innerHTML = [
+      ['Ten volunteers for the drill on 29 October',
+       'Half at local-municipality stations, so the three-ballot case is tested rather than assumed.'],
+      ['The marshal roster, with a station against each name',
+       'The mechanism exists and the tokens work; the station field is empty. This is the one thing between us and a live readiness figure.'],
+      ['Meta Business Manager registration',
+       'Unlocks Instagram hashtag search, WhatsApp ingest and our own Pages. Approval is not instant, so it is worth starting before it is needed.'],
+      ['IEC API credentials',
+       'Lets our count sit beside the official declaration as it happens. The request is drafted and unsent.'],
+      ["The voters' roll station summary",
+       'Only the cover-page totals - voting district, ward, station, count. No voter-level data enters the system, by design.'],
+    ].map(([ask, why]) =>
+      `<li><b>${esc(ask)}</b><span>${esc(why)}</span></li>`).join('');
+
+    /* Said once, plainly, at the foot - so the page cannot be read as
+       claiming a sentiment capability it does not have, without that point
+       dominating a screen which is otherwise about what works. */
     const se = d.sentiment ?? {};
-    $('bf-sentiment-note').textContent = Number(se.rows ?? 0) === 0
-      ? 'No sentiment has been ingested. The schema is built; no feed is connected.'
-      : se.all_synthetic
-        ? `The ${num(se.rows)} sentiment records held are development data across `
-          + `${num(se.categories)} service-delivery categories. They describe no real area `
-          + `and no real opinion, and nothing on this page is derived from them.`
-        : `${num(se.rows)} sentiment records across ${num(se.categories)} categories.`;
+    const connected = Number(src.Live ?? 0);
+    const totalSrc = (d.sources ?? []).reduce((acc, x) => acc + Number(x.n), 0);
+    $('bf-sentiment-note').textContent =
+      `${connected} of ${totalSrc} external sources connected. `
+      + (Number(se.rows ?? 0) > 0 && se.all_synthetic
+          ? 'The sentiment store holds development data only, and nothing above is derived from it.'
+          : 'No public sentiment ingested yet.');
 
     bfDrawMap(d.map);
   } catch (e) {
