@@ -18,6 +18,7 @@
     "sources:news": "node --env-file=.env dist/cli/sources-news.js",
     "sources:press": "node --env-file=.env dist/cli/sources-press.js",
     "sources:instagram": "node --env-file=.env dist/cli/sources-instagram.js",
+    "sources:x": "node --env-file=.env dist/cli/sources-x.js",
     "sources:cameras": "node --env-file=.env dist/cli/sources-cameras.js",
     "daily": "node --env-file=.env dist/cli/daily.js",
     "retention:purge": "node --env-file=.env dist/cli/retention-purge.js",
