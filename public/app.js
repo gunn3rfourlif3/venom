@@ -1215,6 +1215,97 @@ function showView(view) {
 
 const ISSUE_MAX_BARS = 8;
 
+/* ---- The clock, the readiness strip, and what the headline rests on ----
+ *
+ * These three sit above everything on the command centre that is a
+ * projection, because they are the parts that are not one.
+ */
+
+/* Counted server-side against current_date. A war-room laptop with a wrong
+   clock would otherwise be confidently early or late for the one date that
+   cannot move. */
+function renderClock(k) {
+  const el = $('ov-clock');
+  if (!el) return;
+  if (!k) { el.innerHTML = ''; return; }
+
+  const d = Number(k.days_to_election);
+  const when = d > 1 ? `${d} days` : d === 1 ? 'tomorrow' : d === 0 ? 'today' : `${Math.abs(d)} days ago`;
+  const urgent = d >= 0 && d <= 14;
+
+  const drill = k.next_drill
+    ? `<span class="clock-item"><b>${Number(k.days_to_drill) === 0 ? 'today'
+        : Number(k.days_to_drill) === 1 ? 'tomorrow' : num(k.days_to_drill) + ' days'}</b>
+         <span>to the capture drill &middot; ${fmtDay(k.next_drill)}</span></span>`
+    : '';
+
+  el.className = 'clockbar' + (urgent ? ' is-urgent' : '');
+  el.innerHTML = `
+    <span class="clock-item clock-main"><b>${d < 0 ? when : when}</b>
+      <span>${d < 0 ? 'since polling day' : 'to polling day'} &middot; ${fmtDay(k.election_date)}</span></span>
+    ${drill}`;
+}
+
+const fmtDay = (iso) => {
+  const dt = new Date(iso);
+  return Number.isNaN(dt.getTime()) ? String(iso)
+    : dt.toLocaleDateString('en-ZA', { day: 'numeric', month: 'long' });
+};
+
+/* Whether anyone is actually going to be at a polling station. Every figure
+   further down this screen assumes somebody is. */
+function renderReadiness(r) {
+  const el = $('ov-ready');
+  if (!el) return;
+  if (!r) { el.innerHTML = ''; return; }
+
+  const staffed = Number(r.staffed ?? 0);
+  const stations = Number(r.stations ?? 0);
+  const pct = Number(r.pct_staffed ?? 0);
+  const none = staffed === 0 && stations > 0;
+
+  el.className = 'readybar' + (none ? ' is-bare' : '');
+  el.innerHTML = `
+    <span class="ready-item"><b>${num(staffed)}</b><span>of ${num(stations)} stations staffed</span></span>
+    <span class="ready-item"><b>${pct}%</b><span>covered</span></span>
+    <span class="ready-item"><b>${num(r.slips_captured ?? 0)}</b><span>of ${num(r.slips_expected ?? 0)} slips captured</span></span>
+    ${none ? `<span class="ready-say">Nobody is assigned to any station yet.</span>` : ''}`;
+}
+
+/* The headline renders at sixty pixels in the brand colour, which reads as
+   certainty. It is only as good as the roll underneath it, and while that
+   roll is synthetic or partial the figure has to say so in the same breath -
+   not in a tooltip, and not on another screen. When a real roll is loaded
+   these counts change on their own and the caveat disappears without anyone
+   remembering to remove it. */
+function renderHeroProvenance(p) {
+  const el = $('ov-eo-prov');
+  if (!el) return;
+  if (!p) { el.textContent = ''; return; }
+
+  const total = Number(p.wards_total ?? 0);
+  const withRoll = Number(p.wards_with_roll ?? 0);
+  const real = Number(p.wards_real ?? 0);
+
+  if (withRoll === 0) { el.textContent = ''; el.className = 'headline-provenance'; return; }
+
+  if (real === 0) {
+    el.className = 'headline-provenance is-synthetic';
+    el.textContent = `Synthetic. Every voter figure behind this is development `
+      + `data covering ${num(withRoll)} of ${num(total)} wards; `
+      + `the other ${num(total - withRoll)} carry none.`;
+    return;
+  }
+  if (withRoll < total) {
+    el.className = 'headline-provenance is-partial';
+    el.textContent = `Based on ${num(withRoll)} of ${num(total)} wards `
+      + `(${p.pct_covered}%); the rest have no roll loaded.`;
+    return;
+  }
+  el.className = 'headline-provenance';
+  el.textContent = `Based on all ${num(total)} wards.`;
+}
+
 async function loadOverview() {
   let data;
   try {
@@ -1241,6 +1332,12 @@ async function loadOverview() {
   $('ov-sub').textContent =
     `${num(c.wards_total)} wards across ${where}. ${num(c.wards_declared)} declared. `
     + `leakage charged against ${LEAKAGE_WORDS[c.leakage_basis] ?? c.leakage_basis}`;
+
+  renderClock(data.clock);
+  renderReadiness(data.readiness);
+  renderHeroProvenance(data.provenance);
+
+
 
   /* A ward with no registered-voter figure cannot contribute to any of the
      vote arithmetic, so with none of them loaded every number below is zero —

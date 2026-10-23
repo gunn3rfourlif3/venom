@@ -2108,3 +2108,46 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
 .mt-step { margin-top: var(--s-step); }
 .row-controls { margin-top: var(--s-base); gap: var(--s-near); align-items: center; }
 .scroll-tall { overflow: auto; max-height: 60vh; }
+
+/* ---- The clock and the readiness strip -------------------------- *
+ * These sit above everything on the command centre that is a
+ * projection. They are not decorative: the countdown is the number
+ * people open this screen for, and the staffing line is the condition
+ * every figure below it assumes.
+ */
+.clockbar, .readybar {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: var(--s-near) var(--s-sect);
+  margin: 0 var(--gut); padding: var(--s-wide) var(--s-far);
+  border: 1px solid var(--rule); border-radius: var(--r-panel);
+  background: var(--surface);
+}
+.clockbar { margin-top: var(--s-base); }
+.readybar { margin-top: var(--s-near); }
+
+.clock-item, .ready-item { display: flex; align-items: baseline; gap: var(--s-near); }
+.clock-item b, .ready-item b {
+  font-variant-numeric: tabular-nums; font-size: var(--step-2); color: var(--ink);
+}
+.clock-item span, .ready-item span { color: var(--ink-2); font-size: var(--step-0); }
+.clock-main b { font-size: var(--step-3); color: var(--ours); }
+
+/* Inside a fortnight the countdown stops being informational. */
+.clockbar.is-urgent { border-color: var(--ours); }
+
+/* Nobody assigned anywhere is a condition, not a statistic. */
+.readybar.is-bare { border-color: var(--st-warn); }
+.ready-say { color: var(--st-warn); font-size: var(--step-0); }
+
+/* What the headline rests on, in the same breath as the headline. */
+.headline-provenance {
+  margin: var(--s-snug) 0 0; max-width: 46ch;
+  font-size: var(--step--1); line-height: 1.45; color: var(--ink-2);
+}
+.headline-provenance.is-synthetic,
+.headline-provenance.is-partial { color: var(--st-warn); }
+
+@media (max-width: 680px) {
+  .clockbar, .readybar { gap: var(--s-snug) var(--s-far); padding: var(--s-base) var(--s-wide); }
+  .clock-main b { font-size: var(--step-2); }
+}

@@ -124,11 +124,17 @@
       <p id="ov-sub">Reading the ledger…</p>
     </div>
 
+    <!-- The clock and the operational truth, above everything that is a
+         projection. What is certain about the day goes first. -->
+    <div class="clockbar" id="ov-clock" role="status"></div>
+    <div class="readybar" id="ov-ready"></div>
+
     <div class="grid grid-hero">
       <section class="panel headline" aria-label="Expected outcome">
         <div>
           <div class="headline-figure" id="ov-eo">&mdash;</div>
           <div class="headline-label">Expected outcome, in votes</div>
+          <p class="headline-provenance" id="ov-eo-prov"></p>
         </div>
         <!-- The subtraction, drawn. What could be had, less what is being
              lost, leaves the answer above. -->

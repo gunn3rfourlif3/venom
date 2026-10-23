@@ -490,7 +490,8 @@ async function putControlPanel(ctx: Ctx): Promise<void> {
  *  after signing in and it should arrive whole rather than assembling itself
  *  panel by panel. */
 async function getOverview(ctx: Ctx): Promise<void> {
-  const [campaign, act, issues, sources, sentiment, municipal, scope] = await Promise.all([
+  const [campaign, act, issues, sources, sentiment, municipal, scope,
+         clock, readiness, provenance] = await Promise.all([
     pool.query('SELECT * FROM v_campaign_eo'),
     // target_class and pressure_band are computed in v_ward_target, not
     // carried on the extract, so the two are joined rather than guessed at.
@@ -534,6 +535,32 @@ async function getOverview(ctx: Ctx): Promise<void> {
               count(*)::int                        AS wards,
               count(registered_voters)::int        AS wards_with_roll
          FROM ward`),
+
+    /* The clock. Counted in SQL against current_date rather than in the
+       browser, because a laptop with a wrong clock is a laptop that is
+       confidently early or late for the one date that cannot move. */
+    pool.query(
+      `SELECT election_date,
+              (election_date - current_date)::int AS days_to_election,
+              (SELECT min(d) FROM unnest(drill_dates) d
+                WHERE d >= current_date)          AS next_drill,
+              (SELECT min(d) - current_date FROM unnest(drill_dates) d
+                WHERE d >= current_date)::int     AS days_to_drill
+         FROM control_panel WHERE id`),
+
+    /* Operational readiness. The command centre led with expected votes and
+       never said whether anyone was actually going to be at a polling
+       station, which is the question every other number depends on. */
+    pool.query(
+      `SELECT count(*)::int                                      AS stations,
+              count(*) FILTER (WHERE readiness = 'staffed')::int AS staffed,
+              round(100.0 * count(*) FILTER (WHERE readiness = 'staffed')
+                    / NULLIF(count(*), 0), 1)                    AS pct_staffed,
+              sum(ballots_expected)::int                         AS slips_expected,
+              sum(ballots_captured)::int                         AS slips_captured
+         FROM v_station_readiness`),
+
+    pool.query('SELECT * FROM v_headline_provenance'),
   ]);
 
   json(ctx.res, 200, {
@@ -546,6 +573,9 @@ async function getOverview(ctx: Ctx): Promise<void> {
       sentiment: sentiment.rows[0] ?? null,
       municipal: municipal.rows,
       register: scope.rows[0] ?? null,
+      clock: clock.rows[0] ?? null,
+      readiness: readiness.rows[0] ?? null,
+      provenance: provenance.rows[0] ?? null,
     },
   });
 }
