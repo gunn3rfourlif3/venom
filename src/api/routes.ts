@@ -275,6 +275,90 @@ async function getRegisterCompleteness(ctx: Ctx): Promise<void> {
   }));
 }
 
+/**
+ * The briefing view: what this facility demonstrably is, for showing people
+ * who will ask where every number came from.
+ *
+ * EVERY FIGURE HERE IS COUNTED FROM THE REGISTER AT REQUEST TIME. Nothing is
+ * cached, nothing is an estimate, and nothing is carried over from a previous
+ * run. That is the point of the screen - it is meant to survive the question
+ * "where did that come from", asked in a room, in front of people.
+ *
+ * It therefore also reports what is NOT working: how many sources are dark,
+ * and that the sentiment store holds development data only. A capability
+ * demonstration that hides its gaps is a sales pitch, and the first person to
+ * find the gap stops believing the rest of the screen.
+ */
+async function getBriefing(ctx: Ctx): Promise<void> {
+  const [footprint, completeness, pipeline, readiness, clock, sources, sentiment, points] =
+    await Promise.all([
+      pool.query(
+        `SELECT count(DISTINCT province)::int         AS provinces,
+                count(DISTINCT region_code)::int      AS regions,
+                count(DISTINCT demarcation_code)::int AS municipalities,
+                count(DISTINCT ward_id)::int          AS wards,
+                count(*)::int                         AS stations
+           FROM v_station_readiness`),
+      pool.query('SELECT * FROM v_register_completeness'),
+      /* The ballot arithmetic, shown rather than asserted: a metro station
+         issues two ballots and a local one three, which is why the slip count
+         is not the station count. */
+      pool.query(
+        `SELECT municipality_category         AS category,
+                count(*)::int                 AS stations,
+                min(ballots_expected)::int    AS ballots_each,
+                sum(ballots_expected)::int    AS slips
+           FROM v_station_readiness GROUP BY 1 ORDER BY 1`),
+      pool.query(
+        `SELECT count(*)::int                                      AS stations,
+                count(*) FILTER (WHERE readiness = 'staffed')::int AS staffed,
+                sum(ballots_expected)::int                         AS slips_expected,
+                sum(ballots_captured)::int                         AS slips_captured
+           FROM v_station_readiness`),
+      pool.query(
+        `SELECT election_date,
+                (election_date - current_date)::int AS days_to_election,
+                (SELECT min(d) FROM unnest(drill_dates) d WHERE d >= current_date) AS next_drill,
+                (SELECT min(d) - current_date FROM unnest(drill_dates) d
+                  WHERE d >= current_date)::int AS days_to_drill
+           FROM control_panel WHERE id`),
+      pool.query(
+        `SELECT status, count(*)::int AS n FROM v_source_register
+          GROUP BY 1 ORDER BY 2 DESC`),
+      /* Said plainly so the screen can say it plainly. */
+      pool.query(
+        `SELECT count(*)::int AS rows,
+                bool_and(source = 'SYNTHETIC') AS all_synthetic,
+                count(DISTINCT category)::int AS categories
+           FROM issue_signal`),
+      /* A thinned national scatter for the map. Every tenth station is enough
+         to draw the shape of the country at this size and keeps the briefing
+         payload small; the full set lives on the readiness screen. */
+      pool.query(
+        `SELECT round(latitude::numeric * 1000)::int  AS y,
+                round(longitude::numeric * 1000)::int AS x
+           FROM (SELECT latitude, longitude,
+                        row_number() OVER (ORDER BY station_id) AS rn
+                   FROM v_station_readiness) t
+          WHERE rn % 4 = 0`),
+    ]);
+
+  json(ctx.res, 200, await envelope({
+    footprint: footprint.rows[0] ?? null,
+    completeness: completeness.rows,
+    pipeline: pipeline.rows,
+    readiness: readiness.rows[0] ?? null,
+    clock: clock.rows[0] ?? null,
+    sources: sources.rows,
+    sentiment: sentiment.rows[0] ?? null,
+    map: {
+      y: points.rows.map((r) => r.y),
+      x: points.rows.map((r) => r.x),
+      scale: 1000,
+    },
+  }));
+}
+
 async function getCampaign(ctx: Ctx): Promise<void> {
   const result = await pool.query('SELECT * FROM v_campaign_eo');
   json(ctx.res, 200, await envelope(result.rows[0] ?? null));
@@ -585,5 +669,5 @@ export const routes = {
   getCampaign, getFloat, getDecisions, getDocuments, getIngestHealth,
   getSentiment, getSearch, getCameras, getTerrain,
   getControlPanel, putControlPanel, getOverview, getTrending,
-  getStationMap, getRegisterCompleteness, authenticate,
+  getStationMap, getRegisterCompleteness, getBriefing, authenticate,
 };

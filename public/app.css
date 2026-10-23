@@ -2151,3 +2151,51 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
   .clockbar, .readybar { gap: var(--s-snug) var(--s-far); padding: var(--s-base) var(--s-wide); }
   .clock-main b { font-size: var(--step-2); }
 }
+
+/* ---- Briefing --------------------------------------------------- *
+ * Presentation surface. Larger type and more air than the working
+ * screens, because it is read across a room rather than at a desk.
+ */
+.bf { max-width: 72rem; }
+.bf-clock {
+  display: flex; flex-wrap: wrap; gap: var(--s-near) var(--s-sect);
+  margin: var(--s-far) 0 var(--s-sect);
+  padding: var(--s-wide) var(--s-far);
+  border: 1px solid var(--ours); border-radius: var(--r-panel);
+  background: var(--surface);
+}
+.bf-clock b { font-size: var(--step-2); color: var(--ours); font-variant-numeric: tabular-nums; }
+.bf-clock span { color: var(--ink-2); font-size: var(--step-0); }
+
+.bf-block { margin: 0 0 var(--s-sect); padding-top: var(--s-step); border-top: 1px solid var(--rule); }
+.bf-block > h3 { margin: 0 0 var(--s-snug); font-size: var(--step-2); }
+.bf-why { margin: 0 0 var(--s-far); max-width: 62ch; color: var(--ink-2); font-size: var(--step-0); line-height: 1.5; }
+
+.bf-figures { display: flex; flex-wrap: wrap; gap: var(--s-wide); }
+.bf-fig {
+  flex: 1 1 9rem; border: 1px solid var(--rule); border-radius: var(--r-control);
+  padding: var(--s-wide) var(--s-far);
+}
+.bf-fig b { display: block; font-size: var(--step-3); font-variant-numeric: tabular-nums; }
+.bf-fig span { display: block; font-size: var(--step-0); color: var(--ink-2); }
+.bf-fig i { display: block; margin-top: var(--s-tight); font-style: normal; font-size: var(--step--1); color: var(--ink-3); }
+.bf-fig.is-bare { border-color: var(--st-warn); }
+.bf-fig.is-bare b { font-size: var(--step-1); color: var(--st-warn); }
+
+.bf-map-wrap { margin-top: var(--s-far); }
+#bf-map { display: block; width: 100%; background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-panel); }
+.bf-caption { margin: var(--s-near) 0 0; max-width: 62ch; font-size: var(--step--1); color: var(--ink-3); }
+
+.bf-sources { display: flex; flex-wrap: wrap; gap: var(--s-near); margin-bottom: var(--s-wide); }
+.bf-src {
+  border: 1px solid var(--rule); border-radius: var(--r-control);
+  padding: var(--s-snug) var(--s-wide); font-size: var(--step-0); color: var(--ink-2);
+}
+.bf-src b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.bf-src.is-live { border-color: var(--mk-green); }
+.bf-src.is-dark { border-color: var(--rule); }
+
+@media (max-width: 680px) {
+  .bf-fig { flex: 1 1 100%; }
+  .bf-clock { gap: var(--s-snug) var(--s-far); }
+}

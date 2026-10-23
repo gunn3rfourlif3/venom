@@ -101,6 +101,7 @@ const table: Route[] = [
   { method: 'GET',   pattern: /^\/api\/station-map$/, handler: routes.getStationMap },
   { method: 'GET',   pattern: /^\/api\/register-completeness$/,
     handler: routes.getRegisterCompleteness },
+  { method: 'GET',   pattern: /^\/api\/briefing$/, handler: routes.getBriefing },
   { method: 'GET',   pattern: /^\/api\/hashtags$/, handler: hashtags.getHashtags },
   { method: 'POST',  pattern: /^\/api\/hashtags$/, handler: hashtags.postHashtags },
   { method: 'PATCH', pattern: /^\/api\/hashtags\/([A-Za-z0-9_]+)$/,

@@ -827,7 +827,7 @@ async function loadHealth() {
 const WARD_LIMIT = 6000;
 
 const VIEWS = ['logistics', 'slips', 'overview', 'wards', 'sentiment', 'decisions',
-               'viewshed', 'readiness', 'float', 'health', 'settings'];
+               'viewshed', 'readiness', 'briefing', 'float', 'health', 'settings'];
 
 /* ------------------------------------------------------------------ *
  * Station readiness and gap maps.
@@ -1207,6 +1207,7 @@ function showView(view) {
   if (view === 'float') loadFloat();
   if (view === 'health') loadHealth();
   if (view === 'readiness') { loadReadiness(); loadCompleteness(); }
+  if (view === 'briefing') loadBriefing();
   if (view === 'viewshed') loadViewshed();
   if (view === 'settings') loadControlPanel();
 }
@@ -1224,6 +1225,137 @@ const ISSUE_MAX_BARS = 8;
 /* Counted server-side against current_date. A war-room laptop with a wrong
    clock would otherwise be confidently early or late for the one date that
    cannot move. */
+/* ---- Briefing ---------------------------------------------------
+ *
+ * A screen for showing people who will ask where every number came
+ * from. It therefore reports the gaps as prominently as the strengths:
+ * dark sources are listed, and the sentiment store says out loud that
+ * it holds development data.
+ *
+ * The map here is drawn with no basemap and no network call. A boardroom
+ * is exactly where third-party tiles fail to load, and a screen that is
+ * half-blank in front of leadership proves the opposite of the point.
+ */
+function bfDrawMap(m) {
+  const cv = $('bf-map');
+  if (!cv || !m || !m.x?.length) return;
+  const w = cv.parentElement.clientWidth;
+  const h = Math.max(300, Math.round(w * 0.58));
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = w * dpr; cv.height = h * dpr;
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < m.x.length; i++) {
+    if (m.x[i] < minX) minX = m.x[i];
+    if (m.x[i] > maxX) maxX = m.x[i];
+    if (m.y[i] < minY) minY = m.y[i];
+    if (m.y[i] > maxY) maxY = m.y[i];
+  }
+  const kx = Math.cos(((minY + maxY) / 2 / m.scale) * Math.PI / 180);
+  const spanX = (maxX - minX) * kx || 1, spanY = (maxY - minY) || 1;
+  const pad = 16;
+  const sc = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY);
+  const offX = (w - spanX * sc) / 2, offY = (h - spanY * sc) / 2;
+
+  g.fillStyle = '#F8C030'; g.globalAlpha = 0.75;
+  g.beginPath();
+  for (let i = 0; i < m.x.length; i++) {
+    const px = offX + (m.x[i] - minX) * kx * sc;
+    const py = offY + (maxY - m.y[i]) * sc;
+    g.moveTo(px + 1.5, py); g.arc(px, py, 1.5, 0, Math.PI * 2);
+  }
+  g.fill(); g.globalAlpha = 1;
+}
+
+const bfFig = (value, label, note) =>
+  `<div class="bf-fig"><b>${value}</b><span>${label}</span>${
+     note ? `<i>${note}</i>` : ''}</div>`;
+
+async function loadBriefing() {
+  try {
+    const res = await api('/api/briefing');
+    const d = res.data ?? res;
+    const f = d.footprint ?? {}, r = d.readiness ?? {}, k = d.clock ?? {};
+
+    $('bf-clock').innerHTML = k.election_date
+      ? `<span><b>${num(k.days_to_election)}</b> days to polling day &middot; ${fmtDay(k.election_date)}</span>`
+        + (k.next_drill ? `<span><b>${num(k.days_to_drill)}</b> days to the capture drill &middot; ${fmtDay(k.next_drill)}</span>` : '')
+      : '';
+
+    $('bf-footprint').innerHTML =
+      bfFig(num(f.stations), 'voting stations', 'on their IEC coordinates')
+      + bfFig(num(f.wards), 'wards')
+      + bfFig(num(f.municipalities), 'municipalities')
+      + bfFig(num(f.regions), 'districts and metros')
+      + bfFig(num(f.provinces), 'provinces');
+
+    $('bf-map-cap').textContent =
+      `Every voting station in the country. Drawn from the register itself, `
+      + `with no map service involved \u2014 nothing on this page depends on `
+      + `an internet connection in the room.`;
+
+    $('bf-completeness').innerHTML = (d.completeness ?? []).map((p) => {
+      const covered = p.wards - p.wards_without_stations;
+      const pct = p.wards ? (covered / p.wards) * 100 : 0;
+      return `<div class="rc-row rc-${esc(p.status)}">
+        <span class="rc-prov">${esc(p.province)}</span>
+        <span class="rc-bar"><i style="width:${pct.toFixed(1)}%"></i></span>
+        <span class="rc-num">${fmt(p.stations)}</span>
+        <span class="rc-rate">${p.stations_per_ward}/ward</span>
+        <span class="rc-state">${p.wards_without_stations
+          ? fmt(p.wards_without_stations) + ' wards with no station' : esc(p.status)}</span>
+      </div>`;
+    }).join('');
+
+    const pipe = d.pipeline ?? [];
+    const metro = pipe.find((x) => x.category === 'A') ?? {};
+    const local = pipe.find((x) => x.category === 'B') ?? {};
+    $('bf-pipeline').innerHTML =
+      bfFig(num(metro.stations), 'metro stations', `${metro.ballots_each ?? 2} ballots each`)
+      + bfFig(num(local.stations), 'local stations', `${local.ballots_each ?? 3} ballots each`)
+      + bfFig(num(r.slips_expected), 'result slips to capture', 'not 23,696');
+
+    const staffed = Number(r.staffed ?? 0);
+    $('bf-readiness').innerHTML =
+      bfFig(num(staffed), 'stations staffed', `of ${num(r.stations)}`)
+      + bfFig(num(r.slips_captured ?? 0), 'slips captured', `of ${num(r.slips_expected)}`)
+      + (staffed === 0
+          ? `<div class="bf-fig is-bare"><b>Nobody assigned yet</b><span>this is the gap before polling day</span></div>`
+          : '');
+
+    const bad = ['Failing', 'Not connected', 'Never run', 'Closed'];
+    $('bf-sources').innerHTML = (d.sources ?? []).map((x) =>
+      `<span class="bf-src ${bad.includes(x.status) ? 'is-dark' : 'is-live'}">
+         <b>${num(x.n)}</b> ${esc(x.status.toLowerCase())}</span>`).join('');
+
+    const se = d.sentiment ?? {};
+    $('bf-sentiment-note').textContent = Number(se.rows ?? 0) === 0
+      ? 'No sentiment has been ingested. The schema is built; no feed is connected.'
+      : se.all_synthetic
+        ? `The ${num(se.rows)} sentiment records held are development data across `
+          + `${num(se.categories)} service-delivery categories. They describe no real area `
+          + `and no real opinion, and nothing on this page is derived from them.`
+        : `${num(se.rows)} sentiment records across ${num(se.categories)} categories.`;
+
+    bfDrawMap(d.map);
+  } catch (e) {
+    $('bf-sentiment-note').textContent = 'Could not load the briefing: ' + (e?.message ?? e);
+  }
+}
+
+let bfResizeTimer = null;
+window.addEventListener('resize', () => {
+  if ($('view-briefing')?.hidden !== false) return;
+  clearTimeout(bfResizeTimer);
+  bfResizeTimer = setTimeout(() => loadBriefing(), 150);
+});
+
+
 function renderClock(k) {
   const el = $('ov-clock');
   if (!el) return;

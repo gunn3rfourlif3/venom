@@ -68,6 +68,7 @@
     <button data-view="sentiment"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v8H6l-4 3z"/></svg><span>Social sentiment</span></button>
     <button data-view="viewshed"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="1.8"/></svg><span>Viewshed analysis</span></button>
     <button data-view="readiness"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5c2.5 0 4.5 2 4.5 4.4 0 3.2-4.5 8.6-4.5 8.6S3.5 9.1 3.5 5.9C3.5 3.5 5.5 1.5 8 1.5z"/><circle cx="8" cy="5.8" r="1.6"/></svg><span>Station readiness</span></button>
+    <button data-view="briefing"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2.5h11v11h-11z"/><path d="M5 6h6M5 8.5h6M5 11h3.5"/></svg><span>Briefing</span></button>
 
     <p class="rail-group">System</p>
     <button data-view="health"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12V4m4 8V7m4 5V2m4 10V6"/></svg><span>Data sources</span></button>
@@ -356,6 +357,70 @@
 
   <main class="pane pane-single" id="view-float" hidden>
     <section class="panel-body"><div id="float-list"></div></section>
+  </main>
+
+  <main class="pane pane-single" id="view-briefing" hidden>
+    <section class="panel-body bf">
+      <h2 class="viz-title">What this facility is</h2>
+      <p class="viz-sub">Every figure on this page is counted from the register
+         when the page loads. Nothing is cached, estimated, or carried over
+         from a previous run &mdash; so each one can be traced to its source
+         while you are standing in front of it.</p>
+
+      <div class="bf-clock" id="bf-clock"></div>
+
+      <section class="bf-block">
+        <h3>National footprint</h3>
+        <p class="bf-why">The electoral geography of the whole country, loaded
+           from the IEC&rsquo;s own geospatial register. This is the ground the
+           campaign is fought on, and it is complete.</p>
+        <div class="bf-figures" id="bf-footprint"></div>
+        <div class="bf-map-wrap">
+          <canvas id="bf-map" role="img"
+                  aria-label="Every voting station in South Africa plotted on its IEC coordinates"></canvas>
+          <p class="bf-caption" id="bf-map-cap"></p>
+        </div>
+      </section>
+
+      <section class="bf-block">
+        <h3>The register checks itself</h3>
+        <p class="bf-why">A missing voting station looks exactly like a
+           complete register until someone goes looking. This panel counts
+           wards with no station, per province, every time it loads &mdash;
+           which is how the system found 2,366 stations missing across 354
+           Gauteng wards while every other province read clean.</p>
+        <div class="rc-rows" id="bf-completeness"></div>
+      </section>
+
+      <section class="bf-block">
+        <h3>What polling day produces</h3>
+        <p class="bf-why">A station does not produce one result slip. A metro
+           station issues two ballots and a local-municipality station three,
+           so the work is a third larger than a station count suggests. A
+           system that got this wrong would report full coverage while losing
+           two counts in three.</p>
+        <div class="bf-figures" id="bf-pipeline"></div>
+        <p class="bf-caption">Every slip is transcribed twice, by different
+           people, and disagreements are surfaced rather than averaged.</p>
+      </section>
+
+      <section class="bf-block">
+        <h3>Where we actually stand</h3>
+        <p class="bf-why">Stated plainly, because a readiness figure that
+           flatters is worse than none. This is the gap between now and
+           polling day.</p>
+        <div class="bf-figures" id="bf-readiness"></div>
+      </section>
+
+      <section class="bf-block">
+        <h3>What is connected, and what is not</h3>
+        <p class="bf-why">Shown in full. A facility that hides its dark
+           sources invites the first person who finds one to disbelieve
+           everything else on the screen.</p>
+        <div class="bf-sources" id="bf-sources"></div>
+        <p class="provenance" id="bf-sentiment-note"></p>
+      </section>
+    </section>
   </main>
 
   <main class="pane pane-single" id="view-readiness" hidden>
