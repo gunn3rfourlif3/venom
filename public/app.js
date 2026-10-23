@@ -1071,11 +1071,25 @@ function rdRenderStats(t) {
     ? 'voter counts not yet in the register'
     : `${fmt(Number(t.voters_uncovered))} registered voters`;
 
+  /* When every station is a gap, Gaps only draws exactly what Readiness
+     draws, and a control with no visible effect is indistinguishable from a
+     broken one. Say which it is rather than leaving the reader to wonder. */
+  const allGaps = t.real_stations > 0 && t.real_gaps === t.real_stations;
+
   $('rd-note').textContent = t.real_gaps
     ? `${fmt(t.real_gaps)} of ${fmt(t.real_stations)} real stations have nobody `
       + `assigned (${voters}). `
       + `${fmt(t.slips_captured)} of ${fmt(t.slips_expected)} slips captured.`
+      + (allGaps
+          ? ` Every station here is a gap, so Gaps only shows the same points `
+            + `as Readiness — the two views separate once marshals are assigned.`
+          : '')
     : `Every real station in this selection has someone assigned.`;
+
+  const gapsBtn = $('rd-mode-gaps');
+  if (gapsBtn) gapsBtn.title = allGaps
+    ? 'Identical to Readiness while no station has a marshal assigned'
+    : 'Show only stations with nobody assigned';
 }
 
 /* Filled from the map payload itself, so the options always match the
