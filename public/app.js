@@ -502,14 +502,16 @@ function renderHeatmap(area) {
     const n = r ? Number(r.mentions) : 0;
     const t = n / max;
     const x = left + col * cw, y = top + row * ch;
-    // The figure sits on its own cell, so the ink has to beat the cell it sits
-    // on, not the page. Measured both ways across the ramp: the dark ink wins
-    // steps 1-4, the surface wins 5-7. Worst case either side of that line is
-    // 4.4:1 light / 3.8:1 dark; ink-2 on step 3 was 2.9:1, which is why the
-    // mid-blue cells read as smudges. Exact values live in the table view.
+    // The figure sits on its own cell, so the ink has to beat the cell it
+    // sits on, not the page. Which ink wins is a property of the ramp AND of
+    // the theme - on the MK gold ramp the dark theme crosses over at step 4
+    // and the light theme not until step 6 - so a single threshold in here
+    // would smudge one theme or the other. The step is published as a class
+    // and each theme states its own crossover in CSS, where it is measured.
+    // Exact values live in the table view either way.
     const step = Math.max(1, Math.min(7, Math.ceil(t * 7) || 1));
     const label = n ? `<text x="${x + cw / 2 - 1}" y="${y + ch / 2 + 4}" text-anchor="middle"
-        font-size="11.5" fill="${step >= 5 ? 'var(--surface)' : 'var(--ink)'}"
+        font-size="11.5" class="cell-ink s${step}"
         style="pointer-events:none">${n.toLocaleString('en-ZA')}</text>` : '';
     const tipHtml = r
       ? `<b>${esc(m)}</b><br>${esc(c)}<br>${n.toLocaleString('en-ZA')} mentions across ${r.wards} wards<br>net sentiment ${dec(r.net_sentiment)}, mostly ${esc(r.dominant_tone.toLowerCase())}`
@@ -1312,8 +1314,10 @@ async function loadOverview() {
   // Pressure by issue
   const issues = data.issues.slice(0, ISSUE_MAX_BARS);
   const issueMax = Math.max(1, ...issues.map((i) => Number(i.mentions)));
-  $('ov-issues-note').textContent = data.sentiment?.synthetic
-    ? 'synthetic data' : `${num(data.sentiment?.mentions ?? 0)} mentions`;
+  /* Two colours on these bars need a key, or the reader invents one. */
+  $('ov-issues-note').textContent = (data.sentiment?.synthetic
+    ? 'synthetic data' : `${num(data.sentiment?.mentions ?? 0)} mentions`)
+    + ' \u00b7 gold = taken badly';
   $('ov-issues').innerHTML = issues.length ? issues.map((i) => `
     <div class="qbar">
       <span class="qbar-label">${esc(i.category)}</span>

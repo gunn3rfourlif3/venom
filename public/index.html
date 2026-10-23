@@ -284,27 +284,6 @@
 
       <div class="kpi-row" id="sent-kpis"></div>
 
-      <!-- The hashtag watchlist. Instagram allows thirty unique tags per
-           rolling seven days, so this is a budget, not a search box. -->
-      <section class="panel" id="ht-panel" style="margin-top:18px">
-        <div class="panel-head">
-          <h2 class="viz-title" style="margin:0">Hashtag watchlist</h2>
-          <span class="viz-sub" style="margin:0" id="ht-quota">&mdash;</span>
-        </div>
-        <div id="ht-state"></div>
-        <p class="viz-sub">One per line, as <code>tag, municipality, category</code>.
-           A tag with no municipality is kept but never collected &mdash; Instagram
-           hashtag media carries no location, so a tag that does not name a place
-           cannot be attributed to one.</p>
-        <textarea id="ht-paste" spellcheck="false"
-          placeholder="#JoburgWater, City of Johannesburg, Water&#10;#EmfuleniSewage, Emfuleni, Sanitation"></textarea>
-        <div class="row" style="margin-top:10px;gap:8px;align-items:center">
-          <button id="ht-add" class="btn btn-primary">Add to watchlist</button>
-          <span id="ht-note" class="viz-sub" style="margin:0"></span>
-        </div>
-        <div id="ht-list" style="margin-top:12px"></div>
-      </section>
-
       <figure class="viz-figure">
         <figcaption>
           <h3>Where the pressure is</h3>
@@ -314,6 +293,27 @@
         <div class="viz-scroll"><div id="sent-heatmap"></div></div>
         <div class="viz-legend" id="sent-heatmap-legend"></div>
       </figure>
+
+      <!-- The hashtag watchlist. Instagram allows thirty unique tags per
+           rolling seven days, so this is a budget, not a search box. -->
+      <section class="panel" id="ht-panel" class="mt-step">
+        <div class="panel-head">
+          <h2 class="viz-title m-0">Hashtag watchlist</h2>
+          <span class="viz-sub m-0" id="ht-quota">&mdash;</span>
+        </div>
+        <div id="ht-state"></div>
+        <p class="viz-sub">One per line, as <code>tag, municipality, category</code>.
+           A tag with no municipality is kept but never collected &mdash; Instagram
+           hashtag media carries no location, so a tag that does not name a place
+           cannot be attributed to one.</p>
+        <textarea id="ht-paste" spellcheck="false"
+          placeholder="#JoburgWater, City of Johannesburg, Water&#10;#EmfuleniSewage, Emfuleni, Sanitation"></textarea>
+        <div class="row row-controls">
+          <button id="ht-add" class="btn btn-primary">Add to watchlist</button>
+          <span id="ht-note" class="viz-sub m-0"></span>
+        </div>
+        <div id="ht-list" class="mt-wide"></div>
+      </section>
 
       <figure class="viz-figure">
         <figcaption>
@@ -447,16 +447,16 @@
 
     <div class="statline" id="lg-statline" aria-label="Ingest status"></div>
 
-    <div class="tiles" id="lg-tiles" style="margin-top:14px"></div>
+    <div class="tiles" id="lg-tiles" class="mt-far"></div>
 
     <!-- Silence, counted rather than listed. Hidden once most stations are
          reporting, because then a silent one is a genuine exception and
          belongs in the table below with everything else. -->
-    <section class="panel" id="lg-silence" style="margin-top:14px" hidden></section>
+    <section class="panel" id="lg-silence" class="mt-far" hidden></section>
 
-    <section class="panel" style="margin-top:14px">
+    <section class="panel mt-far">
       <div class="panel-head">
-        <h2 class="viz-title" style="margin:0">Stations needing attention</h2>
+        <h2 class="viz-title m-0">Stations needing attention</h2>
         <div class="seg" id="lg-filter" role="group" aria-label="Filter stations">
           <button data-flag="" class="is-on">Exceptions</button>
           <button data-flag="UNSTAFFED">Unstaffed</button>
@@ -468,7 +468,7 @@
       <p class="viz-sub" id="lg-table-note">
         Worst first. A station that is fine needs no attention, so this list
         leads with the ones that are not.</p>
-      <div style="overflow:auto;max-height:60vh">
+      <div class="scroll-tall">
         <table class="logi-table" id="lg-table">
           <thead><tr>
             <th>Station</th><th>Ward</th><th>Presence</th><th>Supply</th>
@@ -480,9 +480,9 @@
       </div>
     </section>
 
-    <section class="panel intake" style="margin-top:14px">
+    <section class="panel intake mt-far">
       <div class="panel-head">
-        <h2 class="viz-title" style="margin:0">Report intake</h2>
+        <h2 class="viz-title m-0">Report intake</h2>
         <span class="pill is-unknown" id="lg-intake-mode">fallback</span>
       </div>
       <p class="viz-sub">
@@ -492,22 +492,22 @@
       <label class="sr-only" for="lg-paste">Pasted reports</label>
       <textarea id="lg-paste" spellcheck="false"
         placeholder="10234 med none 3&#10;10235 long IEC official late 2"></textarea>
-      <div class="row" style="margin-top:10px;gap:8px;align-items:center">
+      <div class="row row-controls">
         <label class="sr-only" for="lg-by">Your name</label>
         <input id="lg-by" placeholder="Filed by (your name)" autocomplete="name">
         <button id="lg-check" class="btn">Check</button>
         <button id="lg-file" class="btn btn-primary" disabled>File reports</button>
-        <span id="lg-parse-note" class="viz-sub" style="margin:0"></span>
+        <span id="lg-parse-note" class="viz-sub m-0"></span>
       </div>
-      <div id="lg-parse" style="margin-top:10px"></div>
+      <div id="lg-parse" class="mt-base"></div>
     </section>
 
     <!-- Who may file a report. An allowlist, so this screen is what makes
          automated ingest usable at all: an empty roster refuses everybody. -->
-    <section class="panel" id="lg-roster-panel" style="margin-top:14px">
+    <section class="panel" id="lg-roster-panel" class="mt-far">
       <div class="panel-head">
-        <h2 class="viz-title" style="margin:0">Who may report</h2>
-        <span class="viz-sub" style="margin:0" id="lg-roster-count">&mdash;</span>
+        <h2 class="viz-title m-0">Who may report</h2>
+        <span class="viz-sub m-0" id="lg-roster-count">&mdash;</span>
       </div>
       <p class="viz-sub">
         Automated ingest accepts a message only from a number on this list.
@@ -518,11 +518,11 @@
       <label class="sr-only" for="lg-roster-paste">Marshals to add</label>
       <textarea id="lg-roster-paste" spellcheck="false"
         placeholder="Thabo Mokoena, 082 123 4567&#10;Nomsa Dlamini, 073 555 0199"></textarea>
-      <div class="row" style="margin-top:10px;gap:8px;align-items:center">
+      <div class="row row-controls">
         <button id="lg-roster-add" class="btn btn-primary">Add to roster</button>
-        <span id="lg-roster-note" class="viz-sub" style="margin:0"></span>
+        <span id="lg-roster-note" class="viz-sub m-0"></span>
       </div>
-      <div id="lg-roster-list" style="margin-top:12px"></div>
+      <div id="lg-roster-list" class="mt-wide"></div>
     </section>
   </main>
 
@@ -536,8 +536,8 @@
 
     <section class="panel" id="sl-work">
       <div class="panel-head">
-        <h2 class="viz-title" style="margin:0">Transcribe</h2>
-        <span class="viz-sub" style="margin:0" id="sl-queue">&mdash;</span>
+        <h2 class="viz-title m-0">Transcribe</h2>
+        <span class="viz-sub m-0" id="sl-queue">&mdash;</span>
       </div>
 
       <div id="sl-empty" class="viz-sub">Nothing waiting. Photographs appear here as marshals send them.</div>
@@ -556,7 +556,7 @@
               <thead><tr><th>Party</th><th style="width:34%">Votes</th><th></th></tr></thead>
               <tbody id="sl-rows"></tbody>
             </table>
-            <button type="button" class="btn" id="sl-addrow" style="margin-top:8px">Add a party line</button>
+            <button type="button" class="btn" id="sl-addrow" class="mt-near">Add a party line</button>
 
             <div class="sl-totals">
               <label>Spoilt<input type="number" min="0" id="sl-spoilt" inputmode="numeric"></label>
@@ -565,30 +565,30 @@
 
             <div class="sl-check viz-sub" id="sl-check"></div>
 
-            <div class="row" style="margin-top:12px;gap:8px;align-items:center">
+            <div class="row row-controls">
               <button type="submit" class="btn btn-primary" id="sl-save">File this pass</button>
               <button type="button" class="btn" id="sl-skip">Skip</button>
-              <span class="viz-sub" id="sl-note" style="margin:0"></span>
+              <span class="viz-sub" id="sl-note" class="m-0"></span>
             </div>
           </form>
         </div>
       </div>
     </section>
 
-    <section class="panel" id="sl-disputes" style="margin-top:14px">
+    <section class="panel" id="sl-disputes" class="mt-far">
       <div class="panel-head">
-        <h2 class="viz-title" style="margin:0">Needs a decision</h2>
-        <span class="viz-sub" style="margin:0" id="sl-dispute-count">&mdash;</span>
+        <h2 class="viz-title m-0">Needs a decision</h2>
+        <span class="viz-sub m-0" id="sl-dispute-count">&mdash;</span>
       </div>
       <p class="viz-sub">Where the two passes disagree, or where a slip does not add up.
         Neither is resolved by editing — a correction is a further pass.</p>
       <div id="sl-dispute-list"></div>
     </section>
 
-    <section class="panel" id="sl-coverage" style="margin-top:14px">
+    <section class="panel" id="sl-coverage" class="mt-far">
       <div class="panel-head">
-        <h2 class="viz-title" style="margin:0">Coverage</h2>
-        <span class="viz-sub" style="margin:0" id="sl-cov-sub">&mdash;</span>
+        <h2 class="viz-title m-0">Coverage</h2>
+        <span class="viz-sub m-0" id="sl-cov-sub">&mdash;</span>
       </div>
       <p class="viz-sub">Counted per ballot, not per station: a metro station owes two slips
         and a local-municipality station three.</p>
