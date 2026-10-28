@@ -771,6 +771,10 @@ button, input, select { font: inherit; color: inherit; }
   content: ''; width: 3px; height: 15px; margin-left: -8px; margin-right: 6px;
 }
 .rail-foot { margin-top: auto; padding: 12px 8px 0; display: grid; gap: 8px; }
+.rail-foot { grid-template-areas: 'live live' 'theme ver'; grid-template-columns: max-content 1fr; align-items: center; }
+.rail-foot .live { grid-area: live; }
+.rail-foot .theme { grid-area: theme; }
+.rail-foot .ver { grid-area: ver; }
 
 .stage { overflow-y: auto; display: flex; flex-direction: column; }
 
@@ -2297,3 +2301,45 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
 /* The station map's dots are brand yellow and green like everything
    else; the readiness canvas reads these from the stylesheet. */
 .rc-bar i { background: var(--mk-green); }
+
+/* ---- Full lockup: mark plus wordmark ---------------------------- *
+ * The logo is the lockup, not the mark alone. It is inlined as a
+ * sprite and referenced with <use>, because an <img> isolates the
+ * document - neither currentColor nor a custom property crosses that
+ * boundary, so a two-colour lockup loaded as an image cannot follow
+ * the theme. These two properties drive both colours everywhere.
+ */
+:root { --brand-mark: var(--ours); --brand-word: var(--ink); }
+
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.brand-lockup, .signin-lockup { display: block; height: auto; }
+
+/* 2550:576 is the lockup's own ratio, so height follows width. */
+.brand-lockup { width: 148px; }
+.signin-lockup { width: 184px; margin: 0 auto var(--s-far); }
+
+/* The wordmark is in the lockup now, so the text beside it would say
+   the name twice. Kept in the DOM for screen readers on the sign-in
+   card, where it is the page's only heading. */
+.vh {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+/* Version sits with the theme control, not with the logo. */
+.rail-foot .ver {
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  font-size: var(--step--1);
+  color: var(--ink-3);
+  letter-spacing: .04em;
+  padding-left: 2px;
+}
+
+/* The stage reserves room for the ticker; the rail never did, so the
+   theme control and version sat underneath it. Same reservation, same
+   condition - so it also disappears when the ticker is hidden. */
+body:has(.ticker:not([hidden])) .rail {
+  padding-bottom: calc(12px + var(--ticker-h));
+}
