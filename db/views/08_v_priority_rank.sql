@@ -32,7 +32,9 @@ WITH base AS (
     s.people_shortage,
     s.presence_shortage,
     ce.candidate_status_source,
-    ce.list_loaded
+    ce.list_loaded,
+    -- NULL decline means the inputs were absent, not that the rival held on.
+    (w.rival_decline_share IS NOT NULL) AS contestability_known
   FROM v_ward_computed w
   LEFT JOIN v_ward_reliability r          ON r.ward_id = w.ward_id
   LEFT JOIN v_ward_shortage s             ON s.ward_id = w.ward_id
@@ -56,6 +58,9 @@ scored AS (
     CASE
       WHEN n.is_contestable AND n.candidate_status = 'Confirmed'          THEN 'Contest'
       WHEN n.is_contestable AND n.candidate_status IN ('None','Pending')  THEN 'PR'
+      -- Checked before Hold/Abandon: a ward with no baseline has not been
+      -- judged uncontestable, it has not been judged. See migration 044.
+      WHEN NOT n.contestability_known                                     THEN 'Unassessed'
       WHEN n.candidate_status = 'Confirmed'                               THEN 'Hold'
       ELSE 'Abandon'
     END                                                              AS recommended_box,
@@ -66,15 +71,23 @@ scored AS (
     -- displacement is negative almost everywhere its percentile is noise,
     -- so headroom and reliability decided the order and neither has
     -- anything to do with contestability.
-    --   1 Contest  contestable and a certified candidate of ours is standing
-    --   2 PR       contestable, no candidate of ours; the list ballot only
+    --   1 Contest     contestable and a certified candidate of ours is standing
+    --   2 PR          contestable, no candidate of ours; the list ballot only
+    --   3/4 Unassessed  no 2021/2024 baseline - not a verdict
     --   3 Hold     holding what we have
     --   4 Abandon  not contestable, no candidate
     CASE
       WHEN n.is_contestable AND n.candidate_status = 'Confirmed'          THEN 1
       WHEN n.is_contestable AND n.candidate_status IN ('None','Pending')  THEN 2
-      WHEN n.candidate_status = 'Confirmed'                               THEN 3
-      ELSE 4
+      -- Unassessed splits into two sort ranks under one label: where no
+      -- baseline exists anywhere, a single rank leaves every ward ordered by
+      -- a score computed from COALESCE(NULL, 0). Whether we certified a ward
+      -- candidate is known regardless of the baseline, so those sort first.
+      WHEN NOT n.contestability_known
+           AND n.candidate_status = 'Confirmed'                          THEN 3
+      WHEN NOT n.contestability_known                                     THEN 4
+      WHEN n.candidate_status = 'Confirmed'                               THEN 5
+      ELSE 6
     END                                                              AS box_priority
   FROM normalised n
   CROSS JOIN control_panel cp
@@ -92,7 +105,8 @@ SELECT
   ROW_NUMBER() OVER (ORDER BY priority_score DESC, ward_id)          AS score_rank,
   CASE WHEN recommended_box = 'PR' THEN 'NO CANDIDATE' ELSE NULL END AS gap_flag,
   candidate_status_source,
-  list_loaded
+  list_loaded,
+  contestability_known
 FROM scored;
 
 COMMENT ON VIEW v_priority_rank IS

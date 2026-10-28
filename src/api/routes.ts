@@ -70,7 +70,8 @@ async function getWards(ctx: Ctx): Promise<void> {
   // and no ward candidate can be added, so the box no longer exists. See
   // migration 041. A stale bookmark asking for it gets a 400, not an empty
   // list that reads as "no wards need a candidate".
-  const box = enumParam(ctx.url, 'box', ['Contest', 'PR', 'Hold', 'Abandon']);
+  const box = enumParam(ctx.url, 'box',
+    ['Contest', 'PR', 'Unassessed', 'Hold', 'Abandon']);
   const municipality = ctx.url.searchParams.get('municipality');
 
   /* Province and region come from the municipality join rather than the

@@ -216,8 +216,10 @@
            glossary entry, because it also shows why a ward moved. -->
       <div class="filter-group">
         <h2>What to do</h2>
-        <p class="filter-note">Each ward falls into one of four, from two
-           questions: can we win it, and do we have a candidate?</p>
+        <p class="filter-note">Two questions place a ward: can we win it, and
+           do we have a candidate? Where no 2021 baseline is loaded the first
+           question has no answer yet, and the ward is listed as unassessed
+           rather than guessed at.</p>
         <table class="matrix">
           <thead>
             <tr><td></td><th scope="col">Candidate</th><th scope="col">No candidate</th></tr>
@@ -229,6 +231,10 @@
             <tr><th scope="row">Not winnable</th>
                 <td><button class="chip" data-box="Hold">Hold</button></td>
                 <td><button class="chip" data-box="Abandon">Abandon</button></td></tr>
+            <!-- Outside the 2x2 on purpose. "Winnable?" has three answers and
+                 the third is "nobody has looked", which is not a column. -->
+            <tr><th scope="row">Not assessed</th>
+                <td colspan="2"><button class="chip" data-box="Unassessed">Unassessed</button></td></tr>
           </tbody>
         </table>
         <div class="chips" id="filter-box"></div>

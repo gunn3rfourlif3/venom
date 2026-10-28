@@ -12,7 +12,7 @@
 
 function required(name: string): string {
   const value = process.env[name];
-  if (!value) {
+  if (!value || value.trim() === '') {
     throw new Error(
       `Missing required environment variable: ${name}. ` +
       `Set it in .env (see .env.example).`,
@@ -21,13 +21,34 @@ function required(name: string): string {
   return value;
 }
 
+/* A SET-BUT-EMPTY VARIABLE IS NOT A VALUE, AND `??` DISAGREES.
+ *
+ * `??` falls back only on null and undefined. `IEC_BASE_URL=` in a .env file
+ * is an empty STRING, which passes straight through every default below -
+ * and `deploy/env.example` ships exactly these keys blank, so copying it is
+ * enough to arm the trap. Observed on the production VPS: IEC_BASE_URL,
+ * IEC_API_VERSION and IEC_CONCURRENCY were all present and all empty.
+ *
+ * The worst of the three was concurrency. `Number('')` is 0, not NaN, so the
+ * request gate would have been built to admit zero concurrent calls: the
+ * ingest would not have errored, it would have hung, silently, for as long
+ * as anyone was willing to leave it. An overnight run producing nothing and
+ * reporting nothing.
+ *
+ * Blank is treated as absent everywhere, which is what a blank line in a
+ * config file means to the person who left it blank. */
+function optional(name: string, fallback: string): string {
+  const value = process.env[name];
+  return value === undefined || value.trim() === '' ? fallback : value;
+}
+
 export const config = {
   iec: {
     get baseUrl(): string {
-      return process.env.IEC_BASE_URL ?? 'https://api.elections.org.za';
+      return optional('IEC_BASE_URL', 'https://api.elections.org.za');
     },
     get version(): string {
-      return process.env.IEC_API_VERSION ?? 'v1';
+      return optional('IEC_API_VERSION', 'v1');
     },
     /** Only the ingestion CLI reads these. */
     get username(): string {
@@ -37,7 +58,11 @@ export const config = {
       return required('IEC_PASSWORD');
     },
     get concurrency(): number {
-      return Number(process.env.IEC_CONCURRENCY ?? 4);
+      // Guarded, not just defaulted: a non-numeric or zero value here does
+      // not fail loudly, it stalls the gate. Anything that is not a positive
+      // integer falls back rather than being believed.
+      const parsed = Number(optional('IEC_CONCURRENCY', '4'));
+      return Number.isInteger(parsed) && parsed > 0 ? parsed : 4;
     },
   },
 
@@ -49,24 +74,24 @@ export const config = {
 
   scope: {
     get province(): string {
-      return process.env.VENOM_PROVINCE ?? 'Gauteng';
+      return optional('VENOM_PROVINCE', 'Gauteng');
     },
     // Exact aliases, pipe-separated. Never substring-matched: see
     // src/ingest/parties.ts for why that is not a style preference.
     get ourParty(): string {
-      return process.env.VENOM_OUR_PARTY ?? 'MK|UMKHONTO WESIZWE|UMKHONTO WESIZWE PARTY';
+      return optional('VENOM_OUR_PARTY', 'MK|UMKHONTO WESIZWE|UMKHONTO WESIZWE PARTY');
     },
     get ourPartyIds(): string {
-      return process.env.VENOM_OUR_PARTY_IDS ?? '';
+      return optional('VENOM_OUR_PARTY_IDS', '');
     },
     get rivalParty(): string {
-      return process.env.VENOM_RIVAL_PARTY ?? 'ANC|AFRICAN NATIONAL CONGRESS';
+      return optional('VENOM_RIVAL_PARTY', 'ANC|AFRICAN NATIONAL CONGRESS');
     },
     get rivalPartyIds(): string {
-      return process.env.VENOM_RIVAL_PARTY_IDS ?? '';
+      return optional('VENOM_RIVAL_PARTY_IDS', '');
     },
     get lgeBallot(): 'PR' | 'WARD' {
-      return (process.env.VENOM_LGE_BALLOT ?? 'PR') as 'PR' | 'WARD';
+      return (optional('VENOM_LGE_BALLOT', 'PR') === 'WARD' ? 'WARD' : 'PR');
     },
   },
 };

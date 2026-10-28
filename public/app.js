@@ -175,6 +175,11 @@ const BOX_MEANING = {
   PR:       'No ward candidate was certified for us. The seat is gone, the list ballot is not — turnout here still earns PR seats.',
   Hold:     'Not winnable, but we hold it. Defend, do not invest.',
   Abandon:  'Not winnable and nobody standing. Spend the day elsewhere.',
+  /* Not a verdict. is_contestable is computed from the rival's 2021-2024
+     decline, and its CASE ends ELSE false - so a ward with no baseline loaded
+     was indistinguishable from one measured and found hopeless, and 4,031 of
+     them were being reported as Abandon. See migration 044. */
+  Unassessed: 'No 2021 baseline loaded for this ward, so nothing has been judged. Not a decision to skip it — a question nobody has answered.',
 };
 
 /* "confirmed" and "none confirmed" were the only two things this row could

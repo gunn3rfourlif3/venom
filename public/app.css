@@ -423,6 +423,9 @@ button, input, select { font: inherit; color: inherit; }
 .box-PR       { color: var(--st-info); font-weight: 600; }
 .box-Hold     { color: var(--ink-2); }
 .box-Abandon  { color: var(--ink-3); opacity: .65; }
+/* Not a verdict, so it must not wear a verdict's colour - and not the faded
+   treatment Abandon gets either, which reads as "already dealt with". */
+.box-Unassessed { color: var(--st-unknown); font-weight: 600; }
 .press-HIGH     { color: var(--theirs); font-weight: 600; }
 .press-ELEVATED { color: var(--theirs); }
 .press-LOW      { color: var(--ink-3); }
