@@ -133,7 +133,7 @@ async function loadWards() {
   // Two thousand rows over two requests takes a couple of seconds, and the
   // sidebar counts cannot be computed until both land. Until then the
   // filters are shown as placeholders rather than as zeros, because a zero
-  // beside "Recruit" is a claim and a placeholder is not.
+  // beside a box name is a claim and a placeholder is not.
   document.querySelector('.filters')?.classList.add('is-waiting');
   return whileLoading('view-wards', async () => {
     const [wards, targets] = await Promise.all([
@@ -162,13 +162,38 @@ function countBy(key, value) {
 
 /* What each of the four means, in the words of the person using it rather
    than the words of the view that computes it. These are not restatements of
-   the rule - the rule is the 2x2 above them - they are the instruction. */
+   the rule - the rule is the 2x2 above them - they are the instruction.
+
+   'Recruit' used to sit at the top of this list and of the ranking: winnable,
+   nobody standing, find a candidate. Lists were certified on 16 September
+   2026 and cannot change, so there is nobody to find. It is now 'PR', which
+   is the thing that can still be done in such a ward - municipal PR is
+   compensatory, so a list vote there is worth what a list vote is worth
+   anywhere. See migration 041. */
 const BOX_MEANING = {
-  Recruit:  'Winnable, and nobody is standing. Find a candidate first.',
   Contest:  'Winnable, candidate in place. Put people and money here.',
+  PR:       'No ward candidate was certified for us. The seat is gone, the list ballot is not — turnout here still earns PR seats.',
   Hold:     'Not winnable, but we hold it. Defend, do not invest.',
   Abandon:  'Not winnable and nobody standing. Spend the day elsewhere.',
 };
+
+/* "confirmed" and "none confirmed" were the only two things this row could
+   say, and both were read off a campaign-entered field that disagreed with
+   the certified ballot in 310 of Gauteng's 526 wards. The row now says what
+   it knows AND who said so, because "we have no candidate here" sourced from
+   the IEC is final and actionable, while the same words sourced from a blank
+   internal field mean only that nobody has filled it in. */
+function candidateLine(d) {
+  const certified = d.candidate_status_source === 'IEC certified';
+  if (certified) {
+    return d.candidate_status === 'Confirmed'
+      ? 'standing — IEC certified'
+      : 'none — IEC certified, final';
+  }
+  if (d.candidate_status === 'Confirmed') return 'confirmed — campaign entry, unverified';
+  if (d.candidate_status === 'Pending')   return 'pending — campaign entry, unverified';
+  return 'not recorded — certified list for this province not loaded';
+}
 
 const CLASS_MEANING = {
   'ACT NOW': 'Close, and complaints are rising.',
@@ -230,12 +255,18 @@ function renderLedger() {
 
   $('ledger').innerHTML = rows.map((w) => {
     const t = state.targets.get(w.ward_id);
-    const urgent = w.gap_flag === 'URGENT';
+    /* Was `urgent`, and wore the signal-yellow flag in the row margin. The
+       flag is an alarm, and this is not one: no ward candidate of ours was
+       certified here, that was final on 16 September, and nothing anyone
+       does this week changes it. The row is still worth marking - the work
+       there is different - so it keeps a marker in the informational hue
+       rather than the alarm one. See migration 041. */
+    const noCandidate = w.gap_flag === 'NO CANDIDATE';
     const band = t?.pressure_band ?? 'QUIET';
     const declineNeg = Number(w.rival_decline_share) < 0;
     const eoNeg = Number(w.eo_est_votes) < 0;
     return `
-      <button class="line${urgent ? ' is-urgent' : ''}${state.openWard === w.ward_id ? ' is-open' : ''}"
+      <button class="line${noCandidate ? ' is-no-candidate' : ''}${state.openWard === w.ward_id ? ' is-open' : ''}"
               data-ward="${esc(w.ward_id)}"
               aria-label="Ward ${esc(w.ward_id)}, ${esc(w.municipality)}, ${esc(w.recommended_box)}">
         <span class="mark"></span>
@@ -399,7 +430,7 @@ async function openDossier(wardId) {
 
     <h3>Liabilities</h3>
     ${kv([
-      ['Candidate', d.candidate_shortage ? 'none confirmed' : 'confirmed'],
+      ['Candidate', candidateLine(d)],
       ['People short', num(d.people_shortage)],
       ['Stations covered', `${num(d.stations_covered)} of ${num(d.stations_total)}`],
       ['Pledges secured', num(d.pledges_total)],
@@ -1575,7 +1606,14 @@ async function loadOverview() {
       + `<span><b>${num(eo)}</b>expected</span>`;
 
   $('ov-stats').innerHTML = [
-    ['Without a candidate', noBaseline ? '—' : num(c.wards_no_candidate),
+    /* Was labelled "Without a candidate", which is not what it counts. The
+       figure is SUM(candidate_shortage) - wards that are contestable AND have
+       no candidate of ours - so it read 6 while 72 Gauteng wards have no
+       candidate of ours at all. The number is the right one to show here (a
+       ward we could not win anyway is not an operational gap); the label was
+       claiming a wider fact than the number supports. It now names the same
+       cell as the 2x2 in the wards directory: winnable, no candidate. */
+    ['Winnable, no candidate', noBaseline ? '—' : num(c.wards_no_candidate),
       !noBaseline && Number(c.wards_no_candidate) > 0],
     ['People short', noBaseline ? '—' : num(c.people_gap_total),
       !noBaseline && Number(c.people_gap_total) > 0],

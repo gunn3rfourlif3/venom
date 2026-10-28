@@ -400,6 +400,10 @@ button, input, select { font: inherit; color: inherit; }
 /* The one loud thing: a flagged line in the ledger margin. */
 .mark { height: 100%; min-height: 1.5em; background: transparent; }
 .line.is-urgent .mark { background: var(--flag); }
+/* No ward candidate certified for us. Marked, because the work in that ward
+   is a different job, but not flagged: --flag is the alarm colour and this is
+   a settled fact about the ballot, not something to act on today. */
+.line.is-no-candidate .mark { background: var(--st-info); }
 
 .rank { color: var(--ink-3); text-align: right; font-size: var(--step--1); }
 .ward {
@@ -410,8 +414,13 @@ button, input, select { font: inherit; color: inherit; }
 }
 .munic { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .box, .press { font-size: var(--step-0); }
-.box-Recruit  { color: var(--theirs); font-weight: 600; }
 .box-Contest  { color: var(--ours);   font-weight: 600; }
+/* A ward where no candidate of ours was certified. Deliberately NOT a warning
+   hue: nothing can be done about the ballot, so an alarm would be an alarm
+   about an unchangeable fact. Not --st-unknown either, which means "no report"
+   - this is a known, final state. Informational: the ward seat is gone, the
+   list vote there is not, and the day is still worth working. */
+.box-PR       { color: var(--st-info); font-weight: 600; }
 .box-Hold     { color: var(--ink-2); }
 .box-Abandon  { color: var(--ink-3); opacity: .65; }
 .press-HIGH     { color: var(--theirs); font-weight: 600; }

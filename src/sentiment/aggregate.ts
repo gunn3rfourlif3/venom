@@ -111,6 +111,12 @@ function modalTone(tones: Map<Tone, number>): Tone {
 export async function writeSignals(
   client: PoolClient, buckets: Bucket[], sourceId: string,
   sourceUrl?: string, level: 'WARD' | 'MUNICIPALITY' = 'WARD',
+  /* Which scorer produced these values. Stored on the row because a sentiment
+     number without its scorer cannot be compared to one from a different
+     lexicon, and the series is about to gain a second generation - see
+     migration 042. Defaulted so an older caller still writes something true
+     rather than NULL. */
+  scorerName = 'keyword-v1',
 ): Promise<number> {
   let written = 0;
   for (const b of buckets) {
@@ -121,28 +127,30 @@ export async function writeSignals(
       b.category, b.observedOn, b.mentions,
       Math.max(-1, Math.min(1, Number(net.toFixed(3)))),
       modalTone(b.tones), sourceId, sourceUrl ?? null,
-      Number(confidence.toFixed(3)),
+      Number(confidence.toFixed(3)), scorerName,
     ];
 
     const sql = level === 'WARD'
       ? `INSERT INTO issue_signal
            (geo_level, ward_id, category, observed_on, mentions, net_sentiment,
-            tone, source, source_url, confidence)
-         VALUES ('WARD', $9, $1::issue_category, $2::date, $3, $4, $5::sentiment_tone, $6, $7, $8)
+            tone, source, source_url, confidence, scorer)
+         VALUES ('WARD', $10, $1::issue_category, $2::date, $3, $4, $5::sentiment_tone, $6, $7, $8, $9)
          ON CONFLICT (ward_id, category, observed_on, source)
            WHERE geo_level = 'WARD' DO UPDATE SET
              mentions = EXCLUDED.mentions, net_sentiment = EXCLUDED.net_sentiment,
              tone = EXCLUDED.tone, confidence = EXCLUDED.confidence,
-             source_url = EXCLUDED.source_url, ingested_at = now()`
+             source_url = EXCLUDED.source_url, scorer = EXCLUDED.scorer,
+             ingested_at = now()`
       : `INSERT INTO issue_signal
            (geo_level, demarcation_code, category, observed_on, mentions,
-            net_sentiment, tone, source, source_url, confidence)
-         VALUES ('MUNICIPALITY', $9, $1::issue_category, $2::date, $3, $4, $5::sentiment_tone, $6, $7, $8)
+            net_sentiment, tone, source, source_url, confidence, scorer)
+         VALUES ('MUNICIPALITY', $10, $1::issue_category, $2::date, $3, $4, $5::sentiment_tone, $6, $7, $8, $9)
          ON CONFLICT (demarcation_code, category, observed_on, source)
            WHERE geo_level = 'MUNICIPALITY' DO UPDATE SET
              mentions = EXCLUDED.mentions, net_sentiment = EXCLUDED.net_sentiment,
              tone = EXCLUDED.tone, confidence = EXCLUDED.confidence,
-             source_url = EXCLUDED.source_url, ingested_at = now()`;
+             source_url = EXCLUDED.source_url, scorer = EXCLUDED.scorer,
+             ingested_at = now()`;
 
     const result = await client.query(sql, [...common, b.placeId]);
     written += result.rowCount ?? 0;
@@ -157,6 +165,9 @@ export async function ingest(
   level: 'WARD' | 'MUNICIPALITY' = 'WARD',
 ): Promise<{ buckets: number; signals: number }> {
   const buckets = await aggregate(items, scorer);
-  const signals = await writeSignals(client, buckets, sourceId, sourceUrl, level);
+  // The scorer's own name goes onto every row it produces. It was already in
+  // hand here and was only ever printed to the console (migration 042).
+  const signals = await writeSignals(
+    client, buckets, sourceId, sourceUrl, level, scorer.name);
   return { buckets: buckets.length, signals };
 }

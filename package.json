@@ -28,7 +28,9 @@
     "clean:synthetic": "node --env-file=.env dist/cli/clean-synthetic.js",
     "coverage": "node --env-file=.env dist/cli/coverage.js",
     "alerts:check": "node --env-file=.env dist/cli/alerts-check.js",
-    "import:facts": "node --env-file=.env dist/cli/import-facts.js"
+    "import:facts": "node --env-file=.env dist/cli/import-facts.js",
+    "import:candidates": "node --env-file=.env dist/cli/import-candidates.js",
+    "seats:verify": "node dist/cli/seats-verify.js"
   },
   "dependencies": {
     "pg": "8.13.1"

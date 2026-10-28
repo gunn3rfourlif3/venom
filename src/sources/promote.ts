@@ -166,12 +166,22 @@ export async function promoteSimpleFact(
  *  figure against one cannot be read beside a ward. */
 export async function runMunicipalMoney(
   years: number[],
-  provinceCode = 'GT',
+  /* One province, or every province when null. The default was 'GT', from
+     when the register held Gauteng only. The register went national on
+     22 October and this did not follow it, so audited Treasury figures
+     existed for 9 municipalities out of 213 and the other 204 showed
+     nothing - which reads on screen as a municipality with no spending
+     rather than a municipality we never asked about. */
+  provinceCode: string | null = null,
 ): Promise<RunResult> {
   const client = new MunicipalMoneyClient();
 
   const { run } = await recorded('municipal_money', async (c) => {
-    const municipalities = await client.municipalities(provinceCode);
+    const provinces = provinceCode
+      ? [provinceCode]
+      : ['EC', 'FS', 'GT', 'KZN', 'LIM', 'MP', 'NC', 'NW', 'WC'];
+    const municipalities = (await Promise.all(
+      provinces.map((p) => client.municipalities(p)))).flat();
     const kept = await promoteMunicipalities(c, municipalities);
 
     const wardHolding = municipalities.filter((m) => m.category !== 'C');

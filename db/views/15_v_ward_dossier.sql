@@ -70,7 +70,14 @@ SELECT
   COALESCE(dec.decisions_total, 0)                          AS decisions_total,
   COALESCE(dec.decisions_open, 0)                           AS decisions_open,
   dec.last_decision_on,
-  COALESCE(doc.documents_total, 0)                          AS documents_total
+  COALESCE(doc.documents_total, 0)                          AS documents_total,
+
+  -- Appended by migration 041. "No candidate" sourced from the IEC certified
+  -- list and "no candidate" sourced from a blank campaign field are not the
+  -- same claim, and the dossier is where someone acts on the difference.
+  pr.candidate_status,
+  pr.candidate_status_source,
+  pr.list_loaded
 
 FROM v_ward_computed c
 LEFT JOIN v_ward_eo e          ON e.ward_id  = c.ward_id

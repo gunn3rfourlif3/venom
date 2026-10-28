@@ -2,8 +2,9 @@
 -- Input:  v_ward_computed, v_ward_reliability, v_ward_shortage, control_panel
 -- Output: ranked list, box classification, gap flag
 --
--- gap_flag = 'URGENT' is the emergency list — the ward is contestable and
--- there is no candidate.
+-- gap_flag = 'NO CANDIDATE' — the ward is contestable and no candidate of
+-- ours was certified for it. Permanent, not urgent: see migration 041, which
+-- removed the 'Recruit' box because certification closed 16 September 2026.
 --
 -- NORMALISATION: the three inputs are in incompatible units — swing_share is
 -- 0-1, headroom is a count of voters, reliability_ratio is 0-1. Weighting
@@ -24,15 +25,18 @@ WITH base AS (
     w.rival_decline_share,
     w.headroom,
     w.pool_owner,
-    w.candidate_status,
+    ce.candidate_status,
     w.is_contestable,
     r.reliability_ratio,
     s.candidate_shortage,
     s.people_shortage,
-    s.presence_shortage
+    s.presence_shortage,
+    ce.candidate_status_source,
+    ce.list_loaded
   FROM v_ward_computed w
-  LEFT JOIN v_ward_reliability r ON r.ward_id = w.ward_id
-  LEFT JOIN v_ward_shortage s    ON s.ward_id = w.ward_id
+  LEFT JOIN v_ward_reliability r          ON r.ward_id = w.ward_id
+  LEFT JOIN v_ward_shortage s             ON s.ward_id = w.ward_id
+  LEFT JOIN v_ward_candidate_effective ce ON ce.ward_id = w.ward_id
 ),
 normalised AS (
   SELECT
@@ -51,7 +55,7 @@ scored AS (
 
     CASE
       WHEN n.is_contestable AND n.candidate_status = 'Confirmed'          THEN 'Contest'
-      WHEN n.is_contestable AND n.candidate_status IN ('None','Pending')  THEN 'Recruit'
+      WHEN n.is_contestable AND n.candidate_status IN ('None','Pending')  THEN 'PR'
       WHEN n.candidate_status = 'Confirmed'                               THEN 'Hold'
       ELSE 'Abandon'
     END                                                              AS recommended_box,
@@ -62,13 +66,13 @@ scored AS (
     -- displacement is negative almost everywhere its percentile is noise,
     -- so headroom and reliability decided the order and neither has
     -- anything to do with contestability.
-    --   1 Recruit  ground has come loose and there is no candidate
-    --   2 Contest  contestable with a candidate in place
+    --   1 Contest  contestable and a certified candidate of ours is standing
+    --   2 PR       contestable, no candidate of ours; the list ballot only
     --   3 Hold     holding what we have
     --   4 Abandon  not contestable, no candidate
     CASE
-      WHEN n.is_contestable AND n.candidate_status IN ('None','Pending')  THEN 1
-      WHEN n.is_contestable AND n.candidate_status = 'Confirmed'          THEN 2
+      WHEN n.is_contestable AND n.candidate_status = 'Confirmed'          THEN 1
+      WHEN n.is_contestable AND n.candidate_status IN ('None','Pending')  THEN 2
       WHEN n.candidate_status = 'Confirmed'                               THEN 3
       ELSE 4
     END                                                              AS box_priority
@@ -76,11 +80,23 @@ scored AS (
   CROSS JOIN control_panel cp
 )
 SELECT
-  *,
+  ward_id, zone, municipality, swing_index, rival_decline_share, headroom,
+  pool_owner, candidate_status, is_contestable, reliability_ratio,
+  candidate_shortage, people_shortage, presence_shortage,
+  n_swing, n_headroom, n_reliability, priority_score, recommended_box,
+  box_priority,
   -- Box first, score within the box.
   ROW_NUMBER() OVER (ORDER BY box_priority, priority_score DESC, ward_id)
                                                                      AS priority_rank,
   -- The score's own ordering, kept so the two can be compared.
   ROW_NUMBER() OVER (ORDER BY priority_score DESC, ward_id)          AS score_rank,
-  CASE WHEN recommended_box = 'Recruit' THEN 'URGENT' ELSE NULL END  AS gap_flag
+  CASE WHEN recommended_box = 'PR' THEN 'NO CANDIDATE' ELSE NULL END AS gap_flag,
+  candidate_status_source,
+  list_loaded
 FROM scored;
+
+COMMENT ON VIEW v_priority_rank IS
+  'Ranked wards with a recommended action. candidate_status is answered from '
+  'the IEC certified list where loaded and from the campaign-entered column '
+  'where not; candidate_status_source says which. There is no "Recruit" box: '
+  'lists were certified 16 September 2026 and no ward candidate can be added.';

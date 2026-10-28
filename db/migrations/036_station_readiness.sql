@@ -22,7 +22,16 @@
 -- progress bar built on station counts understates the work by nearly a
 -- third.
 
-CREATE OR REPLACE VIEW v_station_readiness AS
+-- DROP then CREATE, not CREATE OR REPLACE. Migration 037 supersedes this view
+-- with a different column list, and CREATE OR REPLACE may only change a view's
+-- body, never its columns - so re-running this file against a database that
+-- already has 037's version raises 42P16 "cannot drop columns from view" and
+-- stops the whole migration run. The migrator is designed to be re-runnable;
+-- a file that is only safe the first time defeats that. Nothing in the
+-- database depends on this view (only API queries do), so dropping is free.
+DROP VIEW IF EXISTS v_station_readiness;
+
+CREATE VIEW v_station_readiness AS
 SELECT
   s.station_id,
   s.ward_id,

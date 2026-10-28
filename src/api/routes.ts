@@ -66,7 +66,11 @@ async function getWards(ctx: Ctx): Promise<void> {
      label just was not using it. Both halves are fixed. */
   const limit = intParam(ctx.url, 'limit', 100, 1, 10000);
   const offset = intParam(ctx.url, 'offset', 0, 0, 100000);
-  const box = enumParam(ctx.url, 'box', ['Recruit', 'Contest', 'Hold', 'Abandon']);
+  // 'Recruit' is deliberately absent: certification closed 16 September 2026
+  // and no ward candidate can be added, so the box no longer exists. See
+  // migration 041. A stale bookmark asking for it gets a 400, not an empty
+  // list that reads as "no wards need a candidate".
+  const box = enumParam(ctx.url, 'box', ['Contest', 'PR', 'Hold', 'Abandon']);
   const municipality = ctx.url.searchParams.get('municipality');
 
   /* Province and region come from the municipality join rather than the

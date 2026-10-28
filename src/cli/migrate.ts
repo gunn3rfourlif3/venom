@@ -37,7 +37,22 @@ const DUPLICATE_CODES = new Set([
   '42701', // duplicate_column
   '42723', // duplicate_function
   '42P06', // duplicate_schema
-  '42P16', // invalid_table_definition, e.g. CREATE OR REPLACE VIEW changing columns
+
+  /* 42P16 USED TO BE HERE AND IT WAS WRONG.
+   *
+   * invalid_table_definition is what CREATE OR REPLACE VIEW raises when the
+   * new definition changes the column list - you may replace a view's body
+   * but never its columns. Treating it as a duplicate-object code made the
+   * migrator record such a file as 'present' and move on, leaving the OLD
+   * view in place while reporting a successful run.
+   *
+   * That is the one failure a migrator must never have. The other codes
+   * here mean "what this file asks for is already true"; 42P16 means "what
+   * this file asks for conflicts with what is there", which is the
+   * opposite. Caught when migration 028 changed v_booth_logistics and the
+   * run said 'present' while the old view kept serving. The fix in the
+   * migration is DROP then CREATE; the fix here is to stop swallowing it.
+   */
 ]);
 
 const dryRun = process.argv.includes('--dry-run');
@@ -136,6 +151,63 @@ console.log(
   `${present} already present, ${skipped} unchanged` +
   (changed ? `, ${changed} edited after shipping (left alone)` : ''));
 
+/* The scan below looks for "CREATE <kind> <name>" in the SQL text, and it used
+ * to read comments too. These files are heavily commented and the comments
+ * discuss the DDL they sit above, so a sentence like "uses a plain CREATE VIEW
+ * and the runner tolerates the duplicate" produced an expected object called
+ * `public.and`, which was then reported as missing from the database. A
+ * verification step that cries wolf is worse than none: this one exists to be
+ * trusted when it says an object is absent, and a false positive teaches
+ * whoever reads it to skip the whole section.
+ *
+ * Comments are stripped with a small state machine rather than a regex,
+ * because `--` and the start of a block comment both appear inside string
+ * literals in these files, and dollar-quoted bodies (migration 041 wraps DDL
+ * in $v$...$v$) may contain either. Dollar-quoted text is deliberately KEPT:
+ * the DDL inside it really does create those views. */
+function stripComments(sql: string): string {
+  let out = '';
+  let i = 0;
+  while (i < sql.length) {
+    const two = sql.slice(i, i + 2);
+
+    if (two === '--') {                                  // line comment
+      const nl = sql.indexOf('\n', i);
+      if (nl === -1) break;
+      out += '\n'; i = nl + 1; continue;
+    }
+    if (two === '/*') {                                  // block comment, nests
+      let depth = 1; i += 2;
+      while (i < sql.length && depth > 0) {
+        if (sql.slice(i, i + 2) === '/*') { depth += 1; i += 2; }
+        else if (sql.slice(i, i + 2) === '*/') { depth -= 1; i += 2; }
+        else i += 1;
+      }
+      out += ' '; continue;
+    }
+    if (sql[i] === "'") {                                // single-quoted string
+      out += sql[i]; i += 1;
+      while (i < sql.length) {
+        if (sql[i] === "'" && sql[i + 1] === "'") { out += "''"; i += 2; continue; }
+        if (sql[i] === "'") { out += "'"; i += 1; break; }
+        out += sql[i]; i += 1;
+      }
+      continue;
+    }
+    const dollar = /^\$[a-z_]*\$/i.exec(sql.slice(i));   // dollar-quoted body
+    if (dollar) {
+      const tag = dollar[0];
+      const end = sql.indexOf(tag, i + tag.length);
+      if (end === -1) { out += sql.slice(i); break; }
+      // Kept, then recursed into: the DDL in here is real, its comments are not.
+      out += stripComments(sql.slice(i + tag.length, end));
+      i = end + tag.length; continue;
+    }
+    out += sql[i]; i += 1;
+  }
+  return out;
+}
+
 /* Then check it. "Already present" is an inference from one duplicate error
  * on one statement, and a file that was half applied by hand would pass that
  * test while leaving later statements undone. So read back every relation
@@ -145,7 +217,7 @@ console.log(
 if (!dryRun) {
   const expected = new Map<string, string>();   // schema.name -> kind
   for (const file of files) {
-    const sql = await readFile(file.path, 'utf8');
+    const sql = stripComments(await readFile(file.path, 'utf8'));
     // The optional first group is a schema prefix: migration 011 puts its
     // staging tables in a raw schema, and a name-only check looks for
     // "raw" in public and reports a table that was never meant to be there.

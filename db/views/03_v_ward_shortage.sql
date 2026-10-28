@@ -28,7 +28,10 @@ SELECT
   w.ward_id,
 
   -- liability 1: no candidate where the ward is contestable
-  CASE WHEN w.is_contestable AND w.candidate_status <> 'Confirmed'
+  -- Reads the IEC certified list where loaded (migration 041). No longer a
+  -- shortage anyone can close - the ballot is final - but still the correct
+  -- input to "can a ward seat be won here".
+  CASE WHEN w.is_contestable AND ce.candidate_status <> 'Confirmed'
        THEN 1 ELSE 0 END                                   AS candidate_shortage,
 
   -- liability 2: people needed vs people present
@@ -46,6 +49,7 @@ SELECT
   COALESCE(s.pledges_total,0)                              AS pledges_total
 
 FROM v_ward_computed w
-LEFT JOIN v_ward_reliability r ON r.ward_id = w.ward_id
-LEFT JOIN station_agg s        ON s.ward_id = w.ward_id
-LEFT JOIN asset_agg a          ON a.ward_id = w.ward_id;
+LEFT JOIN v_ward_reliability r          ON r.ward_id = w.ward_id
+LEFT JOIN station_agg s                 ON s.ward_id = w.ward_id
+LEFT JOIN asset_agg a                   ON a.ward_id = w.ward_id
+LEFT JOIN v_ward_candidate_effective ce ON ce.ward_id = w.ward_id;

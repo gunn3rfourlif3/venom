@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xnith</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="mask-icon" href="/favicon.svg" color="#f5c518">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Two families, used for two jobs. Instrument Sans carries the
+     interface; Newsreader carries every quantity of votes or people,
+     with optical sizing so the hero figure is cut for display size and
+     a stat tile is not. The mono is for commands and identifiers only. -->
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,200;6..72,300;6..72,400&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
+<script>
+/* Stamped before the stylesheet paints, so the register never flashes the
+   wrong theme. Dark is the default; 'system' is an explicit choice, not the
+   fallback. Inline and tiny on purpose - a separate file would arrive after
+   first paint and the flash is exactly what it is here to prevent. */
+(function () {
+  try {
+    var saved = localStorage.getItem('venom-theme') || 'dark';
+    var resolved = saved === 'system'
+      ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+      : saved;
+    document.documentElement.setAttribute('data-theme', resolved);
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
+</script>
+</head>
+<body>
+
+<div id="signin" class="signin" hidden>
+  <form class="signin-card" id="signin-form">
+    <h1 class="wordmark">Xnith</h1>
+    <p class="signin-note">Ward ledger for the 2026 municipal elections.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+    <p class="signin-error" id="signin-error" role="alert" hidden></p>
+  </form>
+</div>
+
+<div id="app" class="shell" hidden>
+  <button class="railtoggle" id="railtoggle" aria-expanded="false" aria-controls="rail">Menu</button>
+  <nav class="rail views" id="rail" aria-label="Views">
+    <span class="brand"><span class="mark" aria-hidden="true">X</span><span class="wordmark">Xnith <i class="ver">v2.6</i></span></span>
+    <span class="scope" id="scope">&mdash;<br>2026 municipal elections</span>
+
+    <p class="rail-group">Operations</p>
+    <!-- Logistics leads the rail on purpose. From now until the 4th it is
+         the screen that changes a decision inside the hour; Overview tells
+         you how the campaign is going, which can wait until the evening. -->
+    <button data-view="logistics"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4h9v7H1z"/><path d="M10 6h3l2 2v3h-5z"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="12.5" r="1.5"/></svg><span>Logistics</span></button>
+    <button data-view="slips"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 1.5h7l3 3v10H3z"/><path d="M6 7h5M6 10h5M6 4h2"/></svg><span>Result slips</span></button>
+    <button data-view="overview" class="is-current"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 13V7m4 6V3m4 10V8m4 5V5"/></svg><span>Overview</span></button>
+    <button data-view="wards"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z"/></svg><span>Wards directory</span></button>
+    <button data-view="decisions"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v4M8 11v4M3.5 8H1M15 8h-2.5"/><circle cx="8" cy="8" r="3"/></svg><span>Decisions engine</span></button>
+    <button data-view="float"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5h14v8H1z"/><circle cx="8" cy="9" r="2"/></svg><span>Campaign float</span></button>
+
+    <p class="rail-group">Intelligence</p>
+    <button data-view="sentiment"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v8H6l-4 3z"/></svg><span>Social sentiment</span></button>
+    <button data-view="viewshed"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="1.8"/></svg><span>Viewshed analysis</span></button>
+
+    <p class="rail-group">System</p>
+    <button data-view="health"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12V4m4 8V7m4 5V2m4 10V6"/></svg><span>Data sources</span></button>
+    <button data-view="settings"><svg class="ri" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M15 8h-2M3 8H1M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4M12.9 12.9l-1.4-1.4M4.5 4.5L3.1 3.1"/></svg><span>Control panel</span></button>
+
+    <dl class="rail-stats" id="rail-stats">
+      <div><dt>Active region</dt><dd id="rs-region">&mdash;</dd></div>
+      <div><dt>Stations</dt><dd id="rs-stations">&mdash;</dd></div>
+      <div><dt>Register</dt><dd id="rs-sync">IEC GIS</dd></div>
+    </dl>
+
+    <div class="rail-foot">
+      <span class="live" id="live" title="Live connection">
+        <span class="live-dot"></span><span id="live-text">connecting</span>
+      </span>
+      <button class="theme" id="theme" title="Theme" aria-label="Theme: dark">
+        <span id="theme-text">Dark</span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="stage">
+  <!-- One bar for the whole app. It is driven by a counter of in-flight
+       requests inside api(), so any screen that fetches anything shows it
+       without having to remember to. Indeterminate, because the server
+       reports no progress. -->
+  <div class="progress" id="progress" role="status" aria-hidden="true">
+    <span class="sr-only">Loading</span>
+  </div>
+  <header class="topbar">
+    <div class="sysblock" id="sysblock" title="Connection to the server">
+      <span class="k">System</span>
+      <span class="v"><span class="pulse is-live" id="sys-dot"></span><span id="sys-state">online</span></span>
+    </div>
+    <div class="sysblock" id="latblock" title="Round trip to the server">
+      <span class="k">Latency</span><span class="v" id="sys-lat">&mdash;</span>
+    </div>
+    <form class="search" id="search" role="search" autocomplete="off">
+      <input id="search-input" type="search" placeholder="Search wards, documents, decisions"
+             aria-label="Search" aria-expanded="false" aria-controls="search-results"
+             role="combobox" aria-autocomplete="list">
+      <kbd class="search-key" aria-hidden="true">/</kbd>
+      <div class="search-results" id="search-results" role="listbox" hidden></div>
+    </form>
+    <span class="who" id="who"></span>
+    <button class="signout" id="signout">Sign out</button>
+  </header>
+
+  <!-- Overview: the one screen that answers "how are we doing" without
+       opening anything else. -->
+  <main id="view-overview">
+    <div class="page-head">
+      <h1>Overview</h1>
+      <p id="ov-sub">Reading the ledger…</p>
+    </div>
+
+    <div class="grid grid-hero">
+      <section class="panel headline" aria-label="Expected outcome">
+        <div>
+          <div class="headline-figure" id="ov-eo">&mdash;</div>
+          <div class="headline-label">Expected outcome, in votes</div>
+        </div>
+        <!-- The subtraction, drawn. What could be had, less what is being
+             lost, leaves the answer above. -->
+        <div class="subtraction">
+          <div class="sub-bar" id="ov-bar" role="img" aria-labelledby="ov-legend"></div>
+          <div class="sub-legend" id="ov-legend"></div>
+        </div>
+        <div class="stats" id="ov-stats"></div>
+      </section>
+
+      <section class="panel" aria-label="Wards to act on now">
+        <div class="panel-head">
+          <h2>Act now</h2>
+          <span class="note" id="ov-act-note"></span>
+        </div>
+        <div class="rank-list" id="ov-act"></div>
+      </section>
+    </div>
+
+    <div class="grid grid-2">
+      <section class="panel" aria-label="Pressure by issue">
+        <div class="panel-head">
+          <h2>Pressure by issue</h2>
+          <span class="note" id="ov-issues-note"></span>
+        </div>
+        <div class="qbars" id="ov-issues"></div>
+      </section>
+
+      <section class="panel" aria-label="Municipal finances">
+        <div class="panel-head">
+          <h2>What the municipalities report</h2>
+          <span class="note">National Treasury, audited</span>
+        </div>
+        <div class="qbars" id="ov-municipal"></div>
+      </section>
+    </div>
+
+    <div class="grid">
+      <section class="panel" aria-label="Data sources">
+        <div class="panel-head">
+          <h2>Where the numbers come from</h2>
+          <span class="note" id="ov-src-note"></span>
+        </div>
+        <div class="src-strip" id="ov-sources"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Control panel: the parameters the model runs on. -->
+  <main id="view-settings" hidden>
+    <div class="page-head">
+      <h1>Control panel</h1>
+      <p>Every number the model runs on. Changing these changes what the
+         campaign is told, so only administrators can save.</p>
+    </div>
+    <div class="grid">
+      <section class="panel">
+        <form id="cp-form">
+          <div class="cp-groups" id="cp-groups"></div>
+          <div class="cp-bar">
+            <span class="cp-state" id="cp-state">No changes</span>
+            <button type="button" class="btn" id="cp-reset" disabled>Discard changes</button>
+            <button type="submit" class="btn btn-primary" id="cp-save" disabled>Save changes</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <main class="pane" id="view-wards" hidden>
+    <aside class="filters" aria-label="Filters">
+      <!-- What to do in a ward comes from two questions and nothing else.
+           Showing the grid that produces the answer is more use than a
+           glossary entry, because it also shows why a ward moved. -->
+      <div class="filter-group">
+        <h2>What to do</h2>
+        <p class="filter-note">Each ward falls into one of four, from two
+           questions: can we win it, and do we have a candidate?</p>
+        <table class="matrix">
+          <thead>
+            <tr><td></td><th scope="col">Candidate</th><th scope="col">None yet</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Winnable</th>
+                <td><button class="chip" data-box="Contest">Contest</button></td>
+                <td><button class="chip" data-box="Recruit">Recruit</button></td></tr>
+            <tr><th scope="row">Not winnable</th>
+                <td><button class="chip" data-box="Hold">Hold</button></td>
+                <td><button class="chip" data-box="Abandon">Abandon</button></td></tr>
+          </tbody>
+        </table>
+        <div class="chips" id="filter-box"></div>
+      </div>
+      <div class="filter-group">
+        <h2>Priority</h2>
+        <p class="filter-note">How soon it needs attention, from grievance
+           pressure and how close the ward is.</p>
+        <div class="chips" id="filter-class"></div>
+      </div>
+      <div class="filter-group">
+        <h2>Municipality</h2>
+        <select id="filter-munic"><option value="">All</option></select>
+      </div>
+      <p class="filter-count" id="filter-count"></p>
+    </aside>
+
+    <section class="ledger-wrap">
+      <div class="page-head page-head-tight">
+        <h1>Wards</h1>
+        <p>Every ward, ordered by what needs doing first. Click a
+           row for the full picture of that ward.</p>
+      </div>
+      <!-- Each column says what it means on hover and under its own title:
+           a header that only a model author understands is not a header. -->
+      <div class="ledger-head" role="row">
+        <span class="col-mark" aria-hidden="true"></span>
+        <span class="col-rank" title="Order of attention, best first">#</span>
+        <span class="col-ward">Ward</span>
+        <span class="col-munic">Municipality</span>
+        <span class="col-box" title="The recommended play, from the grid on the left">What to do</span>
+        <span class="col-press" title="Open service-delivery complaints in this ward recently">Complaints</span>
+        <span class="col-num" title="How far the rival's share fell between 2021 and 2024">Rival decline</span>
+        <span class="col-num" title="Votes we expect here, after leakage">Expected votes</span>
+      </div>
+      <div id="ledger" class="ledger"></div>
+      <p class="empty" id="ledger-empty" hidden>No wards match these filters.</p>
+    </section>
+  </main>
+
+  <main class="pane pane-single" id="view-sentiment" hidden>
+    <section class="panel-body viz">
+      <div class="page-head page-head-tight">
+        <h1>Issue pressure</h1>
+        <p id="sent-sub">Which services are generating noise, where.</p>
+      </div>
+      <!-- Which feed is being read, and what that feed actually measures.
+           Two feeds with different meanings must never be averaged, so this
+           chooses one rather than blending. -->
+      <div class="source-switch" id="sent-sources" role="group"
+           aria-label="Signal source"></div>
+      <p class="provenance" id="sent-provenance"></p>
+
+      <div class="kpi-row" id="sent-kpis"></div>
+
+      <!-- The hashtag watchlist. Instagram allows thirty unique tags per
+           rolling seven days, so this is a budget, not a search box. -->
+      <section class="panel" id="ht-panel" style="margin-top:18px">
+        <div class="panel-head">
+          <h2 class="viz-title" style="margin:0">Hashtag watchlist</h2>
+          <span class="viz-sub" style="margin:0" id="ht-quota">&mdash;</span>
+        </div>
+        <div id="ht-state"></div>
+        <p class="viz-sub">One per line, as <code>tag, municipality, category</code>.
+           A tag with no municipality is kept but never collected &mdash; Instagram
+           hashtag media carries no location, so a tag that does not name a place
+           cannot be attributed to one.</p>
+        <textarea id="ht-paste" spellcheck="false"
+          placeholder="#JoburgWater, City of Johannesburg, Water&#10;#EmfuleniSewage, Emfuleni, Sanitation"></textarea>
+        <div class="row" style="margin-top:10px;gap:8px;align-items:center">
+          <button id="ht-add" class="btn btn-primary">Add to watchlist</button>
+          <span id="ht-note" class="viz-sub" style="margin:0"></span>
+        </div>
+        <div id="ht-list" style="margin-top:12px"></div>
+      </section>
+
+      <figure class="viz-figure">
+        <figcaption>
+          <h3>Where the pressure is</h3>
+          <p>Mentions by municipality and issue, over the window. The scale runs
+             fewer to more; the legend below shows which way.</p>
+        </figcaption>
+        <div class="viz-scroll"><div id="sent-heatmap"></div></div>
+        <div class="viz-legend" id="sent-heatmap-legend"></div>
+      </figure>
+
+      <figure class="viz-figure">
+        <figcaption>
+          <h3>How it is being taken</h3>
+          <p>Share of mentions by sentiment, centred on mixed.</p>
+        </figcaption>
+        <div class="viz-scroll"><div id="sent-bands"></div></div>
+        <div class="viz-legend" id="sent-bands-legend"></div>
+      </figure>
+
+      <figure class="viz-figure">
+        <figcaption>
+          <h3>Eight weeks by issue</h3>
+          <p>Weekly mentions per category, on one shared scale.</p>
+        </figcaption>
+        <div id="sent-trend" class="small-multiples"></div>
+      </figure>
+
+      <details class="viz-table">
+        <summary>Table view</summary>
+        <div id="sent-table"></div>
+      </details>
+    </section>
+  </main>
+
+  <main class="pane pane-single" id="view-decisions" hidden>
+    <section class="panel-body">
+      <div class="search-row">
+        <input id="decision-q" type="search" placeholder="Search decisions and rationale">
+      </div>
+      <div id="decision-list"></div>
+    </section>
+  </main>
+
+  <main class="pane pane-single" id="view-float" hidden>
+    <section class="panel-body"><div id="float-list"></div></section>
+  </main>
+
+  <main class="pane pane-single" id="view-viewshed" hidden>
+    <section class="panel-body">
+      <h2 class="viz-title">Viewshed projection</h2>
+      <p class="viz-sub">Public cameras in central London, projected over real
+         elevation. London stands in for Johannesburg until a Gauteng feed is
+         published &mdash; the geometry is the point, not the city.</p>
+      <p class="provenance" id="viewshed-note"></p>
+      <div class="vs-stats" id="viewshed-counts"></div>
+      <div class="vs-canvas" id="viewshed-canvas"
+           aria-label="3D projection of camera fields of view over terrain" role="img"></div>
+      <div class="vs-controls">
+        <label for="vs-exag">Vertical exaggeration</label>
+        <input type="range" id="vs-exag" min="1" max="14" step="1" value="6">
+        <output id="vs-exag-out">×6</output>
+        <span class="vs-attrib">Powered by TfL Open Data &middot;
+          camera and map data &copy; OpenStreetMap contributors (ODbL) &middot;
+          elevation from public terrarium tiles</span>
+      </div>
+    </section>
+  </main>
+
+  <main class="pane pane-single" id="view-health" hidden>
+    <section class="panel-body">
+      <h2 class="viz-title">What Venom may read</h2>
+      <p class="viz-sub">Every source, its access level and when it last worked.
+         Closed means there is no route in, not that it is switched off.</p>
+      <div id="source-register" class="source-register"></div>
+
+      <h2 class="viz-title">Election data ingestion</h2>
+      <p class="viz-sub">IEC fetch and promotion runs.</p>
+      <div id="health-list"></div>
+    </section>
+  </main>
+
+  <!-- LOGISTICS. Did our own intervention reach the ground.
+       Ordered as a person on the day needs it: what is wrong, where, and
+       whether reports are still arriving. -->
+  <main class="pane pane-single" id="view-logistics" hidden>
+    <div class="page-head">
+      <h1>Logistics</h1>
+      <p id="lg-sub">Reading the ground…</p>
+    </div>
+
+    <!-- Open alerts sit above everything. If one is showing, it is the
+         reason somebody opened this screen. -->
+    <section class="panel alerts" id="lg-alerts" hidden aria-label="Open alerts"></section>
+
+    <div class="statline" id="lg-statline" aria-label="Ingest status"></div>
+
+    <div class="tiles" id="lg-tiles" style="margin-top:14px"></div>
+
+    <!-- Silence, counted rather than listed. Hidden once most stations are
+         reporting, because then a silent one is a genuine exception and
+         belongs in the table below with everything else. -->
+    <section class="panel" id="lg-silence" style="margin-top:14px" hidden></section>
+
+    <section class="panel" style="margin-top:14px">
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Stations needing attention</h2>
+        <div class="seg" id="lg-filter" role="group" aria-label="Filter stations">
+          <button data-flag="" class="is-on">Exceptions</button>
+          <button data-flag="UNSTAFFED">Unstaffed</button>
+          <button data-flag="NO_REPORT">No report</button>
+          <button data-flag="STALE">Stale</button>
+          <button data-flag="all">All</button>
+        </div>
+      </div>
+      <p class="viz-sub" id="lg-table-note">
+        Worst first. A station that is fine needs no attention, so this list
+        leads with the ones that are not.</p>
+      <div style="overflow:auto;max-height:60vh">
+        <table class="logi-table" id="lg-table">
+          <thead><tr>
+            <th>Station</th><th>Ward</th><th>Presence</th><th>Supply</th>
+            <th class="num">People</th><th>Queue</th><th>Problem</th>
+            <th class="num">Last report</th>
+          </tr></thead>
+          <tbody id="lg-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel intake" style="margin-top:14px">
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Report intake</h2>
+        <span class="pill is-unknown" id="lg-intake-mode">fallback</span>
+      </div>
+      <p class="viz-sub">
+        Reports normally arrive by WhatsApp straight into the database. This
+        is the manual path for when they do not — paste the batch, check what
+        it read, then file. Nothing is written until you have seen the parse.</p>
+      <label class="sr-only" for="lg-paste">Pasted reports</label>
+      <textarea id="lg-paste" spellcheck="false"
+        placeholder="10234 med none 3&#10;10235 long IEC official late 2"></textarea>
+      <div class="row" style="margin-top:10px;gap:8px;align-items:center">
+        <label class="sr-only" for="lg-by">Your name</label>
+        <input id="lg-by" placeholder="Filed by (your name)" autocomplete="name">
+        <button id="lg-check" class="btn">Check</button>
+        <button id="lg-file" class="btn btn-primary" disabled>File reports</button>
+        <span id="lg-parse-note" class="viz-sub" style="margin:0"></span>
+      </div>
+      <div id="lg-parse" style="margin-top:10px"></div>
+    </section>
+
+    <!-- Who may file a report. An allowlist, so this screen is what makes
+         automated ingest usable at all: an empty roster refuses everybody. -->
+    <section class="panel" id="lg-roster-panel" style="margin-top:14px">
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Who may report</h2>
+        <span class="viz-sub" style="margin:0" id="lg-roster-count">&mdash;</span>
+      </div>
+      <p class="viz-sub">
+        Automated ingest accepts a message only from a number on this list.
+        A report from anywhere else is recorded and refused, never filed &mdash;
+        which is what stops a stranger who learns the number from putting a
+        staffed booth on the exception list. Paste one marshal per line as
+        <code>Name, 082 123 4567</code>.</p>
+      <label class="sr-only" for="lg-roster-paste">Marshals to add</label>
+      <textarea id="lg-roster-paste" spellcheck="false"
+        placeholder="Thabo Mokoena, 082 123 4567&#10;Nomsa Dlamini, 073 555 0199"></textarea>
+      <div class="row" style="margin-top:10px;gap:8px;align-items:center">
+        <button id="lg-roster-add" class="btn btn-primary">Add to roster</button>
+        <span id="lg-roster-note" class="viz-sub" style="margin:0"></span>
+      </div>
+      <div id="lg-roster-list" style="margin-top:12px"></div>
+    </section>
+  </main>
+
+  <!-- Result slips. Two jobs on one screen: transcribing the queue (the work)
+       and seeing what is still outstanding (the picture). -->
+  <main class="pane pane-single" id="view-slips" hidden>
+    <div class="page-head">
+      <h1>Result slips</h1>
+      <p id="sl-sub">Loading…</p>
+    </div>
+
+    <section class="panel" id="sl-work">
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Transcribe</h2>
+        <span class="viz-sub" style="margin:0" id="sl-queue">&mdash;</span>
+      </div>
+
+      <div id="sl-empty" class="viz-sub">Nothing waiting. Photographs appear here as marshals send them.</div>
+
+      <div id="sl-card" hidden>
+        <div class="sl-pass" id="sl-passnote"></div>
+
+        <div class="sl-split">
+          <figure class="sl-photo">
+            <img id="sl-img" alt="Photograph of the result slip">
+            <figcaption class="viz-sub" id="sl-where"></figcaption>
+          </figure>
+
+          <form class="sl-form" id="sl-form" autocomplete="off">
+            <table class="logi-table sl-votes">
+              <thead><tr><th>Party</th><th style="width:34%">Votes</th><th></th></tr></thead>
+              <tbody id="sl-rows"></tbody>
+            </table>
+            <button type="button" class="btn" id="sl-addrow" style="margin-top:8px">Add a party line</button>
+
+            <div class="sl-totals">
+              <label>Spoilt<input type="number" min="0" id="sl-spoilt" inputmode="numeric"></label>
+              <label>Total votes cast<input type="number" min="0" id="sl-total" inputmode="numeric"></label>
+            </div>
+
+            <div class="sl-check viz-sub" id="sl-check"></div>
+
+            <div class="row" style="margin-top:12px;gap:8px;align-items:center">
+              <button type="submit" class="btn btn-primary" id="sl-save">File this pass</button>
+              <button type="button" class="btn" id="sl-skip">Skip</button>
+              <span class="viz-sub" id="sl-note" style="margin:0"></span>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="sl-disputes" style="margin-top:14px">
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Needs a decision</h2>
+        <span class="viz-sub" style="margin:0" id="sl-dispute-count">&mdash;</span>
+      </div>
+      <p class="viz-sub">Where the two passes disagree, or where a slip does not add up.
+        Neither is resolved by editing — a correction is a further pass.</p>
+      <div id="sl-dispute-list"></div>
+    </section>
+
+    <section class="panel" id="sl-coverage" style="margin-top:14px">
+      <div class="panel-head">
+        <h2 class="viz-title" style="margin:0">Coverage</h2>
+        <span class="viz-sub" style="margin:0" id="sl-cov-sub">&mdash;</span>
+      </div>
+      <p class="viz-sub">Counted per ballot, not per station: a metro station owes two slips
+        and a local-municipality station three.</p>
+      <div id="sl-cov-list"></div>
+    </section>
+  </main>
+
+
+  </div><!-- /.stage -->
+
+  <aside class="dossier" id="dossier" hidden aria-label="Ward dossier">
+    <button class="dossier-close" id="dossier-close" aria-label="Close dossier">Close</button>
+    <div id="dossier-body"></div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+  <div class="tip" id="tip" hidden role="status"></div>
+
+  <!-- Trending topics. Counts, not headlines - this system stores no article
+       text. Hidden until there is something real to say. -->
+  <div class="ticker" id="ticker" hidden>
+    <span class="ticker-label">TRENDING</span>
+    <div class="ticker-window" id="ticker-window">
+      <div class="ticker-track" id="ticker-track"></div>
+    </div>
+    <button class="ticker-pause" id="ticker-pause" aria-label="Pause the ticker"
+            aria-pressed="false" title="Pause">&#10073;&#10073;</button>
+  </div>
+</div>
+
+<script src="/app.js" type="module"></script>
+</body>
+</html>
