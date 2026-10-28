@@ -842,11 +842,10 @@ const VIEWS = ['logistics', 'slips', 'overview', 'wards', 'sentiment', 'decision
  * are not dimmed, they are absent, because a gap map that still shows
  * everything else invites the eye to read the dense areas as progress.
  * ------------------------------------------------------------------ */
-/* MK Party palette, sampled from the party logo rather than approximated:
-   green #56AA48, gold #F8C030. Green reads as covered, gold as needing
-   attention, which is also how the rest of the dashboard already uses the
-   accent. */
-const MK = { green: '#56AA48', greenPale: '#9CCC8F', gold: '#F8C030' };
+/* Xnith brand palette, from the brand sheet: status green #00E676 reads
+   as covered, signal yellow #FFD600 as needing attention - the same way
+   the rest of the dashboard already uses the accent. */
+const MK = { green: '#00E676', greenPale: '#7FEFB4', gold: '#FFD600' };
 
 const RD = {
   data: null,
@@ -1276,7 +1275,7 @@ function bfDrawMap(m) {
   const sc = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY);
   const offX = (w - spanX * sc) / 2, offY = (h - spanY * sc) / 2;
 
-  g.fillStyle = '#F8C030'; g.globalAlpha = 0.75;
+  g.fillStyle = MK.gold; g.globalAlpha = 0.75;
   g.beginPath();
   for (let i = 0; i < m.x.length; i++) {
     const px = offX + (m.x[i] - minX) * kx * sc;

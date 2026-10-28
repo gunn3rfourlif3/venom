@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Xnith</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="mask-icon" href="/favicon.svg" color="#f5c518">
+<link rel="mask-icon" href="/favicon.svg" color="#FFD600">
+<meta name="theme-color" content="#0B0B0F">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Two families, used for two jobs. Instrument Sans carries the
@@ -36,6 +37,7 @@
 
 <div id="signin" class="signin" hidden>
   <form class="signin-card" id="signin-form">
+    <span class="signin-mark" aria-hidden="true"></span>
     <h1 class="wordmark">Xnith</h1>
     <p class="signin-note">Ward ledger for the 2026 municipal elections.</p>
     <label for="email">Email</label>
@@ -50,7 +52,7 @@
 <div id="app" class="shell" hidden>
   <button class="railtoggle" id="railtoggle" aria-expanded="false" aria-controls="rail">Menu</button>
   <nav class="rail views" id="rail" aria-label="Views">
-    <span class="brand"><span class="mark" aria-hidden="true">X</span><span class="wordmark">Xnith <i class="ver">v2.6</i></span></span>
+    <span class="brand"><span class="mark" aria-hidden="true"></span><span class="wordmark">Xnith <i class="ver">v2.6</i></span></span>
     <span class="scope" id="scope">&mdash;<br>2026 municipal elections</span>
 
     <p class="rail-group">Operations</p>

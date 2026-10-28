@@ -57,9 +57,9 @@
   --ink-3:      #6e6e7c;   /*  4.2 : 1 — still real text, not decoration */
   --rule:       #26262f;
   --rule-hair:  #1b1b22;
-  --ours:       #f5c518;   /* 12.1 : 1 — identity only, never a status */
+  --ours:       #FFD600;   /* signal yellow — identity only, never a status */
   --theirs:     #8b8b99;
-  --flag:       #f5c518;
+  --flag:       #FFD600;
   --focus:      #60a5fa;
 
   /* The status ramp. Four states, each shipped with its word. */
@@ -1933,7 +1933,6 @@ body:has(.ticker:not([hidden])) .stage { padding-bottom: var(--ticker-h); }
 }
 
 /* ---- Readiness map: MK palette over a dark road basemap --------- */
-:root { --mk-green: #56AA48; --mk-gold: #F8C030; }
 
 .rd-map-wrap {
   border: 1px solid var(--line, #2a2a2a); border-radius: 8px;
@@ -2012,10 +2011,7 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
   /* MK Party, sampled from the party logo rather than approximated.
      Gold carries identity and attention; green carries completeness.
      They are not interchangeable and neither is a status on its own. */
-  --mk-green: #56AA48;
-  --mk-gold:  #F8C030;
-  --ours:     #F8C030;
-  --st-good:  #56AA48;
+  /* Brand colours moved to the 28 October block below. */
 }
 
 /* The sequential ramp, in MK gold. One hue, seven steps, low nearest the
@@ -2024,12 +2020,7 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
    carries dark ink to step 5 (5.4:1) and surface ink from step 6 (5.4:1).
    Worst case on either side is 4.8:1, better than the blue ramp's 3.8:1. */
 .viz {
-  --seq-1: #3b2d07; --seq-2: #5a4409; --seq-3: #7d5d0b;
-  --seq-4: #a37a0f; --seq-5: #c99715; --seq-6: #e4b223; --seq-7: #F8C030;
-}
-:root[data-theme="light"] .viz {
-  --seq-1: #fdf2d4; --seq-2: #f8e0a2; --seq-3: #efc868;
-  --seq-4: #dca92c; --seq-5: #b0851f; --seq-6: #866517; --seq-7: #5c460f;
+  /* Ramp re-derived from signal yellow in the 28 October block below. */
 }
 .viz .cell-ink { fill: var(--ink); }
 .viz .cell-ink.s4, .viz .cell-ink.s5,
@@ -2230,3 +2221,79 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
   .bf-rung { grid-template-columns: minmax(0, 1fr); gap: var(--s-tight); }
   .bf-rung-state { text-align: left; }
 }
+
+/* ================================================================== *
+ * Xnith brand, 28 October.
+ *
+ * The palette is the brand sheet's, sampled from it rather than
+ * approximated: near black #0B0B0F, graphite #1E1E24, warm white
+ * #F4F4F5, signal yellow #FFD600, status green #00E676.
+ *
+ * THIS REPLACES THE MK PARTY COLOURS applied on 23 October. They are
+ * different identities for different things - MK is the party, Xnith
+ * is the instrument - and the brand sheet governs the instrument. The
+ * two are close enough in hue that nothing else needed moving.
+ *
+ * The sequential ramp is re-derived from signal yellow and re-measured,
+ * not re-eyeballed. The crossover lands on the same steps as before -
+ * dark theme at 4, light at 6 - so the rules in the design-system block
+ * above still hold and the JS is untouched. Worst case on either side
+ * is 4.5:1.
+ * ================================================================== */
+
+:root {
+  --paper:     #0B0B0F;
+  --surface-2: #1E1E24;
+  --ink:       #F4F4F5;
+
+  --mk-gold:   #FFD600;   /* signal yellow */
+  --mk-green:  #00E676;   /* status green */
+  --ours:      #FFD600;
+  --flag:      #FFD600;
+  --st-good:   #00E676;
+}
+
+.viz {
+  --seq-1: #3d2f00; --seq-2: #5c4700; --seq-3: #806200;
+  --seq-4: #a88000; --seq-5: #cc9d00; --seq-6: #e6b800; --seq-7: #FFD600;
+}
+:root[data-theme="light"] .viz {
+  --seq-1: #fff3cc; --seq-2: #ffe999; --seq-3: #ffdd5c;
+  --seq-4: #f5c500; --seq-5: #c29c00; --seq-6: #8f7300; --seq-7: #5c4a00;
+}
+
+/* The mark is an image rather than a letter in a tile, so the tile,
+   its background and its type rules all go. */
+/* The mark is painted by CSS through a mask rather than loaded as an
+   image, because an <img> cannot inherit currentColor - an SVG loaded
+   that way resolves it to its own default, which rendered the logo
+   black on black. A mask keeps one asset and lets any surface choose
+   its colour: yellow in the chrome, warm white where the brand sheet
+   calls for the monochrome lockup. */
+.brand .mark,
+.signin-mark {
+  display: block;
+  background-color: var(--ours);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center;  mask-position: center;
+  -webkit-mask-size: contain;     mask-size: contain;
+  border-radius: 0;
+}
+
+.brand .mark {
+  width: 26px; height: 25px; flex: 0 0 26px;
+  -webkit-mask-image: url('/xnith-mark.svg');
+  mask-image: url('/xnith-mark.svg');
+}
+
+/* Big enough here for the circuit detail to read, so it gets the full mark. */
+.signin-mark {
+  width: 72px; height: 68px;
+  margin: 0 auto var(--s-far);
+  -webkit-mask-image: url('/xnith-mark-detail.svg');
+  mask-image: url('/xnith-mark-detail.svg');
+}
+
+/* The station map's dots are brand yellow and green like everything
+   else; the readiness canvas reads these from the stylesheet. */
+.rc-bar i { background: var(--mk-green); }
