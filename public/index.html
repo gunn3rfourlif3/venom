@@ -135,6 +135,34 @@
     <div class="clockbar" id="ov-clock" role="status"></div>
     <div class="readybar" id="ov-ready"></div>
 
+    <!-- LIVE PULSE. Placed under the readiness bar and above the hero so it
+         sits with the other certain things rather than with the projections.
+         Self-contained: to move it, move this whole <section> - nothing
+         outside it depends on where it sits. -->
+    <!-- `livepulse`, not `pulse`: .pulse is the 7px status dot in the
+         header bar. Reusing the name made this entire panel render as a
+         7-pixel dot - present in the DOM, invisible on the screen. -->
+    <section class="panel livepulse" aria-label="Live activity" id="ov-pulse">
+      <div class="panel-head">
+        <h2>Right now</h2>
+        <span class="note" id="pulse-mode"></span>
+      </div>
+      <!-- Section switches. A section that is off is not requested from the
+           server either, so it costs nothing on the night. -->
+      <div class="pulse-toggles" id="pulse-toggles"
+           role="group" aria-label="Live panel sections"></div>
+      <div class="pulse-body">
+        <div class="pulse-map viz" id="pulse-map" role="img"
+             aria-label="National map of voting stations"></div>
+        <div class="pulse-side">
+          <div class="pulse-figs" id="pulse-figs"></div>
+          <div class="pulse-spark" id="pulse-spark"></div>
+          <p class="provenance" id="pulse-note"></p>
+        </div>
+      </div>
+      <div class="pulse-sections" id="pulse-sections"></div>
+    </section>
+
     <div class="grid grid-hero">
       <section class="panel headline" aria-label="Expected outcome">
         <div>

@@ -1265,7 +1265,7 @@ function showView(view) {
   loadTicker();
   if (view === 'logistics') loadLogistics();
   if (view === 'slips') loadSlips();
-  if (view === 'overview') loadOverview();
+  if (view === 'overview') { loadOverview(); loadPulse(); }
   if (view === 'sentiment') { loadSentiment(); loadHashtags(); }
   if (view === 'decisions') loadDecisions();
   if (view === 'float') loadFloat();
@@ -1888,6 +1888,358 @@ document.querySelector('.views').addEventListener('click', (e) => {
   showView(btn.dataset.view);
 });
 
+
+
+/* ------------------------------------------------------- live pulse
+ *
+ * The Overview's real-time panel: a national station map and an activity
+ * strip, both fed by SSE.
+ *
+ * TWO JOBS, SIX DAYS APART. Before polling day the map shows staffing
+ * filling in; on the day it shows result slips arriving. The server decides
+ * which from the election date rather than the client offering a toggle,
+ * because a toggle left in the wrong position on election night shows a
+ * staffing map to a room that believes it is watching results.
+ *
+ * NO BASEMAP HERE, DELIBERATELY. The readiness screen has tiles because you
+ * navigate there. This panel is glanced at, often projected, and a road map
+ * behind 23,696 dots at this size is texture rather than information. The
+ * station positions alone draw a recognisable South Africa - which is the
+ * other reason the readiness screen's own note says nothing on it depends
+ * on an internet connection in the room.
+ */
+
+const PULSE = { data: null, timer: null, drawn: false };
+
+/* ------------------------------------------- live panel sections
+ *
+ * Five optional sections, each switchable. The choice is sent to the server
+ * as ?blocks=, so a section that is off is not computed - this endpoint is
+ * re-read on every NOTIFY, and on polling night that is whenever a slip
+ * lands. A panel nobody has open should not be generating load against the
+ * one screen that has to stay quick.
+ *
+ * Defaults: rate and provinces on, because "are we on track, and where
+ * aren't we" is the election-night question. The rest are opt-in so the
+ * panel does not arrive as a wall.
+ */
+const PULSE_SECTIONS = [
+  ['rate',       'Rate & ETA',   'Slips per minute, and when capture finishes at this rate.'],
+  ['provinces',  'Provinces',    'Capture per province. A national total hides the one that stalled.'],
+  ['quiet',      'Gone quiet',   'Provinces silent while the rest are still reporting.'],
+  ['exceptions', 'Exceptions',   'The last few alerts, as text rather than a count.'],
+  ['seats',      'Seats',        'Councils that can be projected as results land.'],
+];
+const PULSE_DEFAULT = ['rate', 'provinces'];
+
+/* localStorage is per-viewer and can throw in a private window, so every
+   read and write is guarded and the panel renders correctly without it. */
+function pulseOn() {
+  try {
+    const raw = localStorage.getItem('venom-pulse-sections');
+    if (raw) return new Set(JSON.parse(raw));
+  } catch { /* fall through to the default */ }
+  return new Set(PULSE_DEFAULT);
+}
+function pulseSetOn(set) {
+  try {
+    localStorage.setItem('venom-pulse-sections', JSON.stringify([...set]));
+  } catch { /* the toggle still works for this session */ }
+}
+
+function pulseToggles() {
+  const host = $('pulse-toggles');
+  if (!host) return;
+  const on = pulseOn();
+  host.innerHTML = PULSE_SECTIONS.map(([key, label, why]) => `
+    <button type="button" class="pt${on.has(key) ? ' is-on' : ''}"
+            data-pulse-section="${key}" aria-pressed="${on.has(key)}"
+            title="${esc(why)}">${esc(label)}</button>`).join('');
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest?.('[data-pulse-section]');
+  if (!btn) return;
+  const key = btn.dataset.pulseSection;
+  const on = pulseOn();
+  if (on.has(key)) on.delete(key); else on.add(key);
+  pulseSetOn(on);
+  pulseToggles();
+  loadPulse();
+});
+
+const pfNum = (v) => (v === null || v === undefined ? NO_VALUE : fmt(v));
+
+function pulseRate() {
+  const r = PULSE.data?.rate;
+  if (!r) return '';
+  /* minutes_left is null when nothing is arriving. "Infinity" and a blank
+     are both wrong; the useful statement is that nothing is coming in. */
+  const eta = r.minutes_left === null
+    ? '<span class="muted">nothing arriving — no finish time to give</span>'
+    : `<b>${fmtClock(r.eta)}</b> at this rate`;
+  return `
+    <div class="ps ps-rate">
+      <h4>Rate</h4>
+      <p><b>${pfNum(r.recent)}</b> slips in the last ${pfNum(r.window_min)} min
+         · <b>${r.per_minute}</b>/min</p>
+      <p>${pfNum(r.remaining)} still to capture · ${eta}</p>
+    </div>`;
+}
+
+function fmtClock(iso) {
+  if (!iso) return NO_VALUE;
+  try {
+    return new Date(iso).toLocaleTimeString('en-ZA',
+      { hour: '2-digit', minute: '2-digit' });
+  } catch { return NO_VALUE; }
+}
+
+function pulseProvinces() {
+  const rows = PULSE.data?.provinces;
+  if (!rows?.length) return '';
+  const metric = PULSE.data.mode === 'capture'
+    ? (p) => ({ n: p.pct, label: `${p.pct ?? 0}%`,
+                of: `${fmt(p.reporting)}/${fmt(p.stations)}` })
+    : (p) => { const pct = p.stations ? Math.round((p.staffed / p.stations) * 100) : 0;
+               return { n: pct, label: `${pct}%`,
+                        of: `${fmt(p.staffed)}/${fmt(p.stations)}` }; };
+  return `
+    <div class="ps ps-prov">
+      <h4>${PULSE.data.mode === 'capture' ? 'Capture' : 'Staffing'} by province</h4>
+      ${rows.map((p) => { const m = metric(p); return `
+        <div class="pp-row">
+          <span class="pp-name">${esc(p.province)}</span>
+          <span class="pp-bar"><i style="width:${Math.max(0, Math.min(100, m.n || 0))}%"></i></span>
+          <span class="pp-n">${m.label}</span>
+          <span class="pp-of">${m.of}</span>
+        </div>`; }).join('')}
+    </div>`;
+}
+
+function pulseQuiet() {
+  const q = PULSE.data?.quiet;
+  if (!q) return '';
+  if (!q.newest) {
+    return `<div class="ps ps-quiet"><h4>Gone quiet</h4>
+      <p class="muted">Nothing has reported anywhere yet, so nothing can be
+         quiet relative to anything else.</p></div>`;
+  }
+  return `
+    <div class="ps ps-quiet">
+      <h4>Gone quiet</h4>
+      ${q.quiet.length
+        ? q.quiet.map((p) => `<p class="pq"><b>${esc(p.province)}</b>
+            silent ${pfNum(p.silent_min)} min — last slip ${fmtClock(p.last_slip)}</p>`).join('')
+        : '<p class="muted">Every reporting province is still arriving.</p>'}
+    </div>`;
+}
+
+function pulseExceptions() {
+  const rows = PULSE.data?.exceptions;
+  if (!rows) return '';
+  return `
+    <div class="ps ps-exc">
+      <h4>Exceptions</h4>
+      ${rows.length ? rows.map((a) => `
+        <div class="pe sev-${esc(a.severity ?? 'info')}">
+          <span class="pe-when">${fmtClock(a.raised_at)}</span>
+          <span class="pe-body">${esc(a.body ?? a.kind)}</span>
+          ${a.station_name ? `<span class="pe-where">${esc(a.station_name)}</span>` : ''}
+          ${a.acknowledged_at ? '<span class="pe-ack">acknowledged</span>' : ''}
+        </div>`).join('')
+        : '<p class="muted">No exceptions raised.</p>'}
+    </div>`;
+}
+
+function pulseSeats() {
+  const s = PULSE.data?.seats;
+  if (!s) return '';
+  return `
+    <div class="ps ps-seats">
+      <h4>Seats</h4>
+      ${s.projectable > 0
+        ? s.declared.map((c) => `<p class="pc"><b>${esc(c.municipality)}</b>
+            ${fmt(c.total_seats)} seats · ${fmt(c.slips_captured)} slips in</p>`).join('')
+        : `<p class="muted">${fmt(s.needs_total)} councils cannot be projected yet —
+             their seat total is not confirmed. ${fmt(s.waiting)} are ready and
+             waiting for results.</p>`}
+    </div>`;
+}
+
+function pulseSections() {
+  const host = $('pulse-sections');
+  if (!host) return;
+  const on = pulseOn();
+  host.innerHTML = [
+    on.has('rate') ? pulseRate() : '',
+    on.has('provinces') ? pulseProvinces() : '',
+    on.has('quiet') ? pulseQuiet() : '',
+    on.has('exceptions') ? pulseExceptions() : '',
+    on.has('seats') ? pulseSeats() : '',
+  ].join('');
+}
+
+const PULSE_LEGEND = {
+  staffing: [['3', 'staffed'], ['2', 'people only'], ['0', 'nobody'], ['1', 'synthetic']],
+  capture:  [['3', 'all slips in'], ['2', 'partial'], ['0', 'nothing yet'], ['1', 'synthetic']],
+};
+
+function pulseColours() {
+  const host = $('pulse-map') ?? document.documentElement;
+  const css = (n) => getComputedStyle(host).getPropertyValue(n).trim();
+  return {
+    '3': css('--st-good') || '#34d399',
+    '2': css('--st-warn') || '#fb923c',
+    '0': css('--st-bad') || '#f43f5e',
+    '1': css('--ink-3') || '#6e6e7c',
+  };
+}
+
+/* Equirectangular, fitted to the extent of the points themselves. No
+   projection library and no tile server: this is a scatter of 23,696 real
+   coordinates and at this size the difference from a proper projection is
+   smaller than a dot. */
+function pulseDraw() {
+  const host = $('pulse-map');
+  const d = PULSE.data;
+  if (!host || !d || !d.y.length) return;
+
+  const w = host.clientWidth || 420;
+  const h = host.clientHeight || 260;
+  if (w < 20 || h < 20) return;           // laid out but not yet measured
+
+  let cv = host.querySelector('canvas');
+  if (!cv) { cv = document.createElement('canvas'); host.appendChild(cv); }
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== w * dpr || cv.height !== h * dpr) {
+    cv.width = w * dpr; cv.height = h * dpr;
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < d.x.length; i++) {
+    if (d.x[i] < minX) minX = d.x[i];
+    if (d.x[i] > maxX) maxX = d.x[i];
+    if (d.y[i] < minY) minY = d.y[i];
+    if (d.y[i] > maxY) maxY = d.y[i];
+  }
+  // Latitude degrees are a fixed distance; longitude degrees shrink with
+  // latitude. Without this correction the country comes out stretched.
+  const midLat = ((minY + maxY) / 2) / d.scale;
+  const lonScale = Math.cos(midLat * Math.PI / 180);
+  const spanX = (maxX - minX) * lonScale || 1;
+  const spanY = (maxY - minY) || 1;
+  const pad = 8;
+  const k = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY);
+  const offX = (w - spanX * k) / 2;
+  const offY = (h - spanY * k) / 2;
+
+  const colours = pulseColours();
+  // Draw the quiet states first so the interesting ones are never buried.
+  for (const code of ['1', '0', '2', '3']) {
+    g.beginPath();
+    let drew = false;
+    for (let i = 0; i < d.x.length; i++) {
+      if (d.state[i] !== code) continue;
+      const px = offX + ((d.x[i] - minX) * lonScale) * k;
+      const py = offY + (maxY - d.y[i]) * k;
+      g.moveTo(px + 1.1, py);
+      g.arc(px, py, 1.1, 0, Math.PI * 2);
+      drew = true;
+    }
+    if (!drew) continue;
+    g.fillStyle = colours[code];
+    g.globalAlpha = code === '1' ? 0.35 : 0.85;
+    g.fill();
+    g.globalAlpha = 1;
+  }
+  PULSE.drawn = true;
+}
+
+function pulseSpark() {
+  const host = $('pulse-spark');
+  const d = PULSE.data;
+  if (!host || !d) return;
+  const series = [
+    ['slips', 'Slips', '--st-good'],
+    ['reports', 'Reports', '--st-info'],
+    ['alerts', 'Alerts', '--st-warn'],
+  ];
+  const css = (n) => getComputedStyle($('pulse-map') ?? document.documentElement)
+    .getPropertyValue(n).trim();
+
+  host.innerHTML = series.map(([key, label, token]) => {
+    const vals = d.activity.map((a) => Number(a[key]) || 0);
+    const max = Math.max(1, ...vals);
+    const total = vals.reduce((a, b) => a + b, 0);
+    const bars = vals.map((v, i) => {
+      const pct = Math.round((v / max) * 100);
+      /* A zero bar still draws a 2px stub. A bucket with nothing in it must
+         be visible as a bucket - otherwise a quiet hour and a missing hour
+         look the same, and the quiet one is the one worth noticing. */
+      return `<i style="height:${v === 0 ? 2 : Math.max(8, pct)}%;
+                background:${v === 0 ? 'var(--rule)' : css(token)}"
+                 title="${esc(d.activity[i].at)} — ${fmt(v)}"></i>`;
+    }).join('');
+    return `<div class="ps-row">
+      <span class="ps-label">${label}</span>
+      <span class="ps-bars">${bars}</span>
+      <span class="ps-total">${fmt(total)}</span>
+    </div>`;
+  }).join('')
+  + `<p class="ps-window">last hour, in ten-minute buckets</p>`;
+}
+
+function pulseFigures() {
+  const host = $('pulse-figs');
+  const d = PULSE.data;
+  if (!host || !d) return;
+  const t = d.totals ?? {};
+  const fig = (v, label, warn) =>
+    `<div class="pf${warn ? ' is-warn' : ''}"><b>${v}</b><span>${label}</span></div>`;
+
+  host.innerHTML = d.mode === 'capture'
+    ? fig(fmt(t.slips_captured), `of ${fmt(t.slips_expected)} slips in`,
+          Number(t.slips_captured) === 0)
+      + fig(fmt(t.stations_reporting), `of ${fmt(t.stations)} stations reporting`,
+            Number(t.stations_reporting) === 0)
+    : fig(fmt(t.staffed), `of ${fmt(t.stations)} stations staffed`,
+          Number(t.staffed) === 0)
+      + fig(fmt(t.slips_expected), 'slips to capture', false);
+
+  const legend = (PULSE_LEGEND[d.mode] ?? []).map(([code, label]) =>
+    `<span class="pl"><i style="background:${pulseColours()[code]}"></i>${label}</span>`).join('');
+  $('pulse-mode').innerHTML =
+    `${d.mode === 'capture' ? 'Result capture' : 'Staffing'} `
+    + `<span class="muted">· ${esc(d.mode_source)}</span>`;
+  $('pulse-note').innerHTML = legend;
+}
+
+async function loadPulse() {
+  try {
+    const on = [...pulseOn()];
+    PULSE.data = await api('/api/pulse'
+      + (on.length ? `?blocks=${encodeURIComponent(on.join(','))}` : ''));
+  } catch (e) {
+    const n = $('pulse-note');
+    if (n) n.textContent = `Live panel unavailable: ${String(e.message ?? e)}`;
+    return;
+  }
+  pulseToggles();
+  pulseFigures();
+  pulseSpark();
+  pulseSections();
+  pulseDraw();
+}
+
+/* Redraw on resize - the canvas is sized from the container, and a panel
+   that is narrower after a window change would otherwise keep a stale
+   bitmap stretched across it. */
+window.addEventListener('resize', () => { if (PULSE.data) pulseDraw(); });
 
 /* ------------------------------------------- station drill-down
  *
@@ -2736,8 +3088,22 @@ function connectLive() {
   });
   // The push carries an identifier, never a value: read back through the
   // same queries used on load so the screen cannot drift from the database.
-  source.addEventListener('extract_stale', () => { loadOverview(); loadWards(); });
+  source.addEventListener('extract_stale', () => { loadOverview(); loadWards(); loadPulse(); });
   source.addEventListener('ward_changed', () => { loadWards(); });
+
+  /* The pulse channels, emitted by statement-level triggers in migration
+     051. Coalesced: a busy minute on election night can deliver dozens of
+     these, and re-querying on every one would turn the panel into a load
+     generator against the database at the exact hour it must stay quick.
+     One refresh per 1.5s is well inside what the eye reads as live. */
+  let pulseDue = null;
+  const pulseSoon = () => {
+    if (pulseDue) return;
+    pulseDue = setTimeout(() => { pulseDue = null; loadPulse(); }, 1500);
+  };
+  source.addEventListener('slip_captured', pulseSoon);
+  source.addEventListener('booth_reported', pulseSoon);
+  source.addEventListener('roster_changed', pulseSoon);
   source.onerror = () => {
     el.className = 'live is-down'; $('live-text').textContent = 'reconnecting';
   };
@@ -2756,6 +3122,12 @@ async function start() {
      sign-in never goes through it. Hooking it there alone meant the strip
      stayed hidden until you clicked something. */
   loadTicker();
+  /* Same reason as the ticker, and the same bug it had: the live panel lives
+     ON the Overview, and showView never runs for the first screen after
+     sign-in. loadPulse() was only wired into showView, so the panel it
+     belongs to was the one screen that never populated it - you had to
+     navigate away and back to see it fill. */
+  loadPulse();
   connectLive();
 }
 
