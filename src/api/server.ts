@@ -17,6 +17,7 @@ import { pool } from '../db.js';
 import { HttpError, json, type Ctx } from './http.js';
 import { routes } from './routes.js';
 import * as seats from './seats.js';
+import * as pulse from './pulse.js';
 import { logistics } from './logistics.js';
 import { whatsapp } from './whatsapp.js';
 import { slips } from './slips.js';
@@ -101,6 +102,7 @@ const table: Route[] = [
   { method: 'GET',   pattern: /^\/api\/trending$/, handler: routes.getTrending },
   { method: 'GET',   pattern: /^\/api\/station-map$/, handler: routes.getStationMap },
   { method: 'GET',   pattern: /^\/api\/station$/, handler: routes.getStation },
+  { method: 'GET',   pattern: /^\/api\/pulse$/, handler: pulse.getPulse },
   { method: 'GET',   pattern: /^\/api\/heat$/, handler: routes.getHeat },
   { method: 'GET',   pattern: /^\/api\/heat\/detail$/, handler: routes.getHeatDetail },
   { method: 'GET',   pattern: /^\/api\/seats\/readiness$/, handler: seats.getSeatReadiness },
