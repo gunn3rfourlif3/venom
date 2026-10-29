@@ -100,6 +100,7 @@ const table: Route[] = [
 
   { method: 'GET',   pattern: /^\/api\/trending$/, handler: routes.getTrending },
   { method: 'GET',   pattern: /^\/api\/station-map$/, handler: routes.getStationMap },
+  { method: 'GET',   pattern: /^\/api\/station$/, handler: routes.getStation },
   { method: 'GET',   pattern: /^\/api\/heat$/, handler: routes.getHeat },
   { method: 'GET',   pattern: /^\/api\/heat\/detail$/, handler: routes.getHeatDetail },
   { method: 'GET',   pattern: /^\/api\/seats\/readiness$/, handler: seats.getSeatReadiness },

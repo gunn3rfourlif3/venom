@@ -768,11 +768,99 @@ async function getHeatDetail(ctx: Ctx): Promise<void> {
   });
 }
 
+
+/* ------------------------------------------------- one voting station
+ *
+ * Resolves a click on the readiness map to the station under it, or a
+ * station by id.
+ *
+ * WHY NEAREST-BY-COORDINATE RATHER THAN SHIPPING IDS. The map payload is
+ * packed parallel arrays - 23,696 latitudes, 23,696 longitudes and a state
+ * string - precisely so the whole country fits in one response. Adding an id
+ * per point would roughly double it for a lookup that happens once per
+ * click. The client already knows where it clicked; the server can answer
+ * which station that is.
+ *
+ * WHAT IS DELIBERATELY NOT RETURNED. `reporter_roster.capture_token`
+ * authenticates a marshal posting result slips - it is a credential and
+ * never leaves the server. `reporter_roster.phone` is a personal number
+ * belonging to a volunteer; the display name is enough to answer "is anyone
+ * assigned here", which is the question the screen asks. Columns are listed
+ * explicitly rather than SELECT *, so a column added later is not published
+ * by accident.
+ */
+async function getStation(ctx: Ctx): Promise<void> {
+  const id = ctx.url.searchParams.get('id');
+  const lat = Number(ctx.url.searchParams.get('lat'));
+  const lon = Number(ctx.url.searchParams.get('lon'));
+
+  if (!id && !(Number.isFinite(lat) && Number.isFinite(lon))) {
+    json(ctx.res, 400, { error: 'id, or lat and lon, required' });
+    return;
+  }
+
+  /* Longitude degrees shrink with latitude, so comparing raw degree
+     differences would bias the match east-west. cos(lat) corrects it. The
+     bounding box is there to keep the index useful; the ORDER BY decides. */
+  const { rows } = await pool.query(
+    id
+      ? `SELECT station_id, ward_id, name, latitude, longitude,
+                registered_voters, demarcation_code, municipality_name,
+                municipality_category, province, region_name, is_real,
+                ballots_expected, ballots_captured, our_people, has_marshal,
+                marshals, readiness
+           FROM v_station_readiness WHERE station_id = $1`
+      : `SELECT station_id, ward_id, name, latitude, longitude,
+                registered_voters, demarcation_code, municipality_name,
+                municipality_category, province, region_name, is_real,
+                ballots_expected, ballots_captured, our_people, has_marshal,
+                marshals, readiness,
+                sqrt(power(latitude - $1, 2)
+                   + power((longitude - $2) * cos(radians($1)), 2)) AS dist
+           FROM v_station_readiness
+          WHERE latitude  BETWEEN $1 - 0.25 AND $1 + 0.25
+            AND longitude BETWEEN $2 - 0.25 AND $2 + 0.25
+          ORDER BY dist
+          LIMIT 1`,
+    id ? [id] : [lat, lon]);
+
+  const station = rows[0];
+  if (!station) {
+    json(ctx.res, 404, { error: 'no station found near that point' });
+    return;
+  }
+
+  // Address and the campaign's own fields, which the readiness view omits.
+  const { rows: [extra] } = await pool.query(
+    `SELECT street_name, suburb, town, station_type, opening_time,
+            closing_time, pledges, expected_people, transport_route
+       FROM station WHERE station_id = $1`, [station.station_id]);
+
+  /* Names only. No phone, no capture token. */
+  const { rows: roster } = await pool.query(
+    `SELECT display_name, enabled, last_message_at
+       FROM reporter_roster
+      WHERE station_id = $1 AND enabled
+      ORDER BY display_name`, [station.station_id]);
+
+  const { rows: [slips] } = await pool.query(
+    `SELECT count(*)::int AS captured,
+            count(*) FILTER (WHERE rejected IS NOT NULL)::int AS rejected
+       FROM result_slip WHERE station_id = $1`, [station.station_id]);
+
+  json(ctx.res, 200, {
+    ...await envelope(null),
+    station: { ...station, ...(extra ?? {}) },
+    roster,
+    slips: slips ?? { captured: 0, rejected: 0 },
+  });
+}
+
 export const routes = {
   postLogin, postLogout, getMe, getWards, getWard, getTargets,
   getCampaign, getFloat, getDecisions, getDocuments, getIngestHealth,
   getSentiment, getSearch, getCameras, getTerrain,
   getControlPanel, putControlPanel, getOverview, getTrending,
   getStationMap, getRegisterCompleteness, getBriefing, authenticate,
-  getHeat, getHeatDetail,
+  getHeat, getHeatDetail, getStation,
 };

@@ -473,7 +473,13 @@
       <div class="rd-map-wrap">
         <div id="rd-map" role="img"
              aria-label="Map of South African voting stations by staffing readiness, over a road map"></div>
+        <!-- Station detail. Hidden until a station is picked; a panel of
+             dashes reads as "no data about this station" rather than
+             "no station selected". -->
+        <aside class="rd-detail" id="rd-detail" hidden></aside>
       </div>
+      <p class="provenance" id="rd-pick-note">Click a station for its detail.
+         Zoom in where the dots overlap.</p>
       <p class="provenance" id="rd-basemap-note"></p>
 
       <div class="rd-legend" id="rd-legend"></div>

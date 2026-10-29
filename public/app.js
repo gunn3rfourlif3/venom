@@ -991,6 +991,18 @@ function rdMakeLayer(L) {
       /* Anything off-screen is skipped rather than drawn and clipped - at
          city zoom that is almost the whole country. */
       const pad = 40;
+      const drawSelection = () => {
+        /* Drawn last, on top of everything. A selected station that the
+           dots cover is a selection the user cannot see. */
+        if (!RD.selected) return;
+        const pt = map.latLngToContainerPoint([RD.selected.lat, RD.selected.lon]);
+        g.beginPath();
+        g.arc(pt.x, pt.y, Math.max(7, r + 5), 0, Math.PI * 2);
+        g.strokeStyle = getComputedStyle(document.documentElement)
+          .getPropertyValue('--ink').trim() || '#fff';
+        g.lineWidth = 2;
+        g.stroke();
+      };
       for (const code of order) {
         const spec = RD.colours[code];
         g.beginPath();
@@ -1016,6 +1028,7 @@ function rdMakeLayer(L) {
           if (r >= 3) { g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 1; g.stroke(); }
         }
       }
+      drawSelection();
     },
   });
 }
@@ -1045,6 +1058,11 @@ async function rdEnsureMap() {
 
   const StationLayer = rdMakeLayer(L);
   RD.layer = new StationLayer().addTo(RD.map);
+
+  // Drill-down. The canvas overlay does not take pointer events, so the
+  // click arrives on the map and is hit-tested against the drawn points.
+  RD.map.on('click', (e) => { rdShowStation(e.latlng); });
+
   return RD.map;
 }
 
@@ -1868,6 +1886,133 @@ $('cp-form').addEventListener('submit', async (e) => {
 document.querySelector('.views').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-view]'); if (!btn) return;
   showView(btn.dataset.view);
+});
+
+
+/* ------------------------------------------- station drill-down
+ *
+ * Clicking the readiness map opens the station under the pointer.
+ *
+ * THE HIT TEST RUNS CLIENT-SIDE, AGAINST THE POINTS ACTUALLY DRAWN. The
+ * obvious alternative - send the click's latitude and longitude and let the
+ * server return its nearest station - behaves badly at national zoom, where
+ * a click on the Karoo is "near" something 200km away and the panel fills
+ * with a station the user never aimed at. Scanning RD.data instead means a
+ * click either lands on a dot that is on the screen, under the current
+ * filter, or it lands on nothing and says so.
+ *
+ * 23,696 points is a linear scan of about a quarter of a millisecond. There
+ * is no index to justify here.
+ */
+
+const RD_PICK_RADIUS_PX = 14;
+
+/* The dossier has an identical helper, but it is a `const` declared INSIDE
+   that function, so it is not in scope here - calling it would throw at the
+   moment a user first clicked a station, which is exactly the kind of fault
+   that survives a build and a page load and only appears on interaction. */
+const rdKv = (pairs) => `<dl class="kv">${pairs
+  .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>`;
+
+function rdNearest(latlng) {
+  const d = RD.data;
+  if (!d || !d.x.length || !RD.map) return null;
+  const scale = d.scale || 10000;
+  const target = RD.map.latLngToContainerPoint(latlng);
+
+  let best = null, bestDist = RD_PICK_RADIUS_PX * RD_PICK_RADIUS_PX;
+  const gapsOnly = RD.mode === 'gaps';
+
+  for (let i = 0; i < d.x.length; i++) {
+    // Respect the mode: in Gaps only, the other dots are not on screen and
+    // must not be clickable either.
+    if (gapsOnly && d.state[i] !== '0') continue;
+    const lat = d.y[i] / scale, lon = d.x[i] / scale;
+    const pt = RD.map.latLngToContainerPoint([lat, lon]);
+    const dx = pt.x - target.x, dy = pt.y - target.y;
+    const dist = dx * dx + dy * dy;
+    if (dist < bestDist) { bestDist = dist; best = { lat, lon, code: d.state[i] }; }
+  }
+  return best;
+}
+
+const RD_READINESS = {
+  staffed: ['Staffed', 'A marshal is assigned and has checked in.'],
+  people_only: ['People, no marshal', 'Bodies are planned here, but nobody is assigned to capture the result.'],
+  unstaffed: ['Nobody assigned', 'No marshal. Nothing will be captured here unless that changes.'],
+};
+
+async function rdShowStation(latlng) {
+  const host = $('rd-detail');
+  if (!host) return;
+  const hit = rdNearest(latlng);
+  if (!hit) {
+    host.hidden = true;
+    RD.selected = null;
+    RD.layer?._draw?.();
+    return;
+  }
+
+  host.hidden = false;
+  host.innerHTML = '<p class="muted">Loading…</p>';
+  RD.selected = hit;
+  RD.layer?._draw?.();
+
+  let d;
+  try {
+    d = await api(`/api/station?lat=${hit.lat}&lon=${hit.lon}`);
+  } catch (e) {
+    host.innerHTML = `<p class="muted">Could not load that station: ${esc(String(e.message ?? e))}</p>`;
+    return;
+  }
+
+  const s = d.station ?? {};
+  const [label, meaning] = RD_READINESS[s.readiness] ?? ['Unknown', ''];
+  const address = [s.street_name, s.suburb, s.town].filter(Boolean).join(', ');
+
+  const roster = (d.roster ?? []).length
+    ? (d.roster ?? []).map((r) => `<li>${esc(r.display_name ?? 'unnamed')}</li>`).join('')
+    : '<li class="muted">Nobody on the roster for this station.</li>';
+
+  /* `registered_voters` is null for most stations - the roll summary has not
+     been loaded. A dash says that; a 0 would say the station has no voters,
+     which is a different and false claim. */
+  const voters = s.registered_voters == null
+    ? '<span class="muted">not loaded</span>' : fmt(s.registered_voters);
+
+  host.innerHTML = `
+    <button class="rd-close" id="rd-close" aria-label="Close station detail">Close</button>
+    <h3>${esc(s.name ?? s.station_id)}</h3>
+    ${address ? `<p class="rd-addr">${esc(address)}</p>` : ''}
+    ${s.is_real === false
+      ? '<p class="rd-synth">Synthetic station — development data, not a real voting station.</p>'
+      : ''}
+    <p class="rd-state rd-state-${esc(s.readiness ?? 'unknown')}">
+      <b>${esc(label)}</b> ${esc(meaning)}</p>
+    ${rdKv([
+      ['Station', esc(s.station_id)],
+      ['Ward', esc(s.ward_id)],
+      ['Municipality', esc(s.municipality_name ?? '')],
+      ['Province', esc(s.province ?? '')],
+      ['Registered voters', voters],
+      ['Ballot slips expected', fmt(s.ballots_expected)],
+      ['Slips captured', fmt(d.slips?.captured ?? 0)
+        + ((d.slips?.rejected ?? 0) > 0 ? ` (${fmt(d.slips.rejected)} rejected)` : '')],
+      ['Our people planned', s.our_people == null
+        ? '<span class="muted">—</span>' : fmt(s.our_people)],
+    ])}
+    <h4>Roster</h4>
+    <ul class="rd-roster">${roster}</ul>
+    <p class="provenance">${esc(Number(s.latitude).toFixed(5))},
+       ${esc(Number(s.longitude).toFixed(5))} — IEC coordinates.</p>`;
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target?.id === 'rd-close') {
+    $('rd-detail').hidden = true;
+    RD.selected = null;
+    RD.layer?._draw?.();
+  }
 });
 
 /* ------------------------------------------------------- issue heat
