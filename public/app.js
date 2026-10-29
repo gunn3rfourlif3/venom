@@ -2100,6 +2100,82 @@ function pulseColours() {
    projection library and no tile server: this is a scatter of 23,696 real
    coordinates and at this size the difference from a proper projection is
    smaller than a dot. */
+/* ------------------------------------------------- the live map
+ *
+ * This is the screen people are shown first, so it has to read as an
+ * instrument rather than a picture. Three things make the difference:
+ *
+ *   PROJECTION IS CACHED. Fitting 23,696 points and converting each to
+ *   pixels is done once per data change, not once per frame. Hovering
+ *   redraws at 60fps and must not re-project the country to do it.
+ *
+ *   MOTION ONLY WHERE SOMETHING HAPPENED. New dots are not animated for
+ *   effect - the state string is diffed against the previous one and only
+ *   the points that actually changed get a ring. Animation that fires on
+ *   every refresh teaches people to ignore it; animation that fires only on
+ *   real change is a signal. The loop stops when nothing is moving rather
+ *   than burning a core idling.
+ *
+ *   HOVER ANSWERS A QUESTION. A national scatter cannot be read by eye -
+ *   which smudge is Limpopo? Hovering dims the rest and names the one under
+ *   the pointer with its numbers; clicking focuses the whole panel on it.
+ */
+
+const PULSE_MAP = {
+  px: null, py: null,          // cached pixel positions
+  w: 0, h: 0,                  // the size they were computed for
+  hover: null,                 // province index under the pointer
+  focus: null,                 // province name the panel is filtered to
+  changed: null,               // indices that changed on the last refresh
+  changedAt: 0,
+  raf: null,
+  prevState: null,
+};
+
+const PULSE_RING_MS = 1600;
+
+function pulseProject(d, w, h) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < d.x.length; i++) {
+    if (d.x[i] < minX) minX = d.x[i];
+    if (d.x[i] > maxX) maxX = d.x[i];
+    if (d.y[i] < minY) minY = d.y[i];
+    if (d.y[i] > maxY) maxY = d.y[i];
+  }
+  // Longitude degrees shrink with latitude; without this the country is wide.
+  const midLat = ((minY + maxY) / 2) / d.scale;
+  const lonScale = Math.cos(midLat * Math.PI / 180);
+  const spanX = (maxX - minX) * lonScale || 1;
+  const spanY = (maxY - minY) || 1;
+  const pad = 10;
+  const k = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY);
+  const offX = (w - spanX * k) / 2;
+  const offY = (h - spanY * k) / 2;
+
+  const px = new Float32Array(d.x.length);
+  const py = new Float32Array(d.x.length);
+  for (let i = 0; i < d.x.length; i++) {
+    px[i] = offX + ((d.x[i] - minX) * lonScale) * k;
+    // Latitude increases northward, screen y increases downward.
+    py[i] = offY + (maxY - d.y[i]) * k;
+  }
+  PULSE_MAP.px = px; PULSE_MAP.py = py;
+  PULSE_MAP.w = w; PULSE_MAP.h = h;
+}
+
+/* Which points changed since the last payload. Length changes mean the
+   filter changed rather than the world, so nothing is animated then. */
+function pulseDiff(state) {
+  const prev = PULSE_MAP.prevState;
+  PULSE_MAP.prevState = state;
+  if (!prev || prev.length !== state.length) return null;
+  const out = [];
+  for (let i = 0; i < state.length && out.length < 400; i++) {
+    if (prev[i] !== state[i]) out.push(i);
+  }
+  return out.length ? out : null;
+}
+
 function pulseDraw() {
   const host = $('pulse-map');
   const d = PULSE.data;
@@ -2110,54 +2186,196 @@ function pulseDraw() {
   if (w < 20 || h < 20) return;           // laid out but not yet measured
 
   let cv = host.querySelector('canvas');
-  if (!cv) { cv = document.createElement('canvas'); host.appendChild(cv); }
+  if (!cv) {
+    cv = document.createElement('canvas');
+    host.appendChild(cv);
+    pulseBindMap(host, cv);
+  }
   const dpr = window.devicePixelRatio || 1;
   if (cv.width !== w * dpr || cv.height !== h * dpr) {
     cv.width = w * dpr; cv.height = h * dpr;
     cv.style.width = w + 'px'; cv.style.height = h + 'px';
   }
+  if (!PULSE_MAP.px || PULSE_MAP.w !== w || PULSE_MAP.h !== h
+      || PULSE_MAP.px.length !== d.x.length) {
+    pulseProject(d, w, h);
+  }
+
   const g = cv.getContext('2d');
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, w, h);
 
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (let i = 0; i < d.x.length; i++) {
-    if (d.x[i] < minX) minX = d.x[i];
-    if (d.x[i] > maxX) maxX = d.x[i];
-    if (d.y[i] < minY) minY = d.y[i];
-    if (d.y[i] > maxY) maxY = d.y[i];
-  }
-  // Latitude degrees are a fixed distance; longitude degrees shrink with
-  // latitude. Without this correction the country comes out stretched.
-  const midLat = ((minY + maxY) / 2) / d.scale;
-  const lonScale = Math.cos(midLat * Math.PI / 180);
-  const spanX = (maxX - minX) * lonScale || 1;
-  const spanY = (maxY - minY) || 1;
-  const pad = 8;
-  const k = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY);
-  const offX = (w - spanX * k) / 2;
-  const offY = (h - spanY * k) / 2;
-
   const colours = pulseColours();
-  // Draw the quiet states first so the interesting ones are never buried.
+  const provs = d.prov || '';
+  const hover = PULSE_MAP.hover;
+  const px = PULSE_MAP.px, py = PULSE_MAP.py;
+  const r = Math.max(0.9, Math.min(2.4, w / 420));
+
+  /* Quiet states first so the ones that matter are never buried under them,
+     and dimmed wholesale when a province is being singled out. */
   for (const code of ['1', '0', '2', '3']) {
-    g.beginPath();
-    let drew = false;
-    for (let i = 0; i < d.x.length; i++) {
-      if (d.state[i] !== code) continue;
-      const px = offX + ((d.x[i] - minX) * lonScale) * k;
-      const py = offY + (maxY - d.y[i]) * k;
-      g.moveTo(px + 1.1, py);
-      g.arc(px, py, 1.1, 0, Math.PI * 2);
-      drew = true;
+    const colour = colours[code];
+    for (const dim of [true, false]) {
+      // Two passes: dimmed points, then the province in focus on top.
+      g.beginPath();
+      let drew = false;
+      for (let i = 0; i < d.state.length; i++) {
+        if (d.state[i] !== code) continue;
+        const isHot = hover === null || provs[i] === String(hover);
+        if (dim === isHot) continue;
+        g.moveTo(px[i] + r, py[i]);
+        g.arc(px[i], py[i], r, 0, Math.PI * 2);
+        drew = true;
+      }
+      if (!drew) continue;
+      g.fillStyle = colour;
+      g.globalAlpha = dim ? 0.13 : (code === '1' ? 0.5 : 0.92);
+      g.fill();
+      g.globalAlpha = 1;
     }
-    if (!drew) continue;
-    g.fillStyle = colours[code];
-    g.globalAlpha = code === '1' ? 0.35 : 0.85;
-    g.fill();
-    g.globalAlpha = 1;
   }
-  PULSE.drawn = true;
+
+  /* Expanding rings on points that actually changed. */
+  if (PULSE_MAP.changed) {
+    const age = performance.now() - PULSE_MAP.changedAt;
+    const t = age / PULSE_RING_MS;
+    if (t >= 1) {
+      PULSE_MAP.changed = null;
+    } else {
+      const ease = 1 - Math.pow(1 - t, 3);
+      g.lineWidth = 1.4;
+      g.globalAlpha = (1 - t) * 0.9;
+      g.strokeStyle = colours['3'];
+      g.beginPath();
+      for (const i of PULSE_MAP.changed) {
+        const rad = r + ease * 14;
+        g.moveTo(px[i] + rad, py[i]);
+        g.arc(px[i], py[i], rad, 0, Math.PI * 2);
+      }
+      g.stroke();
+      g.globalAlpha = 1;
+    }
+  }
+
+  pulseRaf();
+}
+
+/* One frame at a time, and only while something is moving. */
+function pulseRaf() {
+  if (!PULSE_MAP.changed) { PULSE_MAP.raf = null; return; }
+  if (PULSE_MAP.raf) return;
+  PULSE_MAP.raf = requestAnimationFrame(() => {
+    PULSE_MAP.raf = null;
+    pulseDraw();
+  });
+}
+
+/* Nearest point to the pointer, in cached pixel space. */
+function pulseNearest(mx, my) {
+  const d = PULSE.data;
+  const px = PULSE_MAP.px, py = PULSE_MAP.py;
+  if (!d || !px) return null;
+  let best = -1, bestD = 26 * 26;
+  for (let i = 0; i < px.length; i++) {
+    const dx = px[i] - mx, dy = py[i] - my;
+    const dist = dx * dx + dy * dy;
+    if (dist < bestD) { bestD = dist; best = i; }
+  }
+  return best === -1 ? null : best;
+}
+
+function pulseBindMap(host, cv) {
+  cv.style.cursor = 'crosshair';
+
+  cv.addEventListener('mousemove', (e) => {
+    const rect = cv.getBoundingClientRect();
+    const i = pulseNearest(e.clientX - rect.left, e.clientY - rect.top);
+    const prov = i === null ? null : Number(PULSE.data.prov[i]);
+    // A pointer cursor only where there is something to click.
+    cv.style.cursor = prov === null ? 'crosshair' : 'pointer';
+    if (prov !== PULSE_MAP.hover) {
+      PULSE_MAP.hover = prov;
+      pulseHoverChip(prov, e.clientX - rect.left, e.clientY - rect.top);
+      pulseDraw();
+    } else if (prov !== null) {
+      pulseHoverChip(prov, e.clientX - rect.left, e.clientY - rect.top);
+    }
+  });
+
+  cv.addEventListener('mouseleave', () => {
+    PULSE_MAP.hover = null;
+    pulseHoverChip(null);
+    pulseDraw();
+  });
+
+  /* Click focuses the whole panel on that province - figures, sparkline and
+     every section follow, because a province you are looking at is a
+     province you are asking about. Clicking it again clears. */
+  cv.addEventListener('click', () => {
+    const prov = PULSE_MAP.hover;
+    if (prov === null) return;
+    const name = PULSE.data.province_names?.[prov];
+    if (!name) return;
+    PULSE_MAP.focus = PULSE_MAP.focus === name ? null : name;
+    PULSE_MAP.px = null;              // the point set changes with the filter
+    loadPulse();
+  });
+}
+
+/* Says what the panel is filtered to, and offers the way out. A map that
+   silently shows one province while the figures beside it describe the whole
+   country is the kind of quiet mismatch this project keeps finding. */
+function pulseFocusNote() {
+  const el = $('pulse-focus');
+  if (!el) return;
+  if (!PULSE_MAP.focus) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  el.innerHTML = `Showing <b>${esc(PULSE_MAP.focus)}</b> only
+    <button type="button" class="pf-clear" id="pulse-clear">show all provinces</button>`;
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target?.id !== 'pulse-clear') return;
+  PULSE_MAP.focus = null;
+  PULSE_MAP.px = null;
+  loadPulse();
+});
+
+/* Escape clears the focus. A filter you can enter by clicking and only leave
+   by finding a small link is a trap, and this one changes every number on
+   the panel. */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !PULSE_MAP.focus) return;
+  PULSE_MAP.focus = null;
+  PULSE_MAP.px = null;
+  loadPulse();
+});
+
+function pulseHoverChip(provIdx, x, y) {
+  const el = $('pulse-chip');
+  if (!el) return;
+  if (provIdx === null || provIdx === undefined) { el.hidden = true; return; }
+  const d = PULSE.data;
+  const name = d.province_names?.[provIdx];
+  if (!name) { el.hidden = true; return; }
+
+  // Counted from the points on screen, so the chip can never disagree with
+  // the dots it is describing.
+  let total = 0, good = 0, mid = 0;
+  for (let i = 0; i < d.state.length; i++) {
+    if (d.prov[i] !== String(provIdx)) continue;
+    total++;
+    if (d.state[i] === '3') good++;
+    else if (d.state[i] === '2') mid++;
+  }
+  const label = d.mode === 'capture' ? 'all slips in' : 'staffed';
+  el.innerHTML = `<b>${esc(name)}</b>
+    <span>${fmt(good)} ${label} of ${fmt(total)}</span>
+    ${mid ? `<span class="muted">${fmt(mid)} partial</span>` : ''}
+    <span class="pc-hint">${PULSE_MAP.focus === name ? 'click to clear' : 'click to focus'}</span>`;
+  el.hidden = false;
+  el.style.left = `${Math.min(x + 14, (PULSE_MAP.w || 400) - 150)}px`;
+  el.style.top = `${Math.max(4, y - 10)}px`;
 }
 
 function pulseSpark() {
@@ -2222,14 +2440,22 @@ function pulseFigures() {
 async function loadPulse() {
   try {
     const on = [...pulseOn()];
-    PULSE.data = await api('/api/pulse'
-      + (on.length ? `?blocks=${encodeURIComponent(on.join(','))}` : ''));
+    const qs = new URLSearchParams();
+    if (on.length) qs.set('blocks', on.join(','));
+    // A province chosen on the map filters the whole panel, not just the map.
+    if (PULSE_MAP.focus) qs.set('province', PULSE_MAP.focus);
+    PULSE.data = await api(`/api/pulse${qs.toString() ? `?${qs}` : ''}`);
+    /* Diff before anything renders: the rings mark what moved between this
+       payload and the last, and only a real change should draw one. */
+    const changed = pulseDiff(PULSE.data.state ?? '');
+    if (changed) { PULSE_MAP.changed = changed; PULSE_MAP.changedAt = performance.now(); }
   } catch (e) {
     const n = $('pulse-note');
     if (n) n.textContent = `Live panel unavailable: ${String(e.message ?? e)}`;
     return;
   }
   pulseToggles();
+  pulseFocusNote();
   pulseFigures();
   pulseSpark();
   pulseSections();

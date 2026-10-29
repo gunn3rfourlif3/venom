@@ -2533,7 +2533,10 @@ body:has(.ticker:not([hidden])) .rail {
               gap: var(--s-sect); align-items: stretch; }
 @media (max-width: 900px) { .pulse-body { grid-template-columns: 1fr; } }
 
-.pulse-map { height: 230px; min-height: 180px; position: relative;
+/* Taller than the original 230px. This is the first thing anyone sees and
+   at 230 the country was a smudge; the extra height is what makes the
+   province clusters separable by eye. */
+.pulse-map { height: 300px; min-height: 240px; position: relative;
              background: var(--surface-2); border-radius: 4px; }
 .pulse-map canvas { display: block; }
 
@@ -2610,3 +2613,27 @@ body:has(.ticker:not([hidden])) .rail {
 .pe.sev-serious .pe-body { color: var(--st-bad); }
 .pe.sev-warning .pe-body { color: var(--st-warn); }
 .pq b { color: var(--st-warn); }
+
+/* -------------------------------------------- live map interaction */
+
+.pulse-map { position: relative; }
+.pulse-map canvas { display: block; border-radius: 4px; }
+
+/* Follows the pointer. Positioned inside the map so it cannot escape the
+   panel, and pointer-events:none so it never eats the click it is inviting. */
+.pulse-chip {
+  position: absolute; z-index: 5; pointer-events: none;
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 5px; padding: 7px 10px; min-width: 140px;
+  box-shadow: 0 4px 18px rgba(0,0,0,.5);
+  font-size: var(--step--1); line-height: 1.45;
+}
+.pulse-chip b { display: block; font-size: var(--step-0); }
+.pulse-chip span { display: block; color: var(--ink-2); }
+.pc-hint { color: var(--ink-3) !important; font-style: italic; }
+
+.pulse-focus { margin: 0 0 var(--s-sect); font-size: var(--step-0);
+               color: var(--ink-2); }
+.pf-clear { background: none; border: 0; color: var(--ours);
+            cursor: pointer; font: inherit; text-decoration: underline;
+            padding: 0 0 0 6px; }

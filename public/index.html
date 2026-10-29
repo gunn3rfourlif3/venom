@@ -151,9 +151,13 @@
            server either, so it costs nothing on the night. -->
       <div class="pulse-toggles" id="pulse-toggles"
            role="group" aria-label="Live panel sections"></div>
+      <p class="pulse-focus" id="pulse-focus" hidden></p>
       <div class="pulse-body">
         <div class="pulse-map viz" id="pulse-map" role="img"
-             aria-label="National map of voting stations"></div>
+             aria-label="National map of voting stations">
+          <!-- Follows the pointer; names the province under it. -->
+          <div class="pulse-chip" id="pulse-chip" hidden></div>
+        </div>
         <div class="pulse-side">
           <div class="pulse-figs" id="pulse-figs"></div>
           <div class="pulse-spark" id="pulse-spark"></div>

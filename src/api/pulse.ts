@@ -191,7 +191,8 @@ export async function getPulse(ctx: Ctx): Promise<void> {
 
   /* Packed parallel arrays, the same shape the readiness map uses: the whole
      country in one response rather than 23,696 JSON objects. */
-  const rows = await pool.query<{ y: number; x: number; code: string }>(
+  const rows = await pool.query<{ y: number; x: number; code: string;
+                                  province: string | null }>(
     mode === 'capture'
       ? `SELECT round(latitude::numeric  * 1000)::int AS y,
                 round(longitude::numeric * 1000)::int AS x,
@@ -201,7 +202,8 @@ export async function getPulse(ctx: Ctx): Promise<void> {
                        AND ballots_expected > 0                 THEN '3'
                   WHEN ballots_captured > 0                     THEN '2'
                   ELSE '0'
-                END AS code
+                END AS code,
+                province
            FROM v_station_readiness
           WHERE ($1::text IS NULL OR province = $1)`
       : `SELECT round(latitude::numeric  * 1000)::int AS y,
@@ -211,7 +213,8 @@ export async function getPulse(ctx: Ctx): Promise<void> {
                   WHEN readiness = 'staffed'           THEN '3'
                   WHEN readiness = 'people_only'       THEN '2'
                   ELSE '0'
-                END AS code
+                END AS code,
+                province
            FROM v_station_readiness
           WHERE ($1::text IS NULL OR province = $1)`,
     [province]);
@@ -259,6 +262,10 @@ export async function getPulse(ctx: Ctx): Promise<void> {
        FROM buckets b ORDER BY b.t`,
     [BUCKET_MIN, BUCKETS]);
 
+  /* Stable, sorted, and sent once. The per-point string indexes into it. */
+  const provinceNames = [...new Set(rows.rows
+    .map((r) => r.province).filter((p): p is string => Boolean(p)))].sort();
+
   /* Only what the client has switched on. */
   const want = new Set((ctx.url.searchParams.get('blocks') ?? '')
     .split(',').map((b) => b.trim()).filter(Boolean));
@@ -282,6 +289,19 @@ export async function getPulse(ctx: Ctx): Promise<void> {
     y: rows.rows.map((r) => r.y),
     x: rows.rows.map((r) => r.x),
     state: rows.rows.map((r) => r.code).join(''),
+    /* One character per point, indexing `province_names` below. The map
+       needs to know which province a dot belongs to so hovering can read
+       one out and clicking can focus it; shipping the province NAME per
+       point would add roughly 300 kB of repeated strings to a payload whose
+       whole design is to avoid exactly that. Nine provinces fit in a digit. */
+    /* `prov`, NOT `provinces`. The optional Provinces section is spread into
+       this response as `provinces`, and being spread later it overwrote this
+       string with that array - every hover then compared a character against
+       an object and matched nothing, so the map silently stopped responding
+       to the pointer while rendering perfectly. */
+    prov: rows.rows.map((r) =>
+      String(Math.max(0, provinceNames.indexOf(r.province ?? '')))).join(''),
+    province_names: provinceNames,
     totals: totals ?? null,
     activity: activity.rows,
     ...extra,
