@@ -2425,3 +2425,60 @@ body:has(.ticker:not([hidden])) .rail {
 /* The markers must not be inverted with the tiles. */
 :root:not([data-theme="light"]) .heat-map .leaflet-overlay-pane,
 :root:not([data-theme="light"]) .heat-map .leaflet-marker-pane { filter: none; }
+
+/* -------------------------------------------------- seat projection */
+
+/* The ramp lives on .viz, so anything reading --seq-* must sit inside it. */
+#seat-validation, #seat-result { }
+.seat-pick { display: flex; align-items: center; gap: var(--s-sect);
+             margin-bottom: var(--s-sect); }
+.seat-pick select { background: var(--surface-2); color: var(--ink);
+                    border: 1px solid var(--rule); border-radius: 4px;
+                    padding: 6px 10px; font: inherit; min-width: 320px; }
+.seat-h { margin-top: calc(var(--s-sect) * 2); }
+
+.hemicycle { width: 100%; max-width: 620px; height: auto; display: block;
+             margin: var(--s-sect) auto; }
+.hemi-total { fill: var(--ink); font-size: 30px; font-weight: 600;
+              font-variant-numeric: tabular-nums; }
+.hemi-sub { fill: var(--ink-3); font-size: 12px;
+            text-transform: uppercase; letter-spacing: .08em; }
+
+.seat-legend { display: flex; flex-wrap: wrap; gap: var(--s-sect);
+               justify-content: center; margin-bottom: var(--s-hair); }
+.sl-item { display: inline-flex; align-items: center; gap: 6px;
+           font-size: var(--step-0); }
+.sl-item i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.sl-item b { font-variant-numeric: tabular-nums; }
+
+.seat-fixture { border: 1px solid var(--rule); border-radius: 6px;
+                padding: var(--s-sect); margin-bottom: var(--s-sect);
+                background: var(--surface); }
+.seat-fixture h4 { margin: 0; display: flex; align-items: center;
+                   gap: var(--s-sect); }
+.sv-pass { color: var(--st-good); font-size: var(--step--1);
+           text-transform: uppercase; letter-spacing: .06em; }
+.sv-fail { color: var(--st-bad); font-size: var(--step--1);
+           text-transform: uppercase; letter-spacing: .06em; }
+
+/* A council that cannot be projected says why, in the space the chart
+   would have occupied. An empty hemicycle and a hemicycle of zeros look
+   the same, and only one of them is honest. */
+.seat-blocked { border-left: 3px solid var(--st-warn);
+                background: var(--surface-2); padding: var(--s-sect);
+                margin-bottom: var(--s-sect); }
+.seat-blocked h4 { margin: 0 0 var(--s-hair); }
+.seat-reason { color: var(--st-warn); font-weight: 600; margin: 0 0 var(--s-hair); }
+.seat-live { border: 1px solid var(--rule); border-radius: 6px;
+             padding: var(--s-sect); background: var(--surface); }
+.seat-note { color: var(--ink-2); font-size: var(--step--1); }
+
+.sr-summary { display: flex; gap: var(--s-sect); flex-wrap: wrap;
+              margin-bottom: var(--s-sect); }
+.sr-chip { background: var(--surface-2); border: 1px solid var(--rule);
+           border-radius: 4px; padding: 4px 10px; font-size: var(--step-0); }
+.sr-table { width: 100%; border-collapse: collapse; font-size: var(--step-0); }
+.sr-table th { text-align: left; color: var(--ink-3); font-weight: 500;
+               border-bottom: 1px solid var(--rule); padding: 6px 8px; }
+.sr-table td { padding: 5px 8px; border-bottom: 1px solid var(--rule-hair); }
+.sr-table .num { text-align: right; font-variant-numeric: tabular-nums; }

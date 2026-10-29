@@ -863,7 +863,7 @@ async function loadHealth() {
 const WARD_LIMIT = 6000;
 
 const VIEWS = ['logistics', 'slips', 'overview', 'wards', 'sentiment', 'decisions',
-               'heat', 'readiness', 'briefing', 'float', 'health', 'settings'];
+               'heat', 'seats', 'readiness', 'briefing', 'float', 'health', 'settings'];
 
 /* ------------------------------------------------------------------ *
  * Station readiness and gap maps.
@@ -1255,6 +1255,7 @@ function showView(view) {
   if (view === 'readiness') { loadReadiness(); loadCompleteness(); }
   if (view === 'briefing') loadBriefing();
   if (view === 'heat') loadHeat();
+  if (view === 'seats') loadSeats();
   if (view === 'settings') loadControlPanel();
 }
 
@@ -1328,6 +1329,22 @@ async function loadBriefing() {
     const d = res.data ?? res;
     const f = d.footprint ?? {}, r = d.readiness ?? {}, k = d.clock ?? {};
 
+    /* The capability list below states what is running and what is waiting.
+       It is read by people deciding whether to rely on this, so it is built
+       from live counts rather than from hand-maintained strings - a status
+       board that drifts is worse than none. The seat engine sat listed as
+       "build / two days" for a day after it was built, validated and wired. */
+    let seatsConfirmed = 0, seatsPending = 0, candidatesLoaded = 0;
+    try {
+      const sr = await api('/api/seats/readiness');
+      for (const row of sr.data ?? []) {
+        if (row.total_seats == null) seatsPending += 1; else seatsConfirmed += 1;
+      }
+      candidatesLoaded = (sr.data ?? [])
+        .reduce((a, row) => a + Number(row.ward_candidates_loaded || 0)
+                              + Number(row.pr_list_loaded || 0), 0);
+    } catch { /* the list still renders, just without the live counts */ }
+
     $('bf-clock').innerHTML = k.election_date
       ? `<span><b>${num(k.days_to_election)}</b> days to polling day &middot; ${fmtDay(k.election_date)}</span>`
         + (k.next_drill ? `<span><b>${num(k.days_to_drill)}</b> days to the capture drill &middot; ${fmtDay(k.next_drill)}</span>` : '')
@@ -1395,12 +1412,24 @@ async function loadBriefing() {
        ['ready', "Needs the voters' roll summary - already in hand"]],
       ['Official results feed', 'IEC results alongside our own count, as they declare.',
        ['needs', 'Needs IEC API credentials - request drafted']],
+      /* Was 'build / Two days'. It is built, wired and reachable at
+         /api/seats, and it reproduces both published 2021 results exactly.
+         The one input still outstanding is the council seat total, which
+         cannot be derived from the ward count - see migration 048. */
       ['Seats, not just votes', 'Votes translated into council seats under the Structures Act formula.',
-       ['build', 'Two days, validated against the published 2021 result']],
+       seatsConfirmed > 0
+         ? ['live', 'Running']
+         : ['ready', `Engine validated against 2021 — needs seat totals for ${fmt(seatsPending)} councils`]],
       ['Public issue pressure', 'What residents are raising, by ward, from live public sources.',
-       ['needs', 'Needs Meta Business Manager approval']],
+       ['needs', 'Needs Meta Business Manager approval — adapter already written']],
       ['Audited municipal finances', 'Service-delivery revenue per municipality, from Treasury.',
-       ['ready', 'Source is open - one command to load']],
+       ['live', 'Running — 147 municipalities, 2,295 audited facts']],
+      ['Issue pressure, drillable', 'Complaints by province, municipality, ward and station.',
+       ['live', 'Running — unmeasured places shown as unmeasured']],
+      ['Certified candidates', 'Who is actually on the ballot, per ward.',
+       candidatesLoaded > 0
+         ? ['live', `Running — ${fmt(candidatesLoaded)} candidates loaded`]
+         : ['ready', 'One command per province once the lists are to hand']],
     ];
     $('bf-ladder').innerHTML = rows.map(([name, what, [cls, state]]) => `
       <div class="bf-rung bf-${cls}">
@@ -2189,6 +2218,229 @@ document.addEventListener('click', (e) => {
   if (to === 'municipality' && HEAT.province) heatLoad('municipality');
   if (to === 'ward' && HEAT.municipality) heatLoad('ward');
 });
+
+
+/* ---------------------------------------------------- seat projection
+ *
+ * The hemicycle. Fed by `src/seats/allocate.ts`, which reproduces both
+ * published 2021 results exactly - the engine existed and passed its
+ * fixtures for a day before anything could reach it, so this screen is the
+ * wiring as much as the picture.
+ *
+ * WHAT THE PICTURE MUST NOT DO. A hemicycle is a very convincing shape. It
+ * looks like a result whatever is behind it, so this screen never draws one
+ * from incomplete or unconfirmed inputs. A council whose seat total is not
+ * confirmed gets the reason in words; a council with no captured results
+ * gets the same. The only arcs drawn from real inputs today are the two 2021
+ * fixtures, and they are labelled as validation rather than projection.
+ */
+
+/* Seats laid out in concentric rows across a half-circle, each row holding
+   seats in proportion to its radius so the spacing stays even. */
+function hemicycleSeats(total, rows = null) {
+  if (total <= 0) return [];
+  const R = rows ?? Math.max(2, Math.min(7, Math.round(Math.sqrt(total / 2.2))));
+  const weights = [];
+  for (let i = 0; i < R; i++) weights.push(1 + i * 0.62);
+  const sum = weights.reduce((a, b) => a + b, 0);
+
+  const perRow = weights.map((w) => Math.max(1, Math.round((w / sum) * total)));
+  // Rounding will not add up; correct from the outermost row inwards.
+  let drift = total - perRow.reduce((a, b) => a + b, 0);
+  for (let i = R - 1; i >= 0 && drift !== 0; i--) {
+    const step = drift > 0 ? 1 : -1;
+    if (perRow[i] + step >= 1) { perRow[i] += step; drift -= step; }
+  }
+
+  const pts = [];
+  const rOuter = 1, rInner = 0.42;
+  for (let i = 0; i < R; i++) {
+    const r = R === 1 ? (rOuter + rInner) / 2
+      : rInner + (rOuter - rInner) * (i / (R - 1));
+    const n = perRow[i];
+    for (let k = 0; k < n; k++) {
+      // Left to right across the arc, 180deg to 0deg.
+      const t = n === 1 ? 0.5 : k / (n - 1);
+      const a = Math.PI * (1 - t);
+      pts.push({ x: Math.cos(a) * r, y: -Math.sin(a) * r, row: i, idx: k });
+    }
+  }
+  // Order so seats fill left to right across the whole arc, not row by row:
+  // a party's block should read as one wedge.
+  pts.sort((a, b) => Math.atan2(-a.y, a.x) - Math.atan2(-b.y, b.x));
+  return pts.reverse();
+}
+
+/* CATEGORICAL, NOT SEQUENTIAL. Party is identity, not magnitude. The first
+   attempt opened with --seq-7, --seq-5, --seq-3 - three steps off one
+   sequential ramp - which put the ANC, the DA and the EFF in three yellows
+   nobody could tell apart on a projector. A ramp encodes "more"; parties are
+   not more or less than each other.
+
+   Fixed order, never cycled: a party keeps its colour as the count changes,
+   so filtering does not repaint the survivors. Past the eighth party every
+   remaining one is grey rather than a generated hue - at that point colour
+   has stopped carrying identity and the legend is doing the work. */
+const SEAT_PALETTE = ['--ours', '--st-info', '--st-good', '--st-warn',
+                      '--st-bad', '--seq-3', '--st-unknown', '--theirs'];
+const SEAT_OVERFLOW = '--ink-3';
+
+function seatColour(i, host) {
+  const token = i < SEAT_PALETTE.length ? SEAT_PALETTE[i] : SEAT_OVERFLOW;
+  const v = getComputedStyle(host ?? document.documentElement)
+    .getPropertyValue(token).trim();
+  return v || '#FFD600';
+}
+
+/* Draws one hemicycle. `parties` is [{party, total, ward, pr}] already in
+   seat order. Returns an SVG string. */
+function hemicycleSvg(parties, host) {
+  const total = parties.reduce((a, p) => a + Number(p.total || 0), 0);
+  if (total <= 0) return '<p class="muted">No seats to draw.</p>';
+  const pts = hemicycleSeats(total);
+
+  const blocks = [];
+  let i = 0;
+  parties.forEach((p, pi) => {
+    const n = Number(p.total) || 0;
+    for (let k = 0; k < n && i < pts.length; k++, i++) {
+      blocks.push({ ...pts[i], party: p.party, colour: seatColour(pi, host),
+                    ward: k < Number(p.ward || 0) });
+    }
+  });
+
+  const W = 620, H = 330, cx = W / 2, cy = H - 18, scale = 268;
+  const dots = blocks.map((b) => {
+    const x = cx + b.x * scale, y = cy + b.y * scale;
+    /* A ward seat is filled, a list seat is hollow. The distinction is the
+       whole point of compensatory PR and it is free to show. */
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6.2"`
+      + (b.ward ? ` fill="${b.colour}" stroke="none"` 
+                : ` fill="none" stroke="${b.colour}" stroke-width="2.2"`)
+      + `><title>${esc(b.party)} — ${b.ward ? 'ward' : 'list'} seat</title></circle>`;
+  }).join('');
+
+  const legend = parties.filter((p) => Number(p.total) > 0).map((p, pi) => `
+    <span class="sl-item">
+      <i style="background:${seatColour(pi, host)}"></i>
+      ${esc(p.party)}
+      <b>${fmt(p.total)}</b>
+      <span class="muted">${fmt(p.ward)} ward · ${fmt(p.pr)} list</span>
+    </span>`).join('');
+
+  return `<svg class="hemicycle" viewBox="0 0 ${W} ${H}" role="img"
+            aria-label="Hemicycle of ${total} council seats">${dots}
+            <text x="${cx}" y="${cy - 8}" text-anchor="middle"
+                  class="hemi-total">${fmt(total)}</text>
+            <text x="${cx}" y="${cy + 10}" text-anchor="middle"
+                  class="hemi-sub">seats</text></svg>
+          <div class="seat-legend">${legend}</div>
+          <p class="provenance">Filled = ward seat won outright. Hollow = seat
+             from the PR list. PR seats are the party's total entitlement
+             minus its ward seats, so the two are not added together.</p>`;
+}
+
+async function seatValidation() {
+  const host = $('seat-validation');
+  if (!host) return;
+  let d;
+  try { d = await api('/api/seats/validation'); }
+  catch (e) { host.innerHTML = `<p class="muted">${esc(String(e.message ?? e))}</p>`; return; }
+
+  host.innerHTML = (d.data ?? []).map((f) => `
+    <div class="seat-fixture">
+      <h4>${esc(f.name)}
+        <span class="${f.passed ? 'sv-pass' : 'sv-fail'}">
+          ${f.passed ? 'reproduced exactly' : 'MISMATCH'}</span></h4>
+      <p class="provenance">quota ${fmt(f.quota)} · ${fmt(f.council_seats)} seats
+         · ${fmt(f.parties)} parties</p>
+      ${f.passed ? hemicycleSvg(f.seats, host)
+                 : `<p class="muted">${esc(f.mismatches.join('; '))}</p>`}
+    </div>`).join('');
+}
+
+async function seatReadiness() {
+  const host = $('seat-readiness');
+  if (!host) return;
+  let d;
+  try { d = await api('/api/seats/readiness'); }
+  catch (e) { host.innerHTML = `<p class="muted">${esc(String(e.message ?? e))}</p>`; return; }
+
+  const summary = Object.entries(d.summary ?? {})
+    .map(([k, v]) => `<span class="sr-chip">${esc(k)} <b>${fmt(v)}</b></span>`).join('');
+
+  const rows = (d.data ?? []).slice(0, 40).map((r) => `
+    <tr>
+      <td>${esc(r.municipality)}</td>
+      <td class="num">${fmt(r.ward_seats)}</td>
+      <td class="num">${r.total_seats == null
+          ? `<span class="muted">${fmt(r.total_if_odd)} or ${fmt(r.total_if_even)}</span>`
+          : fmt(r.total_seats)}</td>
+      <td class="num">${fmt(r.ward_candidates_loaded)}</td>
+      <td class="num">${fmt(r.slips_captured)}</td>
+      <td>${esc(r.status)}</td>
+    </tr>`).join('');
+
+  host.innerHTML = `
+    <div class="sr-summary">${summary}</div>
+    <table class="sr-table">
+      <thead><tr><th>Council</th><th class="num">Wards</th>
+        <th class="num">Seats</th><th class="num">Candidates</th>
+        <th class="num">Slips</th><th>Status</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${(d.data ?? []).length > 40
+      ? `<p class="provenance">Showing 40 of ${fmt(d.data.length)} councils.</p>` : ''}`;
+}
+
+async function seatProject(code) {
+  const host = $('seat-result');
+  if (!host) return;
+  if (!code) { host.innerHTML = ''; return; }
+  host.innerHTML = '<p class="muted">Loading…</p>';
+  let d;
+  try { d = await api(`/api/seats?municipality=${encodeURIComponent(code)}`); }
+  catch (e) { host.innerHTML = `<p class="muted">${esc(String(e.message ?? e))}</p>`; return; }
+
+  if (!d.projectable) {
+    host.innerHTML = `
+      <div class="seat-blocked">
+        <h4>${esc(d.municipality ?? '')} — cannot project yet</h4>
+        <p class="seat-reason">${esc(d.reason ?? '')}</p>
+        <p>${esc(d.detail ?? '')}</p>
+      </div>`;
+    return;
+  }
+
+  host.innerHTML = `
+    <div class="seat-live">
+      <h4>${esc(d.municipality)}</h4>
+      <p class="provenance">quota ${fmt(d.quota)} · ${fmt(d.total_seats)} seats
+        · ${fmt(d.surplus_seats)} by largest remainder${d.partial
+          ? ' · <b>partial — counted from slips captured so far</b>' : ''}</p>
+      ${(d.notes ?? []).map((n) => `<p class="seat-note">${esc(n)}</p>`).join('')}
+      ${hemicycleSvg((d.data ?? []).map((p) => ({
+          party: p.party, total: p.totalSeats, ward: p.wardSeats, pr: p.prSeats,
+        })), host)}
+    </div>`;
+}
+
+let seatsLoaded = false;
+async function loadSeats() {
+  return whileLoading('view-seats', async () => {
+    if (!seatsLoaded) {
+      const sel = $('seat-munic');
+      const d = await api('/api/seats/readiness');
+      sel.innerHTML = '<option value="">— choose a council —</option>'
+        + (d.data ?? []).map((r) =>
+            `<option value="${esc(r.demarcation_code)}">${esc(r.municipality)} (${esc(r.province)})</option>`).join('');
+      sel.addEventListener('change', (e) => seatProject(e.target.value));
+      await seatValidation();
+      await seatReadiness();
+      seatsLoaded = true;
+    }
+  });
+}
 
 /* ----------------------------------------------------------- theme */
 
