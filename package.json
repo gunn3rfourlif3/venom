@@ -30,7 +30,8 @@
     "alerts:check": "node --env-file=.env dist/cli/alerts-check.js",
     "import:facts": "node --env-file=.env dist/cli/import-facts.js",
     "import:candidates": "node --env-file=.env dist/cli/import-candidates.js",
-    "seats:verify": "node dist/cli/seats-verify.js"
+    "seats:verify": "node dist/cli/seats-verify.js",
+    "seed:demo-signal": "node --env-file=.env dist/cli/seed-demo-signal.js"
   },
   "dependencies": {
     "pg": "8.13.1"

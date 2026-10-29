@@ -669,10 +669,110 @@ async function getOverview(ctx: Ctx): Promise<void> {
   });
 }
 
+
+/* ---------------------------------------------------------- issue heat
+ *
+ * Drill: province -> municipality -> ward -> the stations inside a ward.
+ *
+ * EVERY ROW SAYS WHETHER IT IS MEASURED, AND ON WHAT. `has_signal` and
+ * `signal_basis` are returned unmodified and net_sentiment is left NULL
+ * where nothing was collected. Nothing here coalesces an absence to zero:
+ * on a heatmap, zero is a colour and a colour is a claim. 116 of 4,485
+ * wards carry any ward-level signal and every one of those is SYNTHETIC
+ * development data, so a client that treats missing as calm would paint a
+ * confident national picture out of one fabricated province.
+ */
+async function getHeat(ctx: Ctx): Promise<void> {
+  const level = enumParam(ctx.url, 'level',
+    ['province', 'municipality', 'ward']) ?? 'province';
+  const province = ctx.url.searchParams.get('province');
+  const municipality = ctx.url.searchParams.get('municipality');
+
+  if (level === 'province') {
+    const rows = await pool.query(
+      `SELECT province, municipalities, municipalities_with_signal,
+              mentions, net_sentiment, last_observed, any_synthetic
+         FROM v_issue_heat_province ORDER BY province`);
+    json(ctx.res, 200, { ...await envelope(rows.rows), level });
+    return;
+  }
+
+  if (level === 'municipality') {
+    const rows = await pool.query(
+      `SELECT demarcation_code, municipality, province, municipality_category,
+              mentions, net_sentiment, confidence, dominant_tone, last_observed,
+              categories, has_signal, signal_basis, stations, lat, lon
+         FROM v_issue_heat_municipality
+        WHERE ($1::text IS NULL OR province = $1)
+        ORDER BY mentions DESC, municipality`, [province]);
+    json(ctx.res, 200, { ...await envelope(rows.rows), level, province });
+    return;
+  }
+
+  // Ward level is scoped deliberately: 4,485 ward rows is not a map, it is a
+  // download. A municipality must be chosen first.
+  if (!municipality) {
+    json(ctx.res, 200, {
+      ...await envelope([]), level,
+      note: 'Choose a municipality first - ward heat is scoped to one municipality.',
+    });
+    return;
+  }
+  const rows = await pool.query(
+    `SELECT ward_id, demarcation_code, municipality, province, mentions,
+            net_sentiment, confidence, dominant_tone, last_observed, categories,
+            has_signal, signal_basis, stations, lat, lon
+       FROM v_issue_heat_ward
+      WHERE demarcation_code = $1
+      ORDER BY mentions DESC, ward_id`, [municipality]);
+  json(ctx.res, 200, { ...await envelope(rows.rows), level, municipality });
+}
+
+/* Category breakdown and the stations underneath, for one selected place. */
+async function getHeatDetail(ctx: Ctx): Promise<void> {
+  const ward = ctx.url.searchParams.get('ward');
+  const municipality = ctx.url.searchParams.get('municipality');
+  if (!ward && !municipality) {
+    json(ctx.res, 400, { error: 'ward or municipality required' });
+    return;
+  }
+
+  const categories = await pool.query(
+    ward
+      ? `SELECT category, mentions, net_sentiment, dominant_tone,
+                last_observed, synthetic
+           FROM v_issue_heat_category
+          WHERE ward_id = $1 ORDER BY mentions DESC`
+      : `SELECT category, SUM(mentions)::int AS mentions,
+                ROUND(AVG(net_sentiment), 3) AS net_sentiment,
+                MODE() WITHIN GROUP (ORDER BY dominant_tone) AS dominant_tone,
+                MAX(last_observed) AS last_observed,
+                bool_and(synthetic) AS synthetic
+           FROM v_issue_heat_category
+          WHERE demarcation_code = $1
+          GROUP BY category ORDER BY mentions DESC`,
+    [ward ?? municipality]);
+
+  /* Stations are shown only for a ward. A metro has hundreds and the list
+     stops being readable long before it stops being accurate. */
+  const stations = ward
+    ? (await pool.query(
+        `SELECT station_id, name, suburb, latitude, longitude,
+                registered_voters, our_people, expected_people
+           FROM station WHERE ward_id = $1
+          ORDER BY registered_voters DESC NULLS LAST`, [ward])).rows
+    : [];
+
+  json(ctx.res, 200, {
+    ...await envelope(categories.rows), ward, municipality, stations,
+  });
+}
+
 export const routes = {
   postLogin, postLogout, getMe, getWards, getWard, getTargets,
   getCampaign, getFloat, getDecisions, getDocuments, getIngestHealth,
   getSentiment, getSearch, getCameras, getTerrain,
   getControlPanel, putControlPanel, getOverview, getTrending,
   getStationMap, getRegisterCompleteness, getBriefing, authenticate,
+  getHeat, getHeatDetail,
 };

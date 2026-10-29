@@ -175,7 +175,30 @@ const BOX_MEANING = {
   PR:       'No ward candidate was certified for us. The seat is gone, the list ballot is not — turnout here still earns PR seats.',
   Hold:     'Not winnable, but we hold it. Defend, do not invest.',
   Abandon:  'Not winnable and nobody standing. Spend the day elsewhere.',
+  /* Not a verdict. is_contestable is computed from the rival's 2021-2024
+     decline, and its CASE ends ELSE false - so a ward with no baseline loaded
+     was indistinguishable from one measured and found hopeless, and 4,031 of
+     them were being reported as Abandon. See migration 044. */
+  Unassessed: 'No 2021 baseline loaded for this ward, so nothing has been judged. Not a decision to skip it — a question nobody has answered.',
 };
+
+/* "confirmed" and "none confirmed" were the only two things this row could
+   say, and both were read off a campaign-entered field that disagreed with
+   the certified ballot in 310 of Gauteng's 526 wards. The row now says what
+   it knows AND who said so, because "we have no candidate here" sourced from
+   the IEC is final and actionable, while the same words sourced from a blank
+   internal field mean only that nobody has filled it in. */
+function candidateLine(d) {
+  const certified = d.candidate_status_source === 'IEC certified';
+  if (certified) {
+    return d.candidate_status === 'Confirmed'
+      ? 'standing — IEC certified'
+      : 'none — IEC certified, final';
+  }
+  if (d.candidate_status === 'Confirmed') return 'confirmed — campaign entry, unverified';
+  if (d.candidate_status === 'Pending')   return 'pending — campaign entry, unverified';
+  return 'not recorded — certified list for this province not loaded';
+}
 
 const CLASS_MEANING = {
   'ACT NOW': 'Close, and complaints are rising.',
@@ -237,12 +260,18 @@ function renderLedger() {
 
   $('ledger').innerHTML = rows.map((w) => {
     const t = state.targets.get(w.ward_id);
-    const urgent = w.gap_flag === 'NO CANDIDATE';
+    /* Was `urgent`, and wore the signal-yellow flag in the row margin. The
+       flag is an alarm, and this is not one: no ward candidate of ours was
+       certified here, that was final on 16 September, and nothing anyone
+       does this week changes it. The row is still worth marking - the work
+       there is different - so it keeps a marker in the informational hue
+       rather than the alarm one. See migration 041. */
+    const noCandidate = w.gap_flag === 'NO CANDIDATE';
     const band = t?.pressure_band ?? 'QUIET';
     const declineNeg = Number(w.rival_decline_share) < 0;
     const eoNeg = Number(w.eo_est_votes) < 0;
     return `
-      <button class="line${urgent ? ' is-urgent' : ''}${state.openWard === w.ward_id ? ' is-open' : ''}"
+      <button class="line${noCandidate ? ' is-no-candidate' : ''}${state.openWard === w.ward_id ? ' is-open' : ''}"
               data-ward="${esc(w.ward_id)}"
               aria-label="Ward ${esc(w.ward_id)}, ${esc(w.municipality)}, ${esc(w.recommended_box)}">
         <span class="mark"></span>
@@ -406,7 +435,7 @@ async function openDossier(wardId) {
 
     <h3>Liabilities</h3>
     ${kv([
-      ['Candidate', d.candidate_shortage ? 'none confirmed' : 'confirmed'],
+      ['Candidate', candidateLine(d)],
       ['People short', num(d.people_shortage)],
       ['Stations covered', `${num(d.stations_covered)} of ${num(d.stations_total)}`],
       ['Pledges secured', num(d.pledges_total)],
@@ -834,7 +863,7 @@ async function loadHealth() {
 const WARD_LIMIT = 6000;
 
 const VIEWS = ['logistics', 'slips', 'overview', 'wards', 'sentiment', 'decisions',
-               'viewshed', 'readiness', 'briefing', 'float', 'health', 'settings'];
+               'heat', 'readiness', 'briefing', 'float', 'health', 'settings'];
 
 /* ------------------------------------------------------------------ *
  * Station readiness and gap maps.
@@ -1214,9 +1243,6 @@ function showView(view) {
     b.classList.toggle('is-current', b.dataset.view === view));
   for (const name of VIEWS) $(`view-${name}`).hidden = name !== view;
 
-  // The projection holds a WebGL context and an animation loop; leaving it
-  // running behind a hidden pane burns a core for nothing.
-  if (view !== 'viewshed') window.VenomViewshed?.hide();
 
   loadTicker();
   if (view === 'logistics') loadLogistics();
@@ -1228,7 +1254,7 @@ function showView(view) {
   if (view === 'health') loadHealth();
   if (view === 'readiness') { loadReadiness(); loadCompleteness(); }
   if (view === 'briefing') loadBriefing();
-  if (view === 'viewshed') loadViewshed();
+  if (view === 'heat') loadHeat();
   if (view === 'settings') loadControlPanel();
 }
 
@@ -1582,7 +1608,14 @@ async function loadOverview() {
       + `<span><b>${num(eo)}</b>expected</span>`;
 
   $('ov-stats').innerHTML = [
-    ['Without a candidate', noBaseline ? '—' : num(c.wards_no_candidate),
+    /* Was labelled "Without a candidate", which is not what it counts. The
+       figure is SUM(candidate_shortage) - wards that are contestable AND have
+       no candidate of ours - so it read 6 while 72 Gauteng wards have no
+       candidate of ours at all. The number is the right one to show here (a
+       ward we could not win anyway is not an operational gap); the label was
+       claiming a wider fact than the number supports. It now names the same
+       cell as the 2x2 in the wards directory: winnable, no candidate. */
+    ['Winnable, no candidate', noBaseline ? '—' : num(c.wards_no_candidate),
       !noBaseline && Number(c.wards_no_candidate) > 0],
     ['People short', noBaseline ? '—' : num(c.people_gap_total),
       !noBaseline && Number(c.people_gap_total) > 0],
@@ -1808,21 +1841,353 @@ document.querySelector('.views').addEventListener('click', (e) => {
   showView(btn.dataset.view);
 });
 
-/* -------------------------------------------------------- viewshed */
+/* ------------------------------------------------------- issue heat
+ *
+ * Replaces the viewshed projection, which rendered London terrain and
+ * answered no question anyone asks about a South African ward.
+ *
+ * Drill: country -> province -> municipality -> ward -> stations.
+ *
+ * THE ONE RULE THIS SCREEN IS BUILT AROUND. A heatmap turns numbers into
+ * colour, and colour reads as measurement. A place with no signal must not
+ * be painted the same as a place measured and found quiet, and a place whose
+ * number is invented must not be painted the same as one that is real.
+ * Today that is not a hypothetical: ward-level signal is 100% SYNTHETIC and
+ * covers 116 of 4,485 wards, so a naive heatmap would render one province of
+ * fabricated data as a national finding.
+ *
+ *   measured + real        filled dot, colour by intensity
+ *   measured + synthetic   filled dot, dashed ring, counted in the banner
+ *   no signal              hollow grey ring, never a warm colour
+ */
 
-let viewshedModule = null;
-async function loadViewshed() {
-  // Loaded on demand: three.js is far larger than the rest of this app put
-  // together, and most sessions never open this screen.
-  if (!viewshedModule) viewshedModule = await import('/viewshed.js');
-  await viewshedModule.show();
+const HEAT = {
+  map: null, L: null, layer: null,
+  level: 'province', province: null, municipality: null,
+  municipalityName: null, selected: null, rows: [],
+};
+
+/* Sequential ramp, light to dark, one hue. Taken from the tokens rather
+   than hardcoded so it follows the theme. */
+const HEAT_STEPS = 6;
+
+/* Read from the MAP HOST, not documentElement. The --seq-* ramp is scoped
+   to `.viz`, so resolving it against the root returns empty string for every
+   step - and the `|| fallback` then painted all nine provinces the same
+   colour while looking like it worked. Third time a token read against the
+   wrong scope has silently degraded a visual in this file. */
+function heatCss(name) {
+  const host = $('heat-map') ?? document.documentElement;
+  return getComputedStyle(host).getPropertyValue(name).trim();
 }
 
-$('vs-exag').addEventListener('input', (e) => {
-  $('vs-exag-out').textContent = `×${e.target.value}`;
-});
-$('vs-exag').addEventListener('change', (e) => {
-  viewshedModule?.setExaggeration(Number(e.target.value));
+/* Resolve the ramp once and say so if it is missing, rather than quietly
+   collapsing to a single colour. A heatmap with one colour is not a degraded
+   heatmap, it is a wrong one. */
+function heatRamp() {
+  const steps = [];
+  for (let i = 2; i <= 7; i++) steps.push(heatCss(`--seq-${i}`));
+  if (steps.some((c) => !c)) {
+    console.warn('issue heat: --seq-* ramp did not resolve; check .viz scope');
+    return ['#3d2f00', '#5c4700', '#806200', '#a88000', '#cc9d00', '#FFD600'];
+  }
+  return steps;
+}
+
+/* Intensity is a rank, not a raw count. Mentions are wildly uneven - one
+   metro carries 12,542 and most municipalities carry single digits - so a
+   linear scale puts everything except Johannesburg in the lightest bucket
+   and the map says nothing. Rank within what is on screen. */
+function heatBuckets(rows) {
+  const vals = rows.filter((r) => r.has_signal ?? (r.mentions > 0))
+                   .map((r) => Number(r.mentions) || 0)
+                   .sort((a, b) => a - b);
+  if (!vals.length) return [];
+  const cuts = [];
+  for (let i = 1; i < HEAT_STEPS; i++) {
+    cuts.push(vals[Math.floor((i / HEAT_STEPS) * vals.length)] ?? vals[vals.length - 1]);
+  }
+  return cuts;
+}
+
+function heatBucketOf(mentions, cuts) {
+  let b = 0;
+  for (const c of cuts) if (mentions > c) b++;
+  return Math.min(b, HEAT_STEPS - 1);
+}
+
+async function heatEnsureMap() {
+  if (HEAT.map) return HEAT.map;
+  const host = $('heat-map');
+  if (!host) return null;
+  const L = HEAT.L ?? (HEAT.L = await loadLeaflet());
+
+  HEAT.map = L.map(host, {
+    zoomAnimation: false, attributionControl: true, worldCopyJump: false,
+  }).setView([-28.8, 24.7], 5);
+
+  L.tileLayer(BASEMAP_URL, {
+    attribution: BASEMAP_ATTRIB, maxZoom: 19, minZoom: 4,
+  }).on('tileerror', () => {
+    const n = $('heat-basemap-note');
+    if (n) n.textContent =
+      'Road basemap unavailable - the dots are still positioned correctly.';
+  }).addTo(HEAT.map);
+
+  HEAT.layer = L.layerGroup().addTo(HEAT.map);
+  return HEAT.map;
+}
+
+/* Province rows carry no coordinates of their own - a province is drawn at
+   the mean of its municipalities, which are drawn at the mean of their
+   stations. Computed here rather than in SQL because it is a presentation
+   convenience, not a fact about a province. */
+const PROVINCE_CENTRES = {
+  'Eastern Cape': [-32.3, 26.4], 'Free State': [-28.5, 26.8],
+  'Gauteng': [-26.1, 28.1], 'KwaZulu-Natal': [-28.9, 30.6],
+  'Limpopo': [-23.7, 29.5], 'Mpumalanga': [-25.6, 30.4],
+  'North West': [-26.4, 25.6], 'Northern Cape': [-29.3, 21.9],
+  'Western Cape': [-33.3, 19.9],
+};
+
+function heatRadius(row) {
+  // Area by station count, floored so a one-station ward is still clickable.
+  const n = Number(row.stations) || 1;
+  return Math.max(6, Math.min(26, Math.sqrt(n) * 2.2));
+}
+
+function heatDraw() {
+  const L = HEAT.L;
+  if (!L || !HEAT.layer) return;
+  HEAT.layer.clearLayers();
+
+  const cuts = heatBuckets(HEAT.rows);
+  const ramp = heatRamp();
+  const muted = heatCss('--ink-3') || '#6e6e7c';
+
+  let synthetic = 0, unmeasured = 0;
+
+  for (const row of HEAT.rows) {
+    const centre = HEAT.level === 'province'
+      ? PROVINCE_CENTRES[row.province]
+      : (row.lat != null && row.lon != null ? [Number(row.lat), Number(row.lon)] : null);
+    if (!centre) continue;
+
+    const measured = HEAT.level === 'province'
+      ? Number(row.mentions) > 0
+      : Boolean(row.has_signal);
+    const isSynth = HEAT.level === 'province'
+      ? Boolean(row.any_synthetic)
+      : (row.signal_basis === 'synthetic' || row.signal_basis === 'mixed');
+
+    if (!measured) unmeasured++;
+    if (isSynth) synthetic++;
+
+    const marker = L.circleMarker(centre, {
+      radius: HEAT.level === 'province' ? 16 : heatRadius(row),
+      /* Unmeasured is hollow. Not a pale warm colour - pale warm is still a
+         position on the scale, and this has no position on the scale. */
+      fillColor: measured ? ramp[heatBucketOf(Number(row.mentions) || 0, cuts)] : 'transparent',
+      fillOpacity: measured ? 0.75 : 0,
+      color: isSynth ? heatCss('--st-warn') : (measured ? ramp[HEAT_STEPS - 1] : muted),
+      weight: isSynth ? 2.5 : 1.2,
+      dashArray: isSynth ? '4 3' : null,
+      opacity: measured ? 0.9 : 0.55,
+    });
+
+    /* Chosen by LEVEL, not by which field happens to be populated. A
+       municipality row carries both `municipality` and `province`, so a
+       `row.province ?? row.municipality` fallback labelled every
+       municipality dot with its province - every dot in the Free State read
+       "Free State". */
+    const label = HEAT.level === 'province' ? row.province
+      : HEAT.level === 'municipality' ? row.municipality
+      : `Ward ${row.ward_id}`;
+    const n = Number(row.mentions) || 0;
+    marker.bindTooltip(
+      `<b>${esc(label)}</b><br>`
+      + (measured
+          ? `${fmt(n)} mention${n === 1 ? '' : 's'}`
+            + (isSynth ? ' <i>(synthetic)</i>' : '')
+          : '<i>no signal collected</i>'),
+      { direction: 'top' });
+
+    marker.on('click', () => heatSelect(row));
+    marker.addTo(HEAT.layer);
+  }
+
+  heatBanner(synthetic, unmeasured);
+  heatLegend(cuts, ramp);
+}
+
+/* The banner exists because this screen is going to be shown to people who
+   did not build it. */
+function heatBanner(synthetic, unmeasured) {
+  const el = $('heat-synth');
+  if (!el) return;
+  /* Both forms written out. Appending "s" produced "6 municipalitys" on
+     screen, which is the sort of thing nobody notices until it is on a
+     projector in front of the people being asked to trust the numbers. */
+  const PLACE = {
+    province: ['province', 'provinces'],
+    municipality: ['municipality', 'municipalities'],
+    ward: ['ward', 'wards'],
+  }[HEAT.level] ?? ['place', 'places'];
+  const plural = (n) => `${fmt(n)} ${n === 1 ? PLACE[0] : PLACE[1]}`;
+  const parts = [];
+  if (synthetic) {
+    parts.push(`${plural(synthetic, place)} shown here carr${synthetic === 1 ? 'ies' : 'y'} `
+      + 'development data rather than collected signal. '
+      + 'Ringed in orange — those numbers are invented.');
+  }
+  if (unmeasured) {
+    parts.push(`${plural(unmeasured, place)} ${unmeasured === 1 ? 'is' : 'are'} hollow `
+      + 'because nothing has been collected there — an absence of data, '
+      + 'not an absence of complaints.');
+  }
+  el.innerHTML = parts.join(' ');
+  el.hidden = parts.length === 0;
+}
+
+function heatLegend(cuts, ramp) {
+  const el = $('heat-legend');
+  if (!el) return;
+  const swatches = ramp.map((c, i) => {
+    const lo = i === 0 ? 0 : Math.round(cuts[i - 1] ?? 0) + 1;
+    return `<span class="hl-step"><i style="background:${c}"></i>${fmt(lo)}+</span>`;
+  }).join('');
+  el.innerHTML =
+    `<span class="hl-title">mentions</span>${swatches}`
+    + '<span class="hl-step hl-none"><i></i>no signal</span>'
+    + '<span class="hl-step hl-synth"><i></i>synthetic</span>';
+}
+
+function heatCrumbs() {
+  const el = $('heat-crumbs');
+  if (!el) return;
+  const bits = [`<button class="crumb" data-to="province">South Africa</button>`];
+  if (HEAT.province) {
+    bits.push(`<button class="crumb" data-to="municipality">${esc(HEAT.province)}</button>`);
+  }
+  if (HEAT.municipality) {
+    bits.push(`<button class="crumb" data-to="ward">${esc(HEAT.municipalityName ?? HEAT.municipality)}</button>`);
+  }
+  el.innerHTML = bits.join('<span class="crumb-sep">›</span>');
+}
+
+/* Clicking a dot drills in; at ward level it opens the detail panel rather
+   than drilling further, because a station has no issue signal of its own
+   and inventing one per station is exactly what this screen refuses to do. */
+async function heatSelect(row) {
+  if (HEAT.level === 'province') {
+    HEAT.province = row.province;
+    return heatLoad('municipality');
+  }
+  if (HEAT.level === 'municipality') {
+    HEAT.municipality = row.demarcation_code;
+    HEAT.municipalityName = row.municipality;
+    return heatLoad('ward');
+  }
+  HEAT.selected = row;
+  await heatDetail(row);
+}
+
+async function heatDetail(row) {
+  const side = $('heat-side');
+  if (!side) return;
+  side.innerHTML = '<p class="muted">Loading…</p>';
+
+  const qs = row.ward_id ? `ward=${encodeURIComponent(row.ward_id)}`
+                         : `municipality=${encodeURIComponent(row.demarcation_code)}`;
+  let d;
+  try { d = await api(`/api/heat/detail?${qs}`); }
+  catch (e) { side.innerHTML = `<p class="muted">Could not load detail: ${esc(String(e.message ?? e))}</p>`; return; }
+
+  const cats = d.data ?? [];
+  const title = row.ward_id ? `Ward ${row.ward_id}` : row.municipality;
+  const max = Math.max(1, ...cats.map((c) => Number(c.mentions) || 0));
+
+  const catRows = cats.length ? cats.map((c) => `
+    <div class="hc-row${c.synthetic ? ' is-synth' : ''}">
+      <span class="hc-name">${esc(c.category)}${c.synthetic ? ' <i class="hc-tag">synthetic</i>' : ''}</span>
+      <span class="hc-bar"><i style="width:${Math.round((Number(c.mentions) / max) * 100)}%"></i></span>
+      <span class="hc-n">${fmt(c.mentions)}</span>
+    </div>`).join('')
+    : '<p class="muted">No signal collected here. That is not the same as no complaints.</p>';
+
+  const stations = (d.stations ?? []);
+  const stationRows = stations.length ? `
+    <h4>Voting stations <span class="muted">(${fmt(stations.length)})</span></h4>
+    <div class="hs-list">${stations.map((st) => `
+      <div class="hs-row">
+        <span class="hs-name">${esc(st.name ?? st.station_id)}</span>
+        <span class="hs-sub">${esc(st.suburb ?? '')}</span>
+        <span class="hs-n">${fmt(st.registered_voters)}</span>
+      </div>`).join('')}</div>` : '';
+
+  side.innerHTML = `
+    <h3>${esc(title)}</h3>
+    <p class="muted">${esc(row.municipality ?? row.province ?? '')}</p>
+    ${catRows}
+    ${stationRows}`;
+}
+
+async function heatLoad(level) {
+  HEAT.level = level;
+  if (level === 'province') { HEAT.province = null; HEAT.municipality = null; }
+  if (level === 'municipality') { HEAT.municipality = null; }
+
+  const params = new URLSearchParams({ level });
+  if (level === 'municipality' && HEAT.province) params.set('province', HEAT.province);
+  if (level === 'ward' && HEAT.municipality) params.set('municipality', HEAT.municipality);
+
+  const res = await api(`/api/heat?${params}`);
+  HEAT.rows = res.data ?? [];
+  HEAT.selected = null;
+  $('heat-side').innerHTML =
+    '<p class="muted">Click a dot for the category breakdown.</p>';
+
+  heatCrumbs();
+  heatDraw();
+  heatFit();
+
+  const note = $('heat-note');
+  if (note) {
+    note.textContent = HEAT.rows.length
+      ? `${fmt(HEAT.rows.length)} ${level === 'province' ? 'provinces' : level === 'municipality' ? 'municipalities' : 'wards'} shown`
+        + (res.as_of ? ` · as of ${new Date(res.as_of).toLocaleDateString('en-ZA')}` : '')
+      : (res.note ?? 'Nothing to show at this level.');
+  }
+}
+
+function heatFit() {
+  if (!HEAT.map || !HEAT.L) return;
+  const pts = HEAT.rows.map((r) => (HEAT.level === 'province'
+      ? PROVINCE_CENTRES[r.province]
+      : (r.lat != null && r.lon != null ? [Number(r.lat), Number(r.lon)] : null)))
+    .filter(Boolean);
+  if (!pts.length) return;
+  if (pts.length === 1) { HEAT.map.setView(pts[0], 11); return; }
+  HEAT.map.fitBounds(HEAT.L.latLngBounds(pts).pad(0.15));
+}
+
+async function loadHeat() {
+  return whileLoading('view-heat', async () => {
+    await heatEnsureMap();
+    // A Leaflet map built in a hidden pane measures itself at zero.
+    HEAT.map?.invalidateSize();
+    if (!HEAT.rows.length) await heatLoad('province');
+    else { heatDraw(); heatFit(); }
+  });
+}
+
+document.addEventListener('click', (e) => {
+  const crumb = e.target.closest?.('.crumb');
+  if (!crumb) return;
+  const to = crumb.dataset.to;
+  if (to === 'province') heatLoad('province');
+  if (to === 'municipality' && HEAT.province) heatLoad('municipality');
+  if (to === 'ward' && HEAT.municipality) heatLoad('ward');
 });
 
 /* ----------------------------------------------------------- theme */
@@ -1853,7 +2218,12 @@ $('theme').addEventListener('click', () => {
   // Charts read their colours from tokens at draw time, so anything already
   // on screen has to be redrawn rather than recoloured.
   if (!$('view-sentiment').hidden) loadSentiment();
-  if (!$('view-viewshed').hidden) viewshedModule?.show();
+  /* The heat map reads its ramp from CSS tokens at draw time, so a theme
+     change has to redraw it rather than recolour it. This line used to
+     reference the removed viewshed pane - `$('view-viewshed')` returns null
+     and `.hidden` on null throws, which would have taken out the theme
+     toggle the first time anyone pressed it with the new screen shipped. */
+  if (!$('view-heat').hidden) heatDraw();
 });
 
 matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {

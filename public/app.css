@@ -2355,3 +2355,73 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
 body:has(.ticker:not([hidden])) .rail {
   padding-bottom: calc(12px + var(--ticker-h));
 }
+
+/* ------------------------------------------------------ issue heat */
+
+.heat-wrap { display: grid; grid-template-columns: 1fr 320px;
+             gap: var(--s-sect); align-items: start; }
+@media (max-width: 1000px) { .heat-wrap { grid-template-columns: 1fr; } }
+
+.heat-map { height: 62vh; min-height: 420px; border: 1px solid var(--rule);
+            border-radius: 6px; background: var(--surface); }
+
+.heat-side { border: 1px solid var(--rule); border-radius: 6px;
+             background: var(--surface); padding: var(--s-sect);
+             max-height: 62vh; overflow-y: auto; }
+.heat-side h3 { margin: 0 0 var(--s-hair); }
+.heat-side h4 { margin: var(--s-sect) 0 var(--s-hair); font-size: var(--step-0); }
+
+/* The synthetic banner. Deliberately loud: this screen turns numbers into
+   colour, and the person reading it may not know which numbers are real. */
+.heat-synth { border-left: 3px solid var(--st-warn); background: var(--surface-2);
+              padding: var(--s-sect); margin: 0 0 var(--s-sect);
+              color: var(--ink-2); font-size: var(--step-0); }
+
+.heat-crumbs { display: flex; align-items: center; gap: var(--s-hair);
+               margin-bottom: var(--s-sect); flex-wrap: wrap; }
+.crumb { background: none; border: 0; color: var(--ours); cursor: pointer;
+         font: inherit; padding: 2px 4px; border-radius: 3px; }
+.crumb:hover { background: var(--surface-2); }
+.crumb:last-child { color: var(--ink); cursor: default; }
+.crumb-sep { color: var(--ink-3); }
+
+.heat-legend { display: flex; align-items: center; gap: var(--s-sect);
+               flex-wrap: wrap; margin-top: var(--s-sect);
+               font-size: var(--step--1); color: var(--ink-2); }
+.hl-title { color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+.hl-step { display: inline-flex; align-items: center; gap: 6px; }
+.hl-step i { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+.hl-none i  { background: transparent; border: 1.5px solid var(--ink-3); }
+.hl-synth i { background: transparent; border: 2px dashed var(--st-warn); }
+
+/* Category breakdown */
+.hc-row { display: grid; grid-template-columns: 1fr 90px 48px;
+          align-items: center; gap: var(--s-hair); padding: 3px 0; }
+.hc-name { font-size: var(--step-0); }
+.hc-tag { color: var(--st-warn); font-style: normal; font-size: var(--step--1); }
+.hc-bar { background: var(--surface-2); height: 7px; border-radius: 4px; overflow: hidden; }
+.hc-bar i { display: block; height: 100%; background: var(--seq-6, #e6b800); }
+.hc-row.is-synth .hc-bar i { background: repeating-linear-gradient(
+    45deg, var(--st-warn) 0 3px, transparent 3px 6px); }
+.hc-n { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+/* Station list under a ward */
+.hs-list { display: flex; flex-direction: column; gap: 2px; }
+.hs-row { display: grid; grid-template-columns: 1fr 70px;
+          gap: var(--s-hair); padding: 4px 0; border-top: 1px solid var(--rule-hair); }
+.hs-name { font-size: var(--step-0); }
+.hs-sub { grid-column: 1; color: var(--ink-3); font-size: var(--step--1); }
+.hs-n { grid-row: 1; grid-column: 2; text-align: right;
+        font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+/* The basemap ships light. Inside a dark dashboard that is a white rectangle
+   with a chart on it, which reads as a different application. Inverted and
+   de-saturated rather than swapped for a dark tile provider: the attribution
+   and the geometry stay exactly as served, only the rendering changes.
+   Scoped to this map so the readiness map is untouched. */
+:root:not([data-theme="light"]) .heat-map .leaflet-tile {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.6);
+}
+/* The markers must not be inverted with the tiles. */
+:root:not([data-theme="light"]) .heat-map .leaflet-overlay-pane,
+:root:not([data-theme="light"]) .heat-map .leaflet-marker-pane { filter: none; }

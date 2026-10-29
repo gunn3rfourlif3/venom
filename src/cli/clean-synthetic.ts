@@ -48,6 +48,17 @@ const STEPS: Array<{ label: string; sql: string }> = [
         WHERE w.source = 'SYNTHETIC' AND w.delimitation IS NULL)` },
   { label: 'stations',       sql: byWard('station') },
   { label: 'issue signals',  sql: byWard('issue_signal') },
+  /* SYNTHETIC SIGNAL ON REAL WARDS. The step above removes signal belonging
+     to fabricated wards. Demo signal written by `seed:demo-signal` attaches
+     to REAL wards, so it is invisible to that predicate and would survive a
+     clean - which would make the seeder's promise that it is removable in
+     one command a false one. The predicate here is the mark the seeder
+     writes and nothing else writes: source = 'SYNTHETIC' on issue_signal.
+     That also catches the 1,920 ward-level rows that were already in the
+     database under the same mark, which are demo data by the same
+     definition and should go at the same time. */
+  { label: 'demo signal on real wards', sql:
+    `DELETE FROM issue_signal WHERE source = 'SYNTHETIC'` },
   { label: 'ward issues',    sql: byWard('ward_issue') },
   { label: 'deployments',    sql: byWard('deployment') },
   { label: 'call log',       sql: byWard('call_log') },
@@ -78,8 +89,40 @@ const { rows: targets } = await pool.query<{
     GROUP BY w.municipality
     ORDER BY 2 DESC`);
 
+/* Demo signal is counted separately because it attaches to REAL wards and is
+   therefore invisible to the fabricated-ward query above. Without this, the
+   command exited with "no fabricated wards remain" while tens of thousands of
+   synthetic signal rows sat in the database - and `seed:demo-signal` promises
+   in its own output that this command removes them. A cleanup command that
+   reports success without doing the thing is worse than one that refuses. */
+const { rows: [signal] } = await pool.query<{ rows: number; wards: number }>(
+  `SELECT count(*)::int AS rows, count(DISTINCT ward_id)::int AS wards
+     FROM issue_signal WHERE source = 'SYNTHETIC'`);
+const demoRows = signal?.rows ?? 0;
+
+if (targets.length === 0 && demoRows === 0) {
+  console.log('Nothing to clean: no fabricated wards and no synthetic signal.');
+  await pool.end();
+  process.exit(0);
+}
+
+if (demoRows > 0) {
+  console.log(`synthetic issue signal: ${demoRows.toLocaleString('en-ZA')} rows `
+    + `across ${(signal?.wards ?? 0).toLocaleString('en-ZA')} real wards`);
+}
+
+/* The fabricated-ward half of this command has its own safety gate below,
+   which refuses to run before the real register has loaded. That gate must
+   not block the signal half: removing demo signal is safe on any database,
+   and is the common case now that the fabricated wards are long gone. */
 if (targets.length === 0) {
-  console.log('Nothing to clean: no fabricated wards remain.');
+  if (!process.argv.includes('--commit')) {
+    console.log('\nDRY RUN - nothing written. Re-run with --commit.');
+  } else {
+    const res = await pool.query(
+      `DELETE FROM issue_signal WHERE source = 'SYNTHETIC'`);
+    console.log(`\nremoved ${(res.rowCount ?? 0).toLocaleString('en-ZA')} synthetic signal rows`);
+  }
   await pool.end();
   process.exit(0);
 }
