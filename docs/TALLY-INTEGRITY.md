@@ -123,19 +123,52 @@ message.
 
 ## Election-night procedure
 
+**Seal hourly. Send an anchor three times: 20:00, 23:00, and at
+declaration.**
+
+That works because each digest contains the previous one, so the 23:00
+anchor retroactively freezes every hourly seal since 20:00. Three messages
+cover a night of eleven seals. Sealing is cheap and reveals nothing — the
+digest is opaque until revealed — so the only real cost is sending the
+anchor, and that is what the cadence economises on.
+
+Sealing hourly regardless of whether you intend to announce anything is the
+part that carries the credibility. It means you cannot have chosen which
+cuts got recorded, and a gap in an hourly chain is conspicuous.
+
 Run from the repo root on the server.
 
-**Every time you take a cut of the count** (suggested: hourly from 20:00, and
-immediately before any public statement):
+**Every hour, from 20:00:**
 
 ```
 npm run tally:commit -- --scope NATIONAL --note "21:00 cut"
-npm run tally:export                      # prints the line to publish
 ```
 
-Send that line out. **The seal is not finished until you have.**
+It will say `Sealed only — no need to send anything` and tell you how many
+seals are riding on the next anchor. Nothing else to do.
 
-Per province or council:
+**At 20:00, 23:00, and declaration — add `--anchor-now`:**
+
+```
+npm run tally:commit -- --scope NATIONAL --note "23:00 cut" --anchor-now
+npm run tally:export -- --mark-sent "observers' WhatsApp group"
+```
+
+`--anchor-now` only changes what is printed; every seal is identical in the
+chain and any of them can be anchored later. The second command prints the
+line and records that you sent it.
+
+**Send the line.** The seal is not finished until you have. To someone with
+no stake in the answer: an agent from another party, an observer, a
+journalist, a timestamped group message. They do not need to understand any
+of this — they need to keep the message.
+
+`--mark-sent` writes a note of where it went. **That note is a pointer, not
+proof.** It exists because at 02:00 nobody remembers which of eleven lines
+was the one that went out, and without that you cannot run the check at all.
+Anyone who could rebuild the chain could also rewrite the note to match.
+
+Per province or council, same pattern:
 
 ```
 npm run tally:commit -- --scope PROVINCE --key "Gauteng"
@@ -146,11 +179,18 @@ npm run tally:commit -- --scope MUNICIPALITY --key NW372
 
 ```
 npm run tally:verify
-npm run tally:verify -- --anchor <a digest you published earlier>
 ```
 
-The second form is the real check. The first only asks the chain about
-itself.
+With no anchor this only asks the chain about itself, and says so. It then
+names the link recorded as sent and where, so you know which message to go
+and find. Open that message, copy the digest **out of the message**, and:
+
+```
+npm run tally:verify -- --anchor <the digest in that message>
+```
+
+Copying it from the screen defeats the point — a rebuilt chain would hand
+you its own digest to check itself against.
 
 **After the result is final:**
 
@@ -163,7 +203,16 @@ A reveal is permanent. There is no un-reveal: one that could be withdrawn
 would let you open a favourable snapshot, see how it landed, and close it
 again.
 
----
+### If you miss an hour
+
+Nothing breaks. The chain has no notion of a schedule — a gap is just a gap,
+and the links either side still join up. Seal when you next can.
+
+### If you forget to anchor at 23:00
+
+Also nothing breaks, but everything since 20:00 is resting on this database
+alone until you do. `tally:verify` says exactly how many seals are in that
+state, and the screen shows each one as *not yet covered by an anchor*.
 
 ## In the app
 
@@ -205,6 +254,7 @@ between. It does not mean nobody can see it.
 | Append-only table, triggers, public view | `db/migrations/053`, `055` |
 | Deduplicated vote source | `db/migrations/054_tally_source.sql` |
 | Seal / open / check / publish | `src/cli/tally-{commit,reveal,verify,export}.ts` |
+| Anchor record (a pointer, not proof) | `db/migrations/056_anchor_record.sql` |
 | API | `src/api/commitment.ts` |
 | Screen | `#view-commitments` in `public/index.html`, `loadCommitments()` in `public/app.js` |
 

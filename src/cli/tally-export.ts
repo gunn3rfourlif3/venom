@@ -32,12 +32,18 @@ function arg(name: string): string | undefined {
 }
 
 const format = (arg('format') ?? 'line').toLowerCase();
+/* Records that the newest digest was sent, and where. A POINTER, not proof:
+   see migration 056. It exists because at 02:00 nobody remembers which of
+   eleven lines went to the observers' group, and without that
+   `tally:verify --anchor` cannot be run at all. */
+const markSent = arg('mark-sent');
 
 interface Row {
   seq: number; scope: string; scope_key: string; taken_at: Date;
   slips_captured: number; slips_expected: number;
   digest: string; prev_digest: string;
   revealed_at: Date | null; parties: number; note: string | null;
+  anchored_at: Date | null; anchored_to: string | null;
 }
 
 const label = (r: Row) => `${r.scope}${r.scope_key ? `/${r.scope_key}` : ''}`;
@@ -48,7 +54,8 @@ const main = async () => {
      is to read from something that does not have the counts to leak. */
   const { rows } = await pool.query<Row>(
     `SELECT seq, scope, scope_key, taken_at, slips_captured, slips_expected,
-            digest, prev_digest, revealed_at, parties, note
+            digest, prev_digest, revealed_at, parties, note,
+            anchored_at, anchored_to
        FROM v_commitment_chain ORDER BY seq`);
 
   if (rows.length === 0) {
@@ -58,22 +65,54 @@ const main = async () => {
 
   if (format === 'line') {
     const r = rows[rows.length - 1]!;
+    /* The line itself goes to stdout and everything else to stderr, so
+       `npm run tally:export > anchor.txt` or a pipe into a message gets the
+       line alone. On the night someone will do exactly that. */
     console.log(`Xnith tally commitment ${r.seq} ${label(r)} `
       + `${canonicalTime(r.taken_at)} sha256:${r.digest}`);
+
+    if (markSent) {
+      const res = await pool.query(
+        `UPDATE tally_commitment
+            SET anchored_at = now(), anchored_to = $2
+          WHERE seq = $1 AND anchored_at IS NULL`, [r.seq, markSent]);
+      console.error('');
+      if (res.rowCount === 1) {
+        console.error(`  Recorded: link ${r.seq} sent to "${markSent}".`);
+        console.error(`  That freezes links 1–${r.seq}, because each digest`);
+        console.error('  contains the one before it.');
+      } else {
+        /* Already recorded. Not an error - someone re-running the command is
+           far more likely than a problem - but it must not look like a fresh
+           send, or a line nobody actually sent gets treated as anchored. */
+        console.error(`  Link ${r.seq} was already recorded as sent. Nothing`);
+        console.error('  changed; an anchor record is written once.');
+      }
+      console.error('');
+      console.error('  THE RECORD IS A POINTER, NOT PROOF. The anchor is the');
+      console.error('  copy in the recipient\'s hands. Anyone who could rebuild');
+      console.error('  the chain could also rewrite this note to match it.');
+    } else {
+      console.error('');
+      console.error('  Send that line to someone outside your campaign.');
+      console.error(`  It freezes links 1–${r.seq}. Then record it:`);
+      console.error(`    npm run tally:export -- --mark-sent "observers' group"`);
+    }
     console.error('');
-    console.error('  Send that line to someone outside your campaign now.');
-    console.error(`  It freezes links 1–${r.seq}. Verify later with:`);
+    console.error('  Verify against it later with:');
     console.error(`    npm run tally:verify -- --anchor ${r.digest}`);
     console.error('');
     return;
   }
 
   if (format === 'csv') {
-    console.log('seq,scope,taken_at,slips_counted,slips_expected,parties,revealed,digest');
+    console.log('seq,scope,taken_at,slips_counted,slips_expected,parties,'
+      + 'revealed,anchor_sent,digest');
     for (const r of rows) {
       console.log([r.seq, label(r), canonicalTime(r.taken_at),
         r.slips_captured, r.slips_expected, r.parties,
-        r.revealed_at ? 'yes' : 'sealed', r.digest].join(','));
+        r.revealed_at ? 'yes' : 'sealed',
+        r.anchored_at ? canonicalTime(r.anchored_at) : '', r.digest].join(','));
     }
     return;
   }

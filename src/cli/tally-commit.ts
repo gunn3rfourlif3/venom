@@ -37,6 +37,10 @@ const scope = (arg('scope') ?? 'NATIONAL').toUpperCase();
 const key = arg('key') ?? '';
 const note = arg('note') ?? null;
 const showForm = process.argv.includes('--show-form');
+/* Marks this as one of the two or three cuts a night whose digest actually
+   goes out. It changes only what is printed - every seal is identical in the
+   chain, and any of them can be anchored later. */
+const anchorNow = process.argv.includes('--anchor-now');
 
 if (!['NATIONAL', 'PROVINCE', 'MUNICIPALITY'].includes(scope)) {
   console.error(`unknown scope ${scope} — use NATIONAL, PROVINCE or MUNICIPALITY`);
@@ -138,14 +142,49 @@ const main = async () => {
     console.log(`  disputed   ${Number(coverage.disputed).toLocaleString('en-ZA')}`
       + ' slips excluded — this tally is incomplete, not merely early');
   }
-  console.log(`\n  PUBLISH THIS LINE:\n`);
-  console.log(`  Xnith tally commitment ${result.seq} `
+  /* The anchor prompt is CONDITIONAL, and that is a deliberate correctness
+     point rather than a nicety.
+
+     The procedure is to seal hourly and send an anchor two or three times a
+     night - at 20:00, 23:00 and declaration - which works because each digest
+     contains the previous one, so one anchor freezes every seal before it.
+     Printing "PUBLISH THIS LINE NOW" after all eleven seals would be wrong
+     eight times, and an instruction that is usually wrong is an instruction
+     people learn to scroll past. The one time it matters it would be
+     invisible.
+
+     So an ordinary seal says what it is, and names how many seals are riding
+     on the next anchor. */
+  const unanchored = await pool.query<{ n: number; oldest: number }>(
+    `SELECT count(*)::int AS n, COALESCE(min(seq), 0)::int AS oldest
+       FROM tally_commitment
+      WHERE seq > COALESCE((SELECT max(seq) FROM tally_commitment
+                             WHERE anchored_at IS NOT NULL), 0)`);
+  const waiting = unanchored.rows[0]?.n ?? 0;
+  const oldest = unanchored.rows[0]?.oldest ?? result.seq;
+
+  const line = `Xnith tally commitment ${result.seq} `
     + `${scope}${key ? `/${key}` : ''} ${result.snap.takenAt} `
-    + `sha256:${result.digest}`);
-  console.log(`\n  Until that digest exists somewhere you do not control, the`);
-  console.log(`  chain proves only that nobody else edited it. Send it to an`);
-  console.log(`  observer, a journalist, or a party agent now — see`);
-  console.log(`  \`npm run tally:export\`.\n`);
+    + `sha256:${result.digest}`;
+
+  if (anchorNow) {
+    console.log(`\n  SEND THIS LINE OUTSIDE THE CAMPAIGN NOW:\n`);
+    console.log(`  ${line}`);
+    console.log(`\n  It freezes ${waiting === 1 ? 'this seal' : `seals ${oldest}–${result.seq}`}`
+      + ' for everyone, including us. Until it is in');
+    console.log('  someone else\'s hands the chain proves only that nobody else');
+    console.log('  edited it. Record that you sent it:');
+    console.log(`    npm run tally:export -- --mark-sent "where you sent it"\n`);
+  } else {
+    console.log(`\n  Sealed only — no need to send anything.`);
+    console.log(`  ${waiting} seal${waiting === 1 ? '' : 's'} `
+      + `(${waiting === 1 ? `#${result.seq}` : `#${oldest}–#${result.seq}`}) `
+      + 'now ride on the next anchor;');
+    console.log('  sending one line then freezes all of them at once.');
+    console.log(`  Next anchor due at 23:00 and at declaration. To send now:`);
+    console.log('    npm run tally:export\n');
+    console.log(`  digest  sha256:${result.digest}\n`);
+  }
 
   if (showForm) {
     console.log('--- exact bytes hashed ---');

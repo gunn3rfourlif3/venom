@@ -4325,6 +4325,11 @@ function cmRow(l) {
     <div class="cm-meta">
       <span>${esc(cov)}</span>
       ${l.note ? `<span class="cm-tag">${esc(l.note)}</span>` : ''}
+      ${l.anchor_recorded
+        ? `<span class="cm-sent">sent to ${esc(l.anchored_to ?? '')}</span>`
+        : l.covered_by_anchor
+          ? '<span class="cm-covered">covered by a later anchor</span>'
+          : '<span class="cm-uncovered">not yet covered by an anchor</span>'}
     </div>
     <div class="cm-digest">
       <code title="${esc(l.digest)}">${esc(cmShort(l.digest))}</code>
@@ -4359,6 +4364,26 @@ async function loadCommitments() {
       + `sha256:${newest.digest}`;
     anchorBox.hidden = false;
     $('cm-anchor-line').textContent = line;
+
+    /* The heading reflects whether anything is actually outstanding. The
+       procedure is hourly seals with an anchor two or three times a night,
+       so "send this now" is wrong most of the time - and a prompt that is
+       usually wrong is one people stop reading, which costs exactly the
+       moment it was there for. */
+    const sent = links.find((l) => l.anchor_recorded);
+    const waiting = sent ? links.filter((l) => l.seq > sent.seq).length : links.length;
+    const label = $('cm-anchor-label');
+    anchorBox.classList.toggle('is-covered', waiting === 0);
+    if (waiting === 0 && sent) {
+      label.textContent = `Everything up to #${sent.seq} is covered — `
+        + `sent to ${sent.anchored_to}`;
+    } else if (sent) {
+      label.textContent = `${waiting} seal${waiting === 1 ? '' : 's'} `
+        + 'since the last anchor — this line covers all of them';
+    } else {
+      label.textContent = 'Nothing sent outside the campaign yet — '
+        + `all ${links.length} seal${links.length === 1 ? '' : 's'} rest on this system alone`;
+    }
 
     /* Described rather than scored. "4 of 6 verified" invites a reader to
        treat the number as the finding; the finding is whether anything was

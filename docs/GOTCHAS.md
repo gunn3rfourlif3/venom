@@ -686,3 +686,21 @@ and 037 down together.
 **Do:** `CREATE OR REPLACE VIEW` may only **append** columns. Anything else is
 `DROP VIEW` then `CREATE VIEW` — and if the view has dependents, the
 capture-with-`pg_get_viewdef`-and-replay pattern from migration 052.
+
+### G49 · An instruction that is usually wrong is one people stop reading
+`tally:commit` printed **PUBLISH THIS LINE NOW** after every seal. Under the
+chosen procedure — seal hourly, anchor at 20:00, 23:00 and declaration — that
+instruction is wrong eight times out of eleven, because one anchor freezes
+every seal before it and the intermediate seals need nothing sent.
+
+An operator who is told to act and correctly ignores it eight times will
+ignore it the ninth. The one moment the prompt exists for is the moment it
+becomes invisible. This is a correctness problem in the interface, not a
+wording preference: the whole scheme rests on a line actually leaving the
+building, and nothing else in the system can make that happen.
+**Do:** `--anchor-now` marks the two or three cuts whose digest goes out; it
+changes only what is printed, and every seal stays identical in the chain. An
+ordinary seal says `Sealed only — no need to send anything` and names how many
+seals are riding on the next anchor. The screen does the same: the prompt
+loses its highlight once nothing is outstanding. When adding any
+act-on-this-now message, check how often it will be right.

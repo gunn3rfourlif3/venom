@@ -2861,3 +2861,22 @@ body:has(.ticker:not([hidden])) .rail {
    the other panes' subtitles are short enough that a cap would only add a
    ragged right edge. */
 #view-commitments .viz-sub { max-width: 78ch; }
+
+/* Anchor coverage, per seal. Three states and each carries its word: sent,
+   covered by a later anchor, not covered. The middle one exists because the
+   chain is why three messages cover a night of hourly seals - without it a
+   reader would think eight unsent seals meant eight gaps. */
+.cm-sent, .cm-covered, .cm-uncovered { font-size: var(--step--1); }
+.cm-sent      { color: var(--st-good); }
+.cm-covered   { color: var(--ink-3); }
+.cm-uncovered { color: var(--st-warn); }
+
+/* Once everything is covered the prompt stops shouting. It stays on screen -
+   the line is still what anyone would copy - but a yellow border on a box
+   with nothing outstanding is a false alarm, and false alarms are how a real
+   one gets ignored. */
+.cm-anchor.is-covered {
+  border-color: var(--rule);
+  background: var(--surface-2);
+}
+.cm-anchor.is-covered .cm-anchor-label { color: var(--ink-3); }

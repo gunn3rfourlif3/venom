@@ -32,13 +32,18 @@ interface Row {
   note: string | null;
   revealed: boolean;
   links_to_previous: boolean;
+  anchored_at: Date | null;
+  anchored_to: string | null;
+  anchor_recorded: boolean;
+  covered_by_anchor: boolean;
 }
 
 export async function getCommitments(ctx: Ctx): Promise<void> {
   const { rows } = await pool.query<Row>(
     `SELECT seq, scope, scope_key, taken_at, slips_captured, slips_expected,
             coverage_pct, prev_digest, digest, counts, nonce, parties,
-            committed_at, revealed_at, note, revealed, links_to_previous
+            committed_at, revealed_at, note, revealed, links_to_previous,
+            anchored_at, anchored_to, anchor_recorded, covered_by_anchor
        FROM v_commitment_chain
       ORDER BY seq DESC
       LIMIT 200`);
@@ -76,6 +81,13 @@ export async function getCommitments(ctx: Ctx): Promise<void> {
         counts: r.counts,
         nonce: r.nonce,
         note: r.note,
+        /* The operator's own note that this digest was sent. A POINTER, not
+           proof - see migration 056. The UI must never render it as a
+           verification, only as "go and find this message". */
+        anchor_recorded: r.anchor_recorded,
+        anchored_to: r.anchored_to,
+        anchored_at: r.anchored_at,
+        covered_by_anchor: r.covered_by_anchor,
         ok: !broken.has(r.seq),
         problems: problems.filter((p) => p.seq === r.seq).map((p) => p.detail),
       })),

@@ -27,6 +27,9 @@ projection on the night.
        Fails if the naive join stops doubling a known fixture
 - 055  corrects 053: sealed means unpublished, not unstored. Counts are
        written at seal time and masked by the public view until revealed
+- 056  records which digest was sent outside the campaign and where. A
+       POINTER so the right message can be found again at 02:00 - never
+       proof, since anyone who could rebuild the chain could rewrite it
 - src/tally/commit.ts  canonical plain-text form and digest, pure and
        checkable by hand with sha256sum (pgcrypto is not installed)
 - tally:commit / tally:reveal / tally:verify / tally:export
@@ -34,11 +37,19 @@ projection on the night.
 - seats.ts now reads v_tally_vote; verify-data gains an UNTESTED outcome so
   checks with no subject stop counting themselves as passes
 
+Procedure is hourly seals with an anchor at 20:00, 23:00 and declaration -
+each digest contains the previous one, so three messages cover eleven
+seals. --anchor-now marks those cuts; it changes only what is printed, and
+an ordinary seal says plainly that nothing needs sending. The old
+unconditional "PUBLISH THIS LINE NOW" would have been wrong eight times
+out of eleven, and an instruction that is usually wrong is one people learn
+to scroll past at exactly the moment it matters.
+
 A chain held only by us proves nothing against us - a rebuilt chain
-verifies perfectly, and that is tested. tally:export prints one line to
-publish outside the campaign; tally:verify --anchor checks against it.
-That is where the actual security is. docs/TALLY-INTEGRITY.md says so
-plainly rather than overselling the digest.
+verifies perfectly, and that is tested, including with the anchor record
+doctored to match. The real check is tally:verify --anchor against the copy
+in the recipient's hands. docs/TALLY-INTEGRITY.md says so plainly rather
+than overselling the digest.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01BDAH2UQX8dEjrQGB7CcQZb

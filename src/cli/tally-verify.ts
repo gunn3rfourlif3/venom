@@ -37,9 +37,12 @@ function arg(name: string): string | undefined {
 const anchor = arg('anchor')?.replace(/^sha256:/, '').trim().toLowerCase();
 
 const main = async () => {
-  const { rows } = await pool.query<ChainLink & { revealed_at: Date | null }>(
+  const { rows } = await pool.query<ChainLink & {
+    revealed_at: Date | null; anchored_at: Date | null; anchored_to: string | null;
+  }>(
     `SELECT seq, scope, scope_key, taken_at, slips_captured, slips_expected,
-            prev_digest, digest, counts, nonce, revealed_at
+            prev_digest, digest, counts, nonce, revealed_at,
+            anchored_at, anchored_to
        FROM tally_commitment ORDER BY seq`);
 
   if (rows.length === 0) {
@@ -108,8 +111,36 @@ const main = async () => {
   } else {
     console.log('\n  No --anchor given, so this run checked the chain against itself.');
     console.log('  That catches accidents and outside tampering. It cannot catch a');
-    console.log('  chain rebuilt by whoever owns this database — for that, pass a');
-    console.log('  digest you published elsewhere: --anchor sha256:…');
+    console.log('  chain rebuilt by whoever owns this database.');
+
+    /* Name the line to go and find. The stored record is a pointer, never a
+       substitute: running the check means opening the sent message and
+       pasting the digest from THERE. If this printed the stored digest as
+       something to trust, it would quietly undo the entire scheme - the
+       rebuilt chain would hand you its own digest to check itself against. */
+    const sent = [...rows].reverse().find((r) => r.anchored_at);
+    if (sent) {
+      console.log('');
+      console.log(`  Link ${sent.seq} is recorded as sent to "${sent.anchored_to}"`);
+      console.log(`  on ${canonicalTime(sent.anchored_at!)}. Open that message, copy the`);
+      console.log('  digest out of it, and run:');
+      console.log('    npm run tally:verify -- --anchor <the digest in that message>');
+      console.log('');
+      console.log('  Copy it from the message, NOT from this screen. The point is to');
+      console.log('  compare the chain against something the chain cannot reach.');
+      const after = rows.filter((r) => r.seq > sent.seq).length;
+      if (after > 0) {
+        console.log(`\n  ${after} seal(s) since then are not covered by any sent`);
+        console.log('  anchor. `npm run tally:export` sends one line that covers all');
+        console.log('  of them.');
+      }
+    } else {
+      console.log('');
+      console.log('  NOTHING HAS BEEN SENT OUTSIDE THE CAMPAIGN YET, so there is no');
+      console.log(`  anchor to check against and all ${rows.length} seal(s) rest on this`);
+      console.log('  database alone. `npm run tally:export` prints the one line that');
+      console.log('  fixes that.');
+    }
   }
 
   if (failed) {
