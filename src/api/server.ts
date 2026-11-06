@@ -18,6 +18,7 @@ import { HttpError, json, type Ctx } from './http.js';
 import { routes } from './routes.js';
 import * as seats from './seats.js';
 import * as pulse from './pulse.js';
+import * as commitment from './commitment.js';
 import { logistics } from './logistics.js';
 import { whatsapp } from './whatsapp.js';
 import { slips } from './slips.js';
@@ -108,6 +109,7 @@ const table: Route[] = [
   { method: 'GET',   pattern: /^\/api\/seats\/readiness$/, handler: seats.getSeatReadiness },
   { method: 'GET',   pattern: /^\/api\/seats\/validation$/, handler: seats.getSeatValidation },
   { method: 'GET',   pattern: /^\/api\/seats$/, handler: seats.getSeatProjection },
+  { method: 'GET',   pattern: /^\/api\/commitments$/, handler: commitment.getCommitments },
   { method: 'GET',   pattern: /^\/api\/register-completeness$/,
     handler: routes.getRegisterCompleteness },
   { method: 'GET',   pattern: /^\/api\/briefing$/, handler: routes.getBriefing },

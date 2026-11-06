@@ -114,23 +114,21 @@ export async function getSeatProjection(ctx: Ctx): Promise<void> {
     return;
   }
 
-  /* Votes per party per ballot, from transcriptions that were accepted.
-     A rejected or superseded slip contributes nothing. `rejected` is text,
-     not boolean - `rejected IS NULL` is the accepted case, and reading it as
-     a boolean would have counted rejected slips as results. */
+  /* Votes per party per ballot, from v_tally_vote (migration 054).
+     THIS MUST NOT GO BACK TO JOINING result_vote DIRECTLY. A slip carries two
+     transcriptions - double entry is the quality mechanism - and each pass
+     writes its own result_vote rows, so summing across transcriptions counted
+     every verified slip twice. It doubled seat projections, and drifted
+     between 1x and 2x as transcription caught up, which looks like results
+     arriving rather than like a bug. v_tally_vote picks one transcription per
+     slip and drops DISPUTED slips entirely. */
   const votes = await pool.query<{
     party: string; ballot: string; votes: string;
   }>(
-    `SELECT rv.party, rs.ballot, SUM(rv.votes)::bigint AS votes
-       FROM result_vote rv
-       JOIN result_transcription rt ON rt.transcription_id = rv.transcription_id
-       JOIN result_slip rs ON rs.slip_id = rt.slip_id
-       JOIN station st ON st.station_id = rs.station_id
-       JOIN ward w ON w.ward_id = st.ward_id
-      WHERE w.demarcation_code = $1
-        AND rs.rejected IS NULL
-        AND rs.superseded IS NOT TRUE
-      GROUP BY rv.party, rs.ballot`, [code]);
+    `SELECT party, ballot, SUM(votes)::bigint AS votes
+       FROM v_tally_vote
+      WHERE demarcation_code = $1
+      GROUP BY party, ballot`, [code]);
 
   if (votes.rows.length === 0) {
     json(ctx.res, 200, {
@@ -149,17 +147,11 @@ export async function getSeatProjection(ctx: Ctx): Promise<void> {
      goes to a recount, not to whichever party sorts first. */
   const wardWins = await pool.query<{ party: string; wards: string }>(
     `WITH per_ward AS (
-       SELECT w.ward_id, rv.party, SUM(rv.votes)::bigint AS votes
-         FROM result_vote rv
-         JOIN result_transcription rt ON rt.transcription_id = rv.transcription_id
-         JOIN result_slip rs ON rs.slip_id = rt.slip_id
-         JOIN station st ON st.station_id = rs.station_id
-         JOIN ward w ON w.ward_id = st.ward_id
-        WHERE w.demarcation_code = $1
-          AND rs.ballot = 'WARD'
-          AND rs.rejected IS NULL
-          AND rs.superseded IS NOT TRUE
-        GROUP BY w.ward_id, rv.party
+       SELECT ward_id, party, SUM(votes)::bigint AS votes
+         FROM v_tally_vote
+        WHERE demarcation_code = $1
+          AND ballot = 'WARD'
+        GROUP BY ward_id, party
      ),
      ranked AS (
        SELECT ward_id, party, votes,

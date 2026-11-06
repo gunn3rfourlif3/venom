@@ -23,8 +23,18 @@
 import { pool } from '../db.js';
 import { allocate } from '../seats/allocate.js';
 import { FIXTURES } from '../seats/fixtures.js';
+import { verifyChain } from '../tally/commit.js';
 
-type Level = 'FAIL' | 'WARN';
+/* UNTESTED is a third outcome, not a shade of WARN.
+ *
+ * A check whose subject does not exist yet has not passed. Counting it as a
+ * pass is how this harness previously reported success for weeks while
+ * querying a table that was not there: the number went up, nothing was
+ * examined. Several checks here cannot run until results are captured on the
+ * night, and they must say so rather than inflate the pass count - the first
+ * thing anyone does with a verification run is read the total.
+ */
+type Level = 'FAIL' | 'WARN' | 'UNTESTED';
 const results: Array<{ level: Level; group: string; name: string; detail: string }> = [];
 let passed = 0;
 
@@ -32,6 +42,11 @@ function check(group: string, name: string, ok: boolean, detail: string,
                level: Level = 'FAIL'): void {
   if (ok) { passed += 1; return; }
   results.push({ level, group, name, detail });
+}
+
+/** The subject of this check does not exist yet, so nothing was verified. */
+function untested(group: string, name: string, detail: string): void {
+  results.push({ level: 'UNTESTED', group, name, detail });
 }
 
 const one = async <T>(sql: string, params: unknown[] = []): Promise<T> =>
@@ -193,12 +208,78 @@ check('PROVENANCE', 'audited finances present for every council',
   + 'not published audited actuals is itself worth knowing - but it must '
   + 'never render as R0.', 'WARN');
 
+/* ---- the tally source double-count regression (054) -------------------
+   Joining result_vote to result_transcription counts every two-pass slip
+   twice, and double entry means every verified slip has two passes. It
+   doubled seat projections while looking like results arriving. The guard is
+   a live comparison rather than a grep, because the fault can come back
+   through any new query, not only through the one that was fixed. */
+const dupeVotes = await one<{ naive: string; dedup: string }>(
+  `SELECT
+     COALESCE((SELECT SUM(rv.votes) FROM result_vote rv
+                 JOIN result_transcription rt USING (transcription_id)
+                 JOIN result_slip rs ON rs.slip_id = rt.slip_id
+                WHERE rs.rejected IS NULL AND rs.superseded IS NOT TRUE
+                  AND rs.status IN ('VERIFIED','TRANSCRIBED')), 0)::text AS naive,
+     COALESCE((SELECT SUM(votes) FROM v_tally_vote), 0)::text            AS dedup`);
+if (Number(dupeVotes.dedup) === 0) {
+  untested('CORRECTNESS', 'vote totals are not double-counted',
+    'No results are captured, so there is nothing to double-count and this '
+    + 'check examined nothing. It becomes live as slips arrive. The '
+    + 'deduplication itself is proved by migration 054, which fails if the '
+    + 'naive join stops doubling a known fixture.');
+} else {
+  check('CORRECTNESS', 'vote totals are not double-counted',
+    Number(dupeVotes.naive) >= Number(dupeVotes.dedup),
+    `v_tally_vote totals ${Number(dupeVotes.dedup).toLocaleString('en-ZA')} but `
+    + `the naive join totals ${Number(dupeVotes.naive).toLocaleString('en-ZA')} - `
+    + 'less than the deduplicated figure, which should be impossible and '
+    + 'means v_tally_vote is counting something twice itself.');
+}
+
+/* ---- the commitment chain (053, 055) ---------------------------------- */
+const chain = await pool.query<{
+  seq: number; scope: string; scope_key: string; taken_at: Date;
+  slips_captured: number; slips_expected: number;
+  prev_digest: string; digest: string; nonce: string;
+  counts: Array<{ party: string; votes: number }>; revealed_at: Date | null;
+}>(`SELECT seq, scope, scope_key, taken_at, slips_captured, slips_expected,
+           prev_digest, digest, nonce, counts, revealed_at
+      FROM tally_commitment ORDER BY seq`);
+
+if (chain.rows.length === 0) {
+  untested('PROVENANCE', 'tally commitment chain verifies',
+    'The chain is empty - nothing has been sealed, so nothing was checked. '
+    + 'Seal a snapshot with `npm run tally:commit -- --scope NATIONAL`.');
+} else {
+  const problems = verifyChain(chain.rows.map((r) => ({
+    ...r,
+    // Sealed links keep their counts in the table; verifyChain recomputes
+    // only what has been revealed, so sealed ones are passed as unrevealed.
+    nonce: r.revealed_at ? r.nonce : null,
+    counts: r.revealed_at ? r.counts : null,
+  })));
+  const revealed = chain.rows.filter((r) => r.revealed_at).length;
+  check('PROVENANCE', 'tally commitment chain verifies',
+    problems.length === 0,
+    `${problems.length} problem(s) in the chain: ${problems[0]?.detail ?? ''} `
+    + '— run `npm run tally:verify` for all of them.');
+  if (problems.length === 0 && revealed === 0) {
+    untested('PROVENANCE', 'commitment digests reproduce from their counts',
+      `${chain.rows.length} link(s) join up, but every one is still sealed so `
+      + 'no digest was recomputed. Linkage is not the same as a digest '
+      + 'matching its own contents.');
+  }
+}
+
 // ------------------------------------------------------------------- report
 
 const fails = results.filter((r) => r.level === 'FAIL');
 const warns = results.filter((r) => r.level === 'WARN');
+const untestedItems = results.filter((r) => r.level === 'UNTESTED');
 
-console.log(`${passed} checks passed, ${fails.length} failed, ${warns.length} warnings\n`);
+console.log(`${passed} checks passed, ${fails.length} failed, `
+  + `${warns.length} warnings, ${untestedItems.length} untested\n`);
 
 for (const group of ['INTEGRITY', 'CORRECTNESS', 'PROVENANCE']) {
   const inGroup = results.filter((r) => r.group === group);
@@ -212,9 +293,20 @@ for (const group of ['INTEGRITY', 'CORRECTNESS', 'PROVENANCE']) {
 }
 
 if (fails.length === 0) {
-  console.log(warns.length === 0
+  /* Deliberately says "everything checked" and names what was not. The
+     distinction is the whole point of the UNTESTED level: a run that reports
+     success while several checks had no subject is how false confidence gets
+     manufactured. */
+  const lines: string[] = [];
+  lines.push(warns.length === 0
     ? 'Everything checked is correct.'
     : 'Nothing is wrong. The warnings above are inputs that have not arrived.');
+  if (untestedItems.length > 0) {
+    lines.push(`${untestedItems.length} check(s) examined nothing, because what `
+      + 'they test does not exist yet. They are not passes:');
+    for (const u of untestedItems) lines.push(`  - ${u.name}`);
+  }
+  console.log(lines.join('\n'));
 }
 
 await pool.end();

@@ -32,7 +32,11 @@
     "import:candidates": "node --env-file=.env dist/cli/import-candidates.js",
     "seats:verify": "node dist/cli/seats-verify.js",
     "seed:demo-signal": "node --env-file=.env dist/cli/seed-demo-signal.js",
-    "verify": "node --env-file=.env dist/cli/verify-data.js"
+    "verify": "node --env-file=.env dist/cli/verify-data.js",
+    "tally:commit": "node --env-file=.env dist/cli/tally-commit.js",
+    "tally:reveal": "node --env-file=.env dist/cli/tally-reveal.js",
+    "tally:verify": "node --env-file=.env dist/cli/tally-verify.js",
+    "tally:export": "node --env-file=.env dist/cli/tally-export.js"
   },
   "dependencies": {
     "pg": "8.13.1"

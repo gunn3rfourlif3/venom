@@ -1,0 +1,12 @@
+---
+description: Token-aware Cursor rule authoring; use when editing .cursor/rules, AGENTS.md, CLAUDE.md, or .cursorrules
+alwaysApply: false
+---
+
+# Rule authoring
+
+Prefer: `description` and/or `globs`; `alwaysApply: false` unless ≤~40 lines and must load every turn. Never put triple-dash fences inside `.mdc` body examples (breaks parsers).
+
+Avoid: fat alwaysApply; 20+ line pasted samples (use `@path`); `.cursorrules`; duplicating into AGENTS+CLAUDE+.mdc; procedures → skills instead.
+
+Shape: under 50 lines; one concern; bullets. Model hints belong in one lean always-on rule, not every file.

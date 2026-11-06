@@ -2637,3 +2637,227 @@ body:has(.ticker:not([hidden])) .rail {
 .pf-clear { background: none; border: 0; color: var(--ours);
             cursor: pointer; font: inherit; text-decoration: underline;
             padding: 0 0 0 6px; }
+
+/* ------------------------------------------------------ tally integrity
+ *
+ * Restrained on purpose. The temptation on a verification screen is a big
+ * green shield, and that is precisely the wrong signal: the chain cannot
+ * certify itself, and a badge saying it has would be the one dishonest
+ * element in the module. The emphasis goes on the line to publish - which is
+ * the only thing here that actually establishes anything - and the states
+ * read as neutral descriptions rather than as scores.
+ *
+ * Status hues come from the existing ramp and are never the only cue: every
+ * state carries its word, and the broken state carries a sentence.
+ */
+
+.cm-explain {
+  background: var(--surface-2);
+  border: 1px solid var(--rule-hair);
+  border-radius: var(--r-panel);
+  padding: 16px 18px;
+  margin: 18px 0 20px;
+  max-width: 74ch;
+}
+.cm-h {
+  font-size: var(--step-1);
+  margin: 0 0 10px;
+  letter-spacing: -.005em;
+}
+.cm-explain p {
+  font-size: var(--step-0);
+  color: var(--ink-2);
+  margin: 0 0 9px;
+  line-height: 1.55;
+}
+.cm-explain p:last-child { margin-bottom: 0; }
+.cm-explain strong { color: var(--ink); font-weight: 600; }
+
+/* The line to publish. The only raised element on the screen, because it is
+   the only action: everything else is a record of actions already taken. */
+.cm-anchor {
+  border: 1px solid var(--ours);
+  border-radius: var(--r-panel);
+  background: color-mix(in oklab, var(--ours) 7%, var(--surface));
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "label label" "line button";
+  gap: 6px 14px;
+  align-items: center;
+}
+.cm-anchor-label {
+  grid-area: label;
+  font-size: var(--step--1);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-2);
+}
+.cm-anchor code {
+  grid-area: line;
+  font-size: var(--step--1);
+  line-height: 1.5;
+  word-break: break-all;
+  color: var(--ink);
+}
+.cm-copy {
+  grid-area: button;
+  align-self: start;
+  white-space: nowrap;
+  padding: 7px 14px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--step--1);
+  cursor: pointer;
+}
+.cm-copy:hover { border-color: var(--ink-2); }
+.cm-copy:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.cm-summary { margin-bottom: 16px; }
+.cm-ok, .cm-alert, .cm-empty {
+  font-size: var(--step-0);
+  line-height: 1.55;
+  border-radius: var(--r-control);
+  padding: 11px 14px;
+  border: 1px solid var(--rule-hair);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  max-width: 74ch;
+}
+.cm-ok strong, .cm-alert strong { color: var(--ink); }
+.cm-alert {
+  border-color: color-mix(in oklab, var(--st-bad) 45%, var(--rule));
+  background: color-mix(in oklab, var(--st-bad) 9%, var(--surface));
+}
+
+/* One snapshot. */
+.cm-link {
+  border: 1px solid var(--rule-hair);
+  border-left: 3px solid var(--st-unknown);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  padding: 13px 16px;
+  margin-bottom: 10px;
+}
+.cm-link.is-open   { border-left-color: var(--st-good); }
+.cm-link.is-sealed { border-left-color: var(--st-info); }
+.cm-link.is-broken {
+  border-left-color: var(--st-bad);
+  background: color-mix(in oklab, var(--st-bad) 6%, var(--surface));
+}
+.cm-link > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.cm-seq {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--ink);
+  font-size: var(--step-1);
+}
+.cm-where { font-size: var(--step-0); color: var(--ink); }
+.cm-when  { font-size: var(--step--1); color: var(--ink-3); }
+.cm-state {
+  margin-left: auto;
+  font-size: var(--step--1);
+  color: var(--ink-2);
+  text-transform: lowercase;
+}
+.cm-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: var(--step--1);
+  color: var(--ink-2);
+  margin-bottom: 8px;
+}
+.cm-tag {
+  border: 1px solid var(--rule-hair);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--ink-3);
+}
+.cm-digest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  align-items: baseline;
+  font-size: var(--step--1);
+  padding: 7px 0;
+  border-top: 1px solid var(--rule-hair);
+  border-bottom: 1px solid var(--rule-hair);
+  margin-bottom: 9px;
+}
+.cm-digest code {
+  color: var(--ink);
+  background: var(--surface-2);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.cm-chainlink { color: var(--ink-3); }
+.cm-chainlink code { color: var(--ink-2); background: none; padding: 0; }
+.cm-note {
+  font-size: var(--step--1);
+  color: var(--ink-3);
+  margin: 0;
+  line-height: 1.5;
+  max-width: 72ch;
+}
+
+.cm-broken { font-size: var(--step-0); color: var(--ink-2); line-height: 1.55; }
+.cm-broken strong { color: var(--ink); display: block; margin-bottom: 6px; }
+.cm-broken ul { margin: 0 0 8px; padding-left: 18px; }
+.cm-broken li { margin-bottom: 4px; }
+.cm-broken p { margin: 0; }
+
+/* Counts, once published. A bar per party rather than a chart: the reader is
+   checking figures against a published fingerprint, so the numbers lead and
+   the bar is only there to make the shape legible at a glance. */
+.cm-counts {
+  width: 100%;
+  max-width: 560px;
+  border-collapse: collapse;
+  font-size: var(--step-0);
+  margin-bottom: 8px;
+}
+.cm-counts td { padding: 3px 8px 3px 0; vertical-align: middle; }
+.cm-counts td:first-child { color: var(--ink); }
+.cm-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.cm-bar { width: 42%; }
+.cm-bar span {
+  display: block;
+  height: 7px;
+  min-width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--theirs);
+}
+.cm-counts tfoot td {
+  border-top: 1px solid var(--rule-hair);
+  padding-top: 7px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .cm-anchor { grid-template-columns: 1fr; grid-template-areas: "label" "line" "button"; }
+  .cm-copy { justify-self: start; }
+  .cm-bar { display: none; }
+}
+
+/* The intro on this pane runs to ~110 characters unchecked, which is past
+   the point where a reader loses the line. Capped here rather than globally:
+   the other panes' subtitles are short enough that a cap would only add a
+   ragged right edge. */
+#view-commitments .viz-sub { max-width: 78ch; }

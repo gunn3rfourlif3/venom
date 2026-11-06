@@ -1,0 +1,12 @@
+---
+description: TypeScript API/CLI conventions for Venom
+globs: src/**/*.ts
+alwaysApply: false
+---
+
+# src/**/*.ts
+
+- No framework: handlers in `src/api/*`, wired in `server.ts`.
+- Figure responses: include `as_of`; null stays null.
+- Reads from views/extract; writes only logistics/import/control-panel.
+- Match file style; no new deps unless asked. Prefer Auto Cost / fast model for small edits; Intelligence for auth/SSE/ingest bugs.

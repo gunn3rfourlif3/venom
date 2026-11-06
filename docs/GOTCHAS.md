@@ -638,3 +638,51 @@ in between answers about the old thing while sounding like it answers about
 the new one. Section 11b of DEPLOY-VPS.md now checks the deployed artifacts:
 the running commit, the installed unit, the container's build time, the live
 URL from outside.
+
+---
+
+### G46 · Double entry made every vote total twice what it was
+Every query that tallied votes joined `result_vote` to `result_transcription`
+and summed. A slip gets **two** transcriptions — double entry by two people is
+the whole quality mechanism — and each pass writes its own `result_vote` rows.
+So every properly verified slip was counted twice. Measured, not reasoned
+about: a 500-vote slip with two agreeing passes returned 1,000.
+
+The dangerous part is not the factor of two, it is that the factor is not
+constant. A single-pass slip counts once and a verified slip counts twice, so
+the overcount drifts between 1× and 2× as transcription catches up through the
+night — which looks exactly like results arriving. It would have doubled every
+seat projection on the 4th while appearing to behave normally.
+
+Found while building the commitment chain, by sealing a tally and checking the
+total against what had been inserted. It had been in `seats.ts` since the seat
+engine was written and no amount of reading the query would have surfaced it;
+counting a known quantity did.
+**Do:** read votes only through `v_tally_vote` (migration 054). Never join
+`result_vote` to `result_transcription` directly. Migration 054 fails if the
+naive join stops doubling a known fixture, and `npm run verify` guards the
+regression once results exist.
+
+### G47 · A verification harness that counted untested checks as passes
+`npm run verify` reported "16 checks passed" where two of those checks had no
+subject to examine — no results captured, so the double-count comparison was
+`0 === 0`, and an empty commitment chain has no digests to recompute. Both
+returned true and incremented the pass count.
+
+This is the same failure as G-earlier's `verify-data.ts` querying a table that
+did not exist and swallowing the error: **a harness that fails open
+manufactures confidence**. The pass total is the first and often only thing
+anyone reads.
+**Do:** `untested()` is a third outcome alongside FAIL and WARN. A check whose
+subject does not exist reports UNTESTED, is excluded from the pass count, and
+is listed by name in the summary. When adding a check that cannot run before
+polling day, use it — do not let it return true.
+
+### G48 · `CREATE OR REPLACE VIEW` cannot insert a column in the middle
+Migration 055 added a `parties` column to `v_commitment_chain` between
+existing columns and failed with `42P16 cannot change name of view column
+"committed_at" to "parties"`, aborting the whole run. Same error that took 036
+and 037 down together.
+**Do:** `CREATE OR REPLACE VIEW` may only **append** columns. Anything else is
+`DROP VIEW` then `CREATE VIEW` — and if the view has dependents, the
+capture-with-`pg_get_viewdef`-and-replay pattern from migration 052.

@@ -1,0 +1,18 @@
+---
+description: Venom stack + token/model budget (always on; keep short)
+alwaysApply: true
+---
+
+# Venom / Xnith
+
+- Analytics + election-day logistics. Node 20+ TS ESM, Postgres 16, dep `pg` only. UI: `public/` (no framework).
+- Lineage: raw → `db/views/` → `mv_campaign_extract`. No app-layer figure math. Docs on demand — never paste into rules.
+- POPIA: issues not people. Never present `SYNTHETIC` as real results.
+
+# Tokens
+
+Search before full reads; smallest slice; short replies; no re-reads; cite `path:line`. Prefer glob/`description` rules; no `.cursorrules`; no AGENTS+CLAUDE+.mdc dupes.
+
+# Models
+
+Default chat: **Auto → Balance** (or **Cost** for routine). Escalate to **Auto → Intelligence** / a strong frontier pick for: hard bugs, schema/view arithmetic, architecture, security, greenfield UI. Mechanical work (commit, PR boilerplate, renames, explore): keep Auto Cost or spawn Task with `composer-2.5-fast`. Complex parallel work: Task with `inherit`. Never invent model IDs — only listed/picker options.

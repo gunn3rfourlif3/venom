@@ -863,7 +863,8 @@ async function loadHealth() {
 const WARD_LIMIT = 6000;
 
 const VIEWS = ['logistics', 'slips', 'overview', 'wards', 'sentiment', 'decisions',
-               'heat', 'seats', 'readiness', 'briefing', 'float', 'health', 'settings'];
+               'heat', 'seats', 'commitments', 'readiness', 'briefing', 'float',
+               'health', 'settings'];
 
 /* ------------------------------------------------------------------ *
  * Station readiness and gap maps.
@@ -1274,6 +1275,7 @@ function showView(view) {
   if (view === 'briefing') loadBriefing();
   if (view === 'heat') loadHeat();
   if (view === 'seats') loadSeats();
+  if (view === 'commitments') loadCommitments();
   if (view === 'settings') loadControlPanel();
 }
 
@@ -4263,4 +4265,140 @@ $('ticker-pause')?.addEventListener('click', () => {
   b.setAttribute('aria-pressed', String(paused));
   b.setAttribute('aria-label', paused ? 'Resume the ticker' : 'Pause the ticker');
   b.innerHTML = paused ? '&#9654;' : '&#10073;&#10073;';
+});
+
+/* ------------------------------------------------------- tally integrity
+ *
+ * The commitment chain, for a room that has to be convinced. The design
+ * problem here is the opposite of the usual one: a green tick would be the
+ * wrong output. A chain verifying against itself proves nothing against the
+ * people who own the database, and a reassuring badge invites exactly the
+ * trust the scheme cannot earn on its own. So the panel leads with the line
+ * to publish, and says plainly what each state does and does not establish.
+ */
+
+function cmShort(d) { return `${d.slice(0, 8)}…${d.slice(-8)}`; }
+
+function cmRow(l) {
+  const when = new Date(l.taken_at).toLocaleString('en-ZA',
+    { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const where = l.scope_key ? `${l.scope}/${l.scope_key}` : l.scope;
+  const cov = l.slips_expected
+    ? `${Number(l.slips_counted).toLocaleString('en-ZA')} of `
+      + `${Number(l.slips_expected).toLocaleString('en-ZA')} slips`
+      + (l.coverage_pct !== null ? ` (${l.coverage_pct}%)` : '')
+    : `${Number(l.slips_counted).toLocaleString('en-ZA')} slips`;
+
+  let body;
+  if (!l.ok) {
+    body = `<div class="cm-broken"><strong>This snapshot does not match its own
+      fingerprint.</strong><ul>${l.problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>
+      <p>Do not delete it. A broken link is the record of what happened.</p></div>`;
+  } else if (!l.revealed) {
+    body = `<p class="cm-note">Sealed. The fingerprint is published; the
+      numbers are not yet. ${esc(String(l.parties))} parties are counted in it.</p>`;
+  } else {
+    const total = (l.counts ?? []).reduce((a, c) => a + c.votes, 0);
+    const rows = [...(l.counts ?? [])].sort((a, b) => b.votes - a.votes)
+      .map((c) => {
+        const pct = total ? (100 * c.votes / total) : 0;
+        return `<tr><td>${esc(c.party)}</td>
+          <td class="cm-num">${c.votes.toLocaleString('en-ZA')}</td>
+          <td class="cm-bar"><span style="width:${pct.toFixed(1)}%"></span></td>
+          <td class="cm-num">${pct.toFixed(1)}%</td></tr>`;
+      }).join('');
+    body = `<table class="cm-counts"><tbody>${rows}</tbody>
+      <tfoot><tr><td>Total counted</td>
+        <td class="cm-num">${total.toLocaleString('en-ZA')}</td><td></td><td></td>
+      </tr></tfoot></table>
+      <p class="cm-note">Recomputing the fingerprint from these numbers gives
+         the value above &mdash; checked on the server when this page loaded.</p>`;
+  }
+
+  return `<article class="cm-link ${l.ok ? '' : 'is-broken'} ${l.revealed ? 'is-open' : 'is-sealed'}">
+    <header>
+      <span class="cm-seq">#${l.seq}</span>
+      <span class="cm-where">${esc(where)}</span>
+      <span class="cm-when">${esc(when)}</span>
+      <span class="cm-state">${l.revealed ? 'numbers published' : 'sealed'}</span>
+    </header>
+    <div class="cm-meta">
+      <span>${esc(cov)}</span>
+      ${l.note ? `<span class="cm-tag">${esc(l.note)}</span>` : ''}
+    </div>
+    <div class="cm-digest">
+      <code title="${esc(l.digest)}">${esc(cmShort(l.digest))}</code>
+      <span class="cm-chainlink">follows #${l.seq - 1 || 'start'}:
+        <code title="${esc(l.prev_digest)}">${esc(cmShort(l.prev_digest))}</code></span>
+    </div>
+    ${body}
+  </article>`;
+}
+
+async function loadCommitments() {
+  return whileLoading('view-commitments', async () => {
+    const d = await api('/api/commitments');
+    const links = d.data?.links ?? [];
+    const s = d.data?.summary ?? {};
+
+    const anchorBox = $('cm-anchor');
+    if (links.length === 0) {
+      anchorBox.hidden = true;
+      $('cm-summary').innerHTML = `<p class="cm-empty">No snapshots sealed yet.
+        On the night, each cut of the count is sealed as it is taken.</p>`;
+      $('cm-chain').innerHTML = '';
+      return;
+    }
+
+    /* The newest digest, formatted for sending. This is the panel's real
+       output - everything below it is context. */
+    const newest = links[0];
+    const line = `Xnith tally commitment ${newest.seq} `
+      + `${newest.scope_key ? `${newest.scope}/${newest.scope_key}` : newest.scope} `
+      + `${new Date(newest.taken_at).toISOString().slice(0, 19)}Z `
+      + `sha256:${newest.digest}`;
+    anchorBox.hidden = false;
+    $('cm-anchor-line').textContent = line;
+
+    /* Described rather than scored. "4 of 6 verified" invites a reader to
+       treat the number as the finding; the finding is whether anything was
+       published outside. */
+    const bits = [];
+    bits.push(`${s.links} snapshot${s.links === 1 ? '' : 's'}`);
+    if (s.revealed > 0) bits.push(`${s.revealed} with numbers published`);
+    if (s.sealed > 0) bits.push(`${s.sealed} still sealed`);
+    $('cm-summary').innerHTML = s.problems > 0
+      ? `<div class="cm-alert"><strong>${s.problems} snapshot(s) no longer match
+          their fingerprints.</strong> Something altered a sealed count. The
+          affected entries are marked below.</div>`
+      : `<div class="cm-ok"><strong>${esc(bits.join(' · '))}.</strong>
+          Each links to the one before it, and every published snapshot
+          recomputes to its own fingerprint.
+          ${s.digests_recomputed === 0
+            ? 'No numbers have been published yet, so none have been recomputed — '
+              + 'only the links between snapshots were checked.'
+            : ''}</div>`;
+
+    $('cm-chain').innerHTML = links.map(cmRow).join('');
+  });
+}
+
+/* Clipboard, with a visible fallback. A copy button that silently fails in a
+   browser without clipboard permission is worse than no button: the line is
+   the one thing on this screen that has to leave the room. */
+document.addEventListener('click', async (e) => {
+  if (e.target?.id !== 'cm-copy') return;
+  const line = $('cm-anchor-line').textContent ?? '';
+  const btn = e.target;
+  try {
+    await navigator.clipboard.writeText(line);
+    btn.textContent = 'Copied';
+  } catch {
+    const r = document.createRange();
+    r.selectNodeContents($('cm-anchor-line'));
+    const sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(r);
+    btn.textContent = 'Selected — press Ctrl+C';
+  }
+  setTimeout(() => { btn.textContent = 'Copy'; }, 2500);
 });

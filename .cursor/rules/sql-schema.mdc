@@ -1,0 +1,11 @@
+---
+description: SQL migration/view conventions for Venom
+globs: db/**/*.sql
+alwaysApply: false
+---
+
+# db/**/*.sql
+
+- Numbered migrations/views by dependency; do not break extract refresh.
+- Tunables in `control_panel` only. Never wipe campaign-entered columns on promote.
+- Before view math changes: `db/AUDIT.md`, `db/test/`. Prefer Auto Intelligence / strong model for view arithmetic.

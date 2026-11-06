@@ -1,0 +1,19 @@
+node_modules/
+dist/
+vendor/
+
+*.min.js
+*.map
+package-lock.json
+
+*.dump
+*.dump.gz
+*.log
+backups/
+
+# Scratch / parallel drafts — not source of truth
+Claude outputs/
+
+# Local agent noise
+docs/handoff/
+.cursor/compaction-log.jsonl
