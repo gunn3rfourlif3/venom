@@ -705,32 +705,68 @@ seals are riding on the next anchor. The screen does the same: the prompt
 loses its highlight once nothing is outstanding. When adding any
 act-on-this-now message, check how often it will be right.
 
-### G50 · Two passing fixtures hid a seat engine that fails 41% of real councils
+### G50 · Two passing fixtures hid a seat engine that fails a quarter of real councils
 `seats:verify` reproduced Sol Plaatje and Madibeng 2021 exactly and was
-treated as validation. Loading the IEC's published 2026 results gave 175
-declared councils to check against instead of two. The engine reproduces
-**100 of 175**.
+treated as validation. Loading the IEC's published 2026 results gave ~170
+declared councils to check against instead of two, and the engine did not
+reproduce them.
 
 The two fixtures were not wrong, they were unrepresentative — both were
 chosen because their results were published in a convenient form, which is
 exactly the selection bias that makes a small fixture set reassuring rather
 than informative.
 
-What is known so far, from fitting rules to the 175:
-- The model SHAPE is right. For 154 of 175, *some* single integer quota plus
-  largest-remainder top-up reproduces the IEC's entitlements exactly. So
-  compensatory allocation (PR seats = entitlement − ward seats won) is
-  confirmed, including by the IEC's own mid-count rows where the entitlement
-  visibly runs ahead of the settled allocation (G-see migration 058).
-- The QUOTA is wrong. The implied denominator sits consistently above
-  `total_seats + 1` — nearer S+2 to S+3 — so either A is not ward+PR
-  combined, or the denominator is not S+1, or both.
-- 21 councils cannot be reproduced by any single quota, so they need a
-  further mechanism (overhang, or a different vote basis).
+Three separate faults came out of it, in order of size.
 
-**Do:** treat seat projections as unvalidated until this is resolved against
-the statute using `npm run seats:verify-2026`, which is now the real test.
-Do not add more hand-picked fixtures; the 175 are the fixture set. And the
-general lesson, which is the reason this entry exists: a validation suite
+**1. The harness fed independents in as an ordinary party.** The dashboard
+carries an aggregate pseudo-party under the exact name `INDEPENDENTS`. They
+contest wards only and can never take a list seat, but their ward votes
+count in the quota's numerator and their ward seats come out of the
+denominator — `allocate()` already took both as separate inputs and the
+harness simply did not use them, so the engine handed list seats to
+"independents" and pushed real parties out.
+**Match the name EXACTLY.** Dozens of registered parties contain
+INDEPENDENT — AFRICAN INDEPENDENT CONGRESS, INDEPENDENT PARTY — and THE
+INDEPENDENTS is a real party holding 7,117 list votes and four PR seats. A
+`startsWith` or `includes` test silently deletes them from the allocation.
+
+**2. "All districts counted" is not "allocation finished".** Four councils
+(EC122, BUF, LIM334, FS194) report every voting district in while their PR
+allocation has not run at all — each declares only its ward seats, summing
+to half the council. Scoring those manufactures failures. A council is
+testable only when its declared seats actually fill it.
+
+**3. The quota divisor is unresolved, and it is the big one.** Against the
+same ~170 councils, with the two faults above fixed:
+
+| quota | divisor | 2026 councils reproduced | 2021 fixtures |
+|---|---|---|---|
+| Droop (shipped) | `A / (seats + 1)` | 106 of 171 (62%) | both pass |
+| Hare | `A / seats` | **151 of 171 (88%)** | both FAIL |
+
+Both cannot be right. Either Schedule 1's quota changed between the two
+elections — Act 3 of 2021 amended it — or one of the fixture sets is wrong.
+The difference moves the last seat in roughly a quarter of councils.
+
+**Do:** the default stays `droop`, the shipped behaviour that reproduces the
+two results known to be correct. Switching to Hare on the strength of a
+better score would be fitting the rule to the data, which is how a plausible
+wrong answer gets locked in. Resolve it by reading Schedule 1 as amended
+against these cases, then set the default deliberately. Compare any time
+with `npm run seats:verify-2026 -- --quota hare`.
+
+**A retracted claim, kept on purpose.** An earlier pass at this reported
+that the implied quota denominator "sits consistently above `total_seats +
+1`", which pointed away from Hare. That was an artifact of the search: it
+returned the *smallest* quota that fitted each council, so it was biased low
+by construction. The lesson is not about quotas — it is that a fitting
+procedure will hand you a confident number about its own search order and
+let you read it as a fact about the world.
+
+**And the general one, which is why this entry exists:** a validation suite
 small enough to be convenient is small enough to be wrong, and the number of
 cases it passes is not evidence until the cases were not chosen for passing.
+
+**Treat seat projections as unvalidated until the quota is settled.**
+`seats:verify-2026` is the real test now; the ~170 are the fixture set and no
+more hand-picked ones should be added.

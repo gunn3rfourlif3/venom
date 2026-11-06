@@ -47,6 +47,32 @@ export interface AllocationInput {
   independentWardVotes?: number;
   /** Ward seats won by independent candidates. */
   independentSeats?: number;
+  /**
+   * Which quota divisor to use. UNRESOLVED, AND THE DEFAULT IS DELIBERATE.
+   *
+   *   'droop'  A / (seats - independentSeats + 1)   — the shipped behaviour
+   *   'hare'   A / (seats - independentSeats)
+   *
+   * The two published 2021 results this engine was built against (Sol
+   * Plaatje, Madibeng) reproduce exactly under 'droop' and fail under
+   * 'hare'. The IEC's own 2026 results go the other way: across 175
+   * declared councils, 'droop' reproduces 106 and 'hare' reproduces 151,
+   * and among local councils alone the split is 50% against 74%.
+   *
+   * Both cannot be right, and the difference is not cosmetic — it moves the
+   * last seat in roughly a quarter of councils. Either Schedule 1's quota
+   * changed between the two elections (Act 3 of 2021 amended it) or one of
+   * the two fixture sets is wrong.
+   *
+   * Until someone reads the statute against these cases, the default stays
+   * on the behaviour that has shipped and that reproduces the two results
+   * known to be correct. Changing it on the strength of a better score
+   * would be fitting the rule to the data, which is exactly how a plausible
+   * wrong answer gets locked in.
+   *
+   * Compare with: npm run seats:verify-2026 -- --quota hare
+   */
+  quotaRule?: 'droop' | 'hare';
 }
 
 export interface PartyAllocation {
@@ -107,8 +133,11 @@ export function allocate(input: AllocationInput): Allocation {
      and the FF+ lost one it did. */
   const A = [...votesOf.values()].reduce((s, v) => s + v, 0) + independentWardVotes;
 
-  // Base quota: fractions disregarded.
-  const quota = floorDiv(A, totalSeats - independentSeats + 1);
+  // Base quota: fractions disregarded. See quotaRule on AllocationInput —
+  // which divisor is correct is an open question, not a settled one.
+  const quotaRule = input.quotaRule ?? 'droop';
+  const quota = floorDiv(
+    A, totalSeats - independentSeats + (quotaRule === 'droop' ? 1 : 0));
   if (quota <= 0) throw new Error('quota computed as zero - check the vote totals');
 
   const entitlement = new Map<string, number>();

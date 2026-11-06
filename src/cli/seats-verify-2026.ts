@@ -32,6 +32,12 @@ import { allocate, type PartyVotes } from '../seats/allocate.js';
 
 const showArg = process.argv.indexOf('--show');
 const SHOW = showArg === -1 ? 8 : Number(process.argv[showArg + 1] ?? 8);
+const quotaArg = process.argv.indexOf('--quota');
+const QUOTA = (quotaArg === -1 ? 'droop' : process.argv[quotaArg + 1]) as 'droop' | 'hare';
+if (QUOTA !== 'droop' && QUOTA !== 'hare') {
+  console.error("--quota takes 'droop' or 'hare'");
+  process.exit(2);
+}
 
 interface Row {
   demarcation_code: string;
@@ -78,26 +84,54 @@ const main = async () => {
 
   for (const [code, council] of byCouncil) {
     const first = council[0]!;
-    if (!first.is_complete) { notDeclared.push(code); continue; }
+    /* "Complete" from the IEC's district counters is not enough. Four
+       councils report every district counted while their PR allocation has
+       not run at all - EC122, BUF, LIM334 and FS194 each declare only their
+       ward seats, summing to half the council. Scoring those manufactures
+       failures that say nothing about the engine. A council is testable
+       only once its declared seats actually fill it. */
+    const declared = council.reduce((s, r) => s + r.total_seats_won, 0);
+    if (!first.is_complete || declared !== first.available_seats) {
+      notDeclared.push(code);
+      continue;
+    }
 
-    const parties: PartyVotes[] = council.map((r) => ({
-      party: r.party,
-      wardVotes: r.ward_votes,
-      prVotes: r.pr_votes,
-      wardSeats: r.ward_seats_won,
-    }));
+    /* Independents are an AGGREGATE PSEUDO-PARTY in the dashboard, under the
+       exact name INDEPENDENTS. They contest wards only: they hold no list,
+       so they can never take a PR seat, but their ward votes still count in
+       the quota's numerator and their ward seats come out of the
+       denominator. The engine takes both as separate inputs; an earlier
+       version of this harness passed them as an ordinary party instead,
+       which let the engine award list seats to "independents" and pushed a
+       real party out. That alone accounted for a large share of the
+       mismatches.
 
-    /* Independents: the dashboard's party rows do not carry them, so the
-       only signal is seats unaccounted for. If the declared ward seats do
-       not fill the council's ward half, something outside these rows holds
-       them - almost always independents - and the quota the engine computes
-       will differ from the IEC's. Flagged, not silently absorbed. */
-    const declaredTotal = council.reduce((s, r) => s + r.total_seats_won, 0);
-    const hasIndependents = declaredTotal < first.available_seats;
+       MATCHED EXACTLY, NEVER AS A SUBSTRING. Dozens of registered parties
+       have INDEPENDENT in their names - AFRICAN INDEPENDENT CONGRESS,
+       INDEPENDENT PARTY - and THE INDEPENDENTS is a real party holding
+       7,117 list votes and four PR seats. A `startsWith` or `includes`
+       test would silently delete them from the allocation. */
+    const indRow = council.find((r) => r.party === 'INDEPENDENTS');
+    const parties: PartyVotes[] = council
+      .filter((r) => r !== indRow)
+      .map((r) => ({
+        party: r.party,
+        wardVotes: r.ward_votes,
+        prVotes: r.pr_votes,
+        wardSeats: r.ward_seats_won,
+      }));
+    const hasIndependents = (indRow?.ward_seats_won ?? 0) > 0
+      || (indRow?.ward_votes ?? 0) > 0;
 
     let got;
     try {
-      got = allocate({ totalSeats: first.available_seats, parties });
+      got = allocate({
+        totalSeats: first.available_seats,
+        parties,
+        independentWardVotes: indRow?.ward_votes ?? 0,
+        independentSeats: indRow?.ward_seats_won ?? 0,
+        quotaRule: QUOTA,
+      });
     } catch (error) {
       mismatches.push({ code, name: first.municipality, province: first.province,
         detail: [`engine refused: ${(error as Error).message}`], hasIndependents });
@@ -109,6 +143,12 @@ const main = async () => {
     const detail: string[] = [];
     const bySeats = new Map(got.parties.map((p) => [p.party, p]));
     for (const r of council) {
+      if (r === indRow) {
+        /* The engine returns no row for independents by design. Check the
+           declared ward seats instead - they are an input, so a mismatch
+           here means the input was wrong, not the allocation. */
+        continue;
+      }
       const g = bySeats.get(r.party);
       if (!g) { detail.push(`${r.party}: engine returned nothing`); continue; }
       if (g.totalSeats !== r.total_seats_won) {
@@ -124,7 +164,7 @@ const main = async () => {
   const withInd = mismatches.filter((m) => m.hasIndependents);
   const withoutInd = mismatches.filter((m) => !m.hasIndependents);
 
-  console.log(`\nSeat engine against IEC-declared 2026 results\n`);
+  console.log(`\nSeat engine against IEC-declared 2026 results  [quota: ${QUOTA}]\n`);
   console.log(`  councils loaded        ${byCouncil.size}`);
   console.log(`  declared and testable  ${tested}`);
   console.log(`  still counting         ${notDeclared.length} — not testable yet, `
@@ -132,12 +172,13 @@ const main = async () => {
   console.log('');
   console.log(`  reproduced exactly     ${exact} of ${tested}`
     + (tested ? `  (${(100 * exact / tested).toFixed(1)}%)` : ''));
-  console.log(`  differ, independents present   ${withInd.length} — the engine was `
-    + 'not given');
-  console.log('                                 independent votes or seats, which '
-    + 'move the quota');
-  console.log(`  differ, no independents        ${withoutInd.length} — these are the `
-    + 'ones that matter');
+  /* Independents are now passed to the engine as votes and seats, so their
+     presence is no longer an excuse for a mismatch. Both groups are real
+     disagreements; the split is kept only because councils with
+     independents exercise an extra code path and are worth reading first. */
+  console.log(`  differ                 ${mismatches.length}`);
+  console.log(`    with independents    ${withInd.length}`);
+  console.log(`    without              ${withoutInd.length}`);
 
   const worth = [...withoutInd, ...withInd].slice(0, SHOW);
   if (worth.length) {
@@ -151,21 +192,21 @@ const main = async () => {
   }
 
   console.log('');
-  if (withoutInd.length === 0 && tested > 0) {
+  if (mismatches.length === 0 && tested > 0) {
     console.log(`  The engine reproduces every declared council that has no`);
     console.log('  independents. That is a far stronger check than the two 2021');
     console.log('  fixtures, and it is the same statute it will run under next time.\n');
   } else if (tested > 0) {
-    console.log(`  ${withoutInd.length} council(s) differ with no independents to`);
-    console.log('  explain it. Those are worth reading before the engine is used to');
-    console.log('  project anything.\n');
+    console.log(`  ${mismatches.length} council(s) differ. Seat projections are not`);
+    console.log('  validated while that is true. Try `-- --quota hare` for the');
+    console.log('  comparison that is currently unresolved.\n');
   }
 
   /* Exit non-zero only on the unexplained ones. A council differing because
      the engine was not handed independent votes is a known gap in the INPUT,
      not a failing engine, and failing the build for it would train everyone
      to ignore this command. */
-  process.exitCode = withoutInd.length === 0 ? 0 : 1;
+  process.exitCode = mismatches.length === 0 ? 0 : 1;
 };
 
 main()
