@@ -36,7 +36,10 @@
     "tally:commit": "node --env-file=.env dist/cli/tally-commit.js",
     "tally:reveal": "node --env-file=.env dist/cli/tally-reveal.js",
     "tally:verify": "node --env-file=.env dist/cli/tally-verify.js",
-    "tally:export": "node --env-file=.env dist/cli/tally-export.js"
+    "tally:export": "node --env-file=.env dist/cli/tally-export.js",
+    "import:seats": "node --env-file=.env dist/cli/import-iec-seats.js",
+    "import:iec": "node --env-file=.env dist/cli/import-iec-results.js",
+    "seats:verify-2026": "node --env-file=.env dist/cli/seats-verify-2026.js"
   },
   "dependencies": {
     "pg": "8.13.1"

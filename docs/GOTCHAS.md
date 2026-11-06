@@ -704,3 +704,33 @@ ordinary seal says `Sealed only — no need to send anything` and names how many
 seals are riding on the next anchor. The screen does the same: the prompt
 loses its highlight once nothing is outstanding. When adding any
 act-on-this-now message, check how often it will be right.
+
+### G50 · Two passing fixtures hid a seat engine that fails 41% of real councils
+`seats:verify` reproduced Sol Plaatje and Madibeng 2021 exactly and was
+treated as validation. Loading the IEC's published 2026 results gave 175
+declared councils to check against instead of two. The engine reproduces
+**100 of 175**.
+
+The two fixtures were not wrong, they were unrepresentative — both were
+chosen because their results were published in a convenient form, which is
+exactly the selection bias that makes a small fixture set reassuring rather
+than informative.
+
+What is known so far, from fitting rules to the 175:
+- The model SHAPE is right. For 154 of 175, *some* single integer quota plus
+  largest-remainder top-up reproduces the IEC's entitlements exactly. So
+  compensatory allocation (PR seats = entitlement − ward seats won) is
+  confirmed, including by the IEC's own mid-count rows where the entitlement
+  visibly runs ahead of the settled allocation (G-see migration 058).
+- The QUOTA is wrong. The implied denominator sits consistently above
+  `total_seats + 1` — nearer S+2 to S+3 — so either A is not ward+PR
+  combined, or the denominator is not S+1, or both.
+- 21 councils cannot be reproduced by any single quota, so they need a
+  further mechanism (overhang, or a different vote basis).
+
+**Do:** treat seat projections as unvalidated until this is resolved against
+the statute using `npm run seats:verify-2026`, which is now the real test.
+Do not add more hand-picked fixtures; the 175 are the fixture set. And the
+general lesson, which is the reason this entry exists: a validation suite
+small enough to be convenient is small enough to be wrong, and the number of
+cases it passes is not evidence until the cases were not chosen for passing.
