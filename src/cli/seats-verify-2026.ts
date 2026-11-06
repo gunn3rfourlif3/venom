@@ -32,12 +32,17 @@ import { allocate, type PartyVotes } from '../seats/allocate.js';
 
 const showArg = process.argv.indexOf('--show');
 const SHOW = showArg === -1 ? 8 : Number(process.argv[showArg + 1] ?? 8);
+/* Defaults mirror allocate()'s own, rather than restating them — a harness
+   that hardcodes its own copy of the defaults will keep reporting on the
+   old behaviour after the engine changes, which is the most direct way to
+   make a validation tool lie. */
 const indArg = process.argv.indexOf('--ind-votes');
-const IND_IN = indArg === -1 ? true : process.argv[indArg + 1] !== 'out';
+const IND_IN = indArg === -1 ? undefined : process.argv[indArg + 1] !== 'out';
 const quotaArg = process.argv.indexOf('--quota');
-const QUOTA = (quotaArg === -1 ? 'droop' : process.argv[quotaArg + 1]) as 'droop' | 'hare';
-if (QUOTA !== 'droop' && QUOTA !== 'hare') {
-  console.error("--quota takes 'droop' or 'hare'");
+const QUOTA = (quotaArg === -1 ? undefined : process.argv[quotaArg + 1]) as
+  'droop' | 'hare' | 'iec' | undefined;
+if (QUOTA !== undefined && QUOTA !== 'droop' && QUOTA !== 'hare' && QUOTA !== 'iec') {
+  console.error("--quota takes 'droop', 'hare' or 'iec'");
   process.exit(2);
 }
 
@@ -132,8 +137,8 @@ const main = async () => {
         parties,
         independentWardVotes: indRow?.ward_votes ?? 0,
         independentSeats: indRow?.ward_seats_won ?? 0,
-        quotaRule: QUOTA,
-        independentVotesInQuota: IND_IN,
+        ...(QUOTA === undefined ? {} : { quotaRule: QUOTA }),
+        ...(IND_IN === undefined ? {} : { independentVotesInQuota: IND_IN }),
       });
     } catch (error) {
       mismatches.push({ code, name: first.municipality, province: first.province,
@@ -167,7 +172,8 @@ const main = async () => {
   const withInd = mismatches.filter((m) => m.hasIndependents);
   const withoutInd = mismatches.filter((m) => !m.hasIndependents);
 
-  console.log(`\nSeat engine against IEC-declared 2026 results  [quota: ${QUOTA}, independent votes ${IND_IN ? 'in' : 'out'}]\n`);
+  console.log(`\nSeat engine against IEC-declared 2026 results  [quota: ${QUOTA ?? 'default'}, `
+    + `independent votes ${IND_IN === undefined ? 'default' : IND_IN ? 'in' : 'out'}]\n`);
   console.log(`  councils loaded        ${byCouncil.size}`);
   console.log(`  declared and testable  ${tested}`);
   console.log(`  still counting         ${notDeclared.length} — not testable yet, `
@@ -201,8 +207,8 @@ const main = async () => {
     console.log('  fixtures, and it is the same statute it will run under next time.\n');
   } else if (tested > 0) {
     console.log(`  ${mismatches.length} council(s) differ. Seat projections are not`);
-    console.log('  validated while that is true. Try `-- --quota hare` for the');
-    console.log('  comparison that is currently unresolved.\n');
+    console.log('  validated while that is true. Compare other rules with');
+    console.log('  `-- --quota droop --ind-votes in` (the old behaviour).\n');
   }
 
   /* Exit non-zero only on the unexplained ones. A council differing because

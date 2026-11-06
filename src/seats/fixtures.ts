@@ -26,13 +26,29 @@ export interface Fixture {
   expectedTotalSeats: Record<string, number>;
   /** party -> PR seats actually won. */
   expectedPrSeats: Record<string, number>;
+  /**
+   * NOT SET, AND THAT IS THE POINT.
+   *
+   * This field used to carry 1865 for Sol Plaatje and 2153 for Madibeng.
+   * Neither was ever published: the Wikipedia pages these fixtures come
+   * from state no quota, and both numbers were this engine's own output,
+   * written down as though they were facts about the election.
+   *
+   * The test was therefore circular — it checked the engine against its own
+   * assumption — and it actively concealed the bug. The correct quota rule
+   * reproduces both fixtures' SEATS exactly while giving a quota three
+   * higher, so the only thing that ever failed was the self-derived
+   * assertion, and for months that read as "the correct rule is wrong".
+   *
+   * Leave it unset unless a figure is found in the IEC's own declaration.
+   * Seats are published; quotas are not.
+   */
   expectedQuota?: number;
 }
 
 export const FIXTURES: Fixture[] = [
   {
     name: 'Sol Plaatje 2021 (65 seats, 33 wards, 14 parties)',
-    expectedQuota: 1865,
     input: {
       totalSeats: 65,
       independentWardVotes: 1648,
@@ -65,7 +81,6 @@ export const FIXTURES: Fixture[] = [
   },
   {
     name: 'Madibeng 2021 (82 seats, 41 wards, 26 parties)',
-    expectedQuota: 2153,
     input: {
       totalSeats: 82,
       independentWardVotes: 1884,

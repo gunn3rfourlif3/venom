@@ -48,45 +48,32 @@ export interface AllocationInput {
   /** Ward seats won by independent candidates. */
   independentSeats?: number;
   /**
-   * Which quota divisor to use. UNRESOLVED, AND THE DEFAULT IS DELIBERATE.
+   * Which quota formula to use. Default 'iec'.
    *
-   *   'droop'  A / (seats - independentSeats + 1)   — the shipped behaviour
-   *   'hare'   A / (seats - independentSeats)
+   *   'iec'    floor(A / (seats - independentSeats)) + 1   — the IEC's own
+   *   'hare'   floor(A / (seats - independentSeats))
+   *   'droop'  floor(A / (seats - independentSeats + 1))   — WRONG; kept
+   *            only so the old behaviour can be reproduced for comparison
    *
-   * The two published 2021 results this engine was built against (Sol
-   * Plaatje, Madibeng) reproduce exactly under 'droop' and fail under
-   * 'hare'. The IEC's own 2026 results go the other way: across 175
-   * declared councils, 'droop' reproduces 106 and 'hare' reproduces 151,
-   * and among local councils alone the split is 50% against 74%.
+   * 'iec' is the formula as the Electoral Commission's own voter-education
+   * material states it: divide the valid votes by the seats remaining after
+   * independents, THEN add one, disregarding fractions. The "+1" lands on
+   * the quota, not on the denominator — the two are easy to conflate when
+   * reading that sentence quickly, and conflating them is what 'droop' is.
    *
-   * Both cannot be right, and the difference is not cosmetic — it moves the
-   * last seat in roughly a quarter of councils. Either Schedule 1's quota
-   * changed between the two elections (Act 3 of 2021 amended it) or one of
-   * the two fixture sets is wrong.
-   *
-   * Until someone reads the statute against these cases, the default stays
-   * on the behaviour that has shipped and that reproduces the two results
-   * known to be correct. Changing it on the strength of a better score
-   * would be fitting the rule to the data, which is exactly how a plausible
-   * wrong answer gets locked in.
-   *
-   * Compare with: npm run seats:verify-2026 -- --quota hare
+   * 'hare' differs from 'iec' only at exact boundaries and scores
+   * identically against 2026; it is kept to show that the ambiguity in the
+   * IEC's wording does not change outcomes.
    */
-  quotaRule?: 'droop' | 'hare';
+  quotaRule?: 'droop' | 'hare' | 'iec';
   /**
    * Whether independents' ward votes count in the quota's numerator.
-   * UNRESOLVED, same shape of conflict as quotaRule, and the default is
-   * again the shipped behaviour.
+   * Default FALSE: they do not.
    *
-   * true  (default) A includes them — reproduces Sol Plaatje 2021, where
-   *                 excluding them gave quota 1,840 instead of 1,865, won
-   *                 the ANC a seat it did not take and cost the FF+ one.
-   * false           A excludes them — fits the IEC's 2026 results markedly
-   *                 better, and almost all of the remaining 2026
-   *                 disagreements are councils where independents stood.
-   *
-   * Measure before changing anything:
-   *   npm run seats:verify-2026 -- --quota hare --ind-votes out
+   * The IEC's own description is "the number of valid votes for all
+   * parties (ward and PR)". Independents are not a party and their votes
+   * are not in A; their ward SEATS still come out of the denominator,
+   * which is a separate thing and still done.
    */
   independentVotesInQuota?: boolean;
 }
@@ -145,20 +132,33 @@ export function allocate(input: AllocationInput): Allocation {
 
   const votesOf = new Map(parties.map((p) => [p.party, p.wardVotes + p.prVotes]));
 
-  /* A is every valid vote cast on both ballots, INCLUDING votes for
-     independent ward candidates. Excluding them was tested against Sol
-     Plaatje 2021 and produced the wrong answer for two parties: the quota
-     came out 1,840 instead of 1,865, the ANC gained a seat it did not win
-     and the FF+ lost one it did. */
-  const independentVotesInQuota = input.independentVotesInQuota ?? true;
+  /* A is every valid vote cast on both ballots for PARTIES. Independents'
+     ward votes are excluded; their ward seats still come out of the
+     denominator.
+
+     An earlier comment here claimed the opposite, on the grounds that
+     excluding them gave Sol Plaatje 2021 a quota of 1,840 instead of 1,865
+     and moved two seats. That test changed two things at once: it excluded
+     independents AND kept the Droop denominator. With the correct
+     denominator, excluding them reproduces Sol Plaatje's published seats
+     exactly. The 1,865 it was measured against was never published — it was
+     this engine's own output, recorded in the fixture as if it were a fact.
+     See G50. */
+  const independentVotesInQuota = input.independentVotesInQuota ?? false;
   const A = [...votesOf.values()].reduce((s, v) => s + v, 0)
     + (independentVotesInQuota ? independentWardVotes : 0);
 
   // Base quota: fractions disregarded. See quotaRule on AllocationInput —
   // which divisor is correct is an open question, not a settled one.
-  const quotaRule = input.quotaRule ?? 'droop';
-  const quota = floorDiv(
-    A, totalSeats - independentSeats + (quotaRule === 'droop' ? 1 : 0));
+  const quotaRule = input.quotaRule ?? 'iec';
+  /* 'iec' is the formula as the IEC's own voter-education material states
+     it: divide by the seats left after independents, THEN add one,
+     disregarding fractions. That is a different number from dividing by
+     seats+1 - the "+1" lands on the quota, not on the denominator - and the
+     two are easy to conflate when reading the sentence quickly. */
+  const quota = quotaRule === 'iec'
+    ? floorDiv(A, totalSeats - independentSeats) + 1
+    : floorDiv(A, totalSeats - independentSeats + (quotaRule === 'droop' ? 1 : 0));
   if (quota <= 0) throw new Error('quota computed as zero - check the vote totals');
 
   /* A PARTY WITH NO LIST CANNOT TAKE A LIST SEAT.

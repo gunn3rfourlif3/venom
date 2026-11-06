@@ -705,7 +705,7 @@ seals are riding on the next anchor. The screen does the same: the prompt
 loses its highlight once nothing is outstanding. When adding any
 act-on-this-now message, check how often it will be right.
 
-### G50 · Two passing fixtures hid a seat engine that got a third of real councils wrong
+### G50 · Two passing fixtures, one of them circular, hid a wrong quota formula
 `seats:verify` reproduced Sol Plaatje and Madibeng 2021 exactly and was
 treated as validation. Loading the IEC's published 2026 results gave ~170
 declared councils instead of two, and the engine reproduced 106 of them.
@@ -747,30 +747,50 @@ recomputes against a new quota and handed the seats straight back. A rule
 enforced in one path and not the other is not enforced — and the three
 councils still wrong at that point were all in that branch.
 
-**4. The quota divisor and the independent-vote question are UNRESOLVED,
-and they are the ones that matter.** With 1–3 fixed, against 171 councils:
+**4. The quota formula was wrong, and a circular fixture hid it.** The
+engine divided by `seats - independents + 1` and counted independents' ward
+votes in the numerator. The IEC's own voter-education material states
+neither: the quota is the valid votes **for parties** divided by the seats
+left after independents, **then plus one**, disregarding fractions. The "+1"
+lands on the quota, not on the denominator — conflating the two is exactly
+what the engine did.
 
-| quota | independents' votes in A | 2026 reproduced | 2021 fixtures |
-|---|---|---|---|
-| Droop `A/(seats+1)` | in *(shipped)* | 109 of 171 — 64% | both pass |
-| Droop | out | 105 of 171 — 61% | — |
-| Hare `A/seats` | in | 152 of 171 — 89% | — |
-| **Hare** | **out** | **169 of 171 — 98.8%** | both **fail** |
+Against 171 declared 2026 councils:
 
-Both ends cannot be right. The shipped combination reproduces the two 2021
-results known to be correct; the opposite combination reproduces 2026 almost
-perfectly. The most likely reading is that Schedule 1 changed between the
-two elections — Act 3 of 2021 amended it, and both differences concern
-exactly how independents and the quota interact — but that is a hypothesis
-from the data, not from the statute, and nobody has read the statute yet.
+| quota | independents' votes in A | reproduced |
+|---|---|---|
+| `seats+1` denominator, votes in *(old)* | in | 109 of 171 — 64% |
+| `seats` denominator | in | 152 of 171 — 89% |
+| **IEC: `floor(A/seats)+1`** | **out** | **169 of 171 — 98.8%** |
 
-**Do:** defaults stay on the shipped combination. Flipping them on the
-strength of a better score is fitting the rule to the data, which is how a
-plausible wrong answer gets locked in — and a 98.8% fit is persuasive enough
-to be dangerous. Resolve it by reading Schedule 1 as amended, then set the
-defaults deliberately and move the 2021 fixtures to whichever rule the text
-says applied in 2021. Compare any time with:
-`npm run seats:verify-2026 -- --quota hare --ind-votes out`
+**Why this looked for hours like a 2021-vs-2026 rule change.** Switching to
+the correct rule made the 2021 fixtures "fail" — so the obvious reading was
+that Act 3 of 2021 had changed the formula between the elections, and the
+defaults were left alone on that basis.
+
+It was not a rule change. The fixtures carried
+`expectedQuota: 1865` (Sol Plaatje) and `2153` (Madibeng), and **neither was
+ever published** — the Wikipedia pages those fixtures come from state no
+quota at all. Both numbers were this engine's own output, written into the
+fixture as though they were facts about the election. The test was checking
+the engine against its own assumption.
+
+Under the correct rule both fixtures reproduce their published SEATS
+exactly, with a quota three higher. The only thing that ever failed was the
+self-derived assertion — and because it failed loudly, it read as evidence
+that the correct rule was wrong. A circular test is worse than no test: it
+does not merely fail to catch the bug, it argues for it.
+
+`expectedQuota` is now unset in both fixtures, with the reason in the file.
+Seats are published; quotas are not. Do not write a computed value into a
+fixture.
+
+**Defaults are now `quotaRule: 'iec'` and `independentVotesInQuota: false`.**
+The old behaviour is reproducible for comparison with
+`npm run seats:verify-2026 -- --quota droop --ind-votes in`.
+
+Two councils still differ, EC153 and LIM344, both in the overhang path —
+which remains the one branch never checked against a published result.
 
 **A retracted claim, kept on purpose.** An earlier pass reported the implied
 quota denominator "sits consistently above `total_seats + 1`", pointing away
@@ -783,6 +803,5 @@ search order and let you read it as a fact about the world.
 small enough to be wrong, and the number of cases it passes is not evidence
 until the cases were not chosen for passing.
 
-**Seat projections stay unvalidated until the quota question is settled.**
-`seats:verify-2026` is the real test; the ~170 are the fixture set and no
-more hand-picked ones should be added.
+`seats:verify-2026` is the real test; the ~170 declared councils are the
+fixture set and no more hand-picked ones should be added.
