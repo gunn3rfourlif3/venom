@@ -32,6 +32,8 @@ import { allocate, type PartyVotes } from '../seats/allocate.js';
 
 const showArg = process.argv.indexOf('--show');
 const SHOW = showArg === -1 ? 8 : Number(process.argv[showArg + 1] ?? 8);
+const indArg = process.argv.indexOf('--ind-votes');
+const IND_IN = indArg === -1 ? true : process.argv[indArg + 1] !== 'out';
 const quotaArg = process.argv.indexOf('--quota');
 const QUOTA = (quotaArg === -1 ? 'droop' : process.argv[quotaArg + 1]) as 'droop' | 'hare';
 if (QUOTA !== 'droop' && QUOTA !== 'hare') {
@@ -131,6 +133,7 @@ const main = async () => {
         independentWardVotes: indRow?.ward_votes ?? 0,
         independentSeats: indRow?.ward_seats_won ?? 0,
         quotaRule: QUOTA,
+        independentVotesInQuota: IND_IN,
       });
     } catch (error) {
       mismatches.push({ code, name: first.municipality, province: first.province,
@@ -164,7 +167,7 @@ const main = async () => {
   const withInd = mismatches.filter((m) => m.hasIndependents);
   const withoutInd = mismatches.filter((m) => !m.hasIndependents);
 
-  console.log(`\nSeat engine against IEC-declared 2026 results  [quota: ${QUOTA}]\n`);
+  console.log(`\nSeat engine against IEC-declared 2026 results  [quota: ${QUOTA}, independent votes ${IND_IN ? 'in' : 'out'}]\n`);
   console.log(`  councils loaded        ${byCouncil.size}`);
   console.log(`  declared and testable  ${tested}`);
   console.log(`  still counting         ${notDeclared.length} — not testable yet, `

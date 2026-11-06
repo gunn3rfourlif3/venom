@@ -705,68 +705,84 @@ seals are riding on the next anchor. The screen does the same: the prompt
 loses its highlight once nothing is outstanding. When adding any
 act-on-this-now message, check how often it will be right.
 
-### G50 · Two passing fixtures hid a seat engine that fails a quarter of real councils
+### G50 · Two passing fixtures hid a seat engine that got a third of real councils wrong
 `seats:verify` reproduced Sol Plaatje and Madibeng 2021 exactly and was
 treated as validation. Loading the IEC's published 2026 results gave ~170
-declared councils to check against instead of two, and the engine did not
-reproduce them.
+declared councils instead of two, and the engine reproduced 106 of them.
 
-The two fixtures were not wrong, they were unrepresentative — both were
-chosen because their results were published in a convenient form, which is
-exactly the selection bias that makes a small fixture set reassuring rather
-than informative.
-
-Three separate faults came out of it, in order of size.
+The fixtures were not wrong, they were unrepresentative — both chosen
+because their results were published in a convenient form, which is the
+selection bias that makes a small fixture set reassuring rather than
+informative. Four separate faults came out of it.
 
 **1. The harness fed independents in as an ordinary party.** The dashboard
-carries an aggregate pseudo-party under the exact name `INDEPENDENTS`. They
-contest wards only and can never take a list seat, but their ward votes
-count in the quota's numerator and their ward seats come out of the
-denominator — `allocate()` already took both as separate inputs and the
-harness simply did not use them, so the engine handed list seats to
-"independents" and pushed real parties out.
+carries an aggregate pseudo-party named exactly `INDEPENDENTS`: ward-only,
+never eligible for a list seat, but its ward votes belong in the quota's
+numerator and its ward seats come out of the denominator. `allocate()`
+already took both as separate inputs; the harness simply did not use them,
+so the engine awarded list seats to "independents" and pushed real parties
+out.
 **Match the name EXACTLY.** Dozens of registered parties contain
 INDEPENDENT — AFRICAN INDEPENDENT CONGRESS, INDEPENDENT PARTY — and THE
-INDEPENDENTS is a real party holding 7,117 list votes and four PR seats. A
+INDEPENDENTS is a real party with 7,117 list votes and four PR seats. A
 `startsWith` or `includes` test silently deletes them from the allocation.
 
-**2. "All districts counted" is not "allocation finished".** Four councils
-(EC122, BUF, LIM334, FS194) report every voting district in while their PR
-allocation has not run at all — each declares only its ward seats, summing
-to half the council. Scoring those manufactures failures. A council is
-testable only when its declared seats actually fill it.
+**2. "All districts counted" is not "allocation finished".** EC122, BUF,
+LIM334 and FS194 report every district in while their PR allocation has not
+run — each declares only ward seats, summing to half the council. Scoring
+them manufactures failures. A council is testable only once its declared
+seats fill it.
 
-**3. The quota divisor is unresolved, and it is the big one.** Against the
-same ~170 councils, with the two faults above fixed:
+**3. A party with no list cannot take a list seat.** PR seats are filled
+from a submitted list; a party that contested wards only has nothing to fill
+them from, so it can hold no more seats than the wards it won. No list is
+inferred from zero votes on the PR ballot — the only signal the published
+results carry — and the evidence is unambiguous: **147 party rows have zero
+PR votes and not one was awarded a PR seat.** This was a plain bug, not a
+judgement call, so it is fixed as default behaviour; it improved every
+configuration and broke neither 2021 fixture, which is what a genuine
+correctness fix looks like.
+Then the same cap had to be applied **in the overhang branch**, which
+recomputes against a new quota and handed the seats straight back. A rule
+enforced in one path and not the other is not enforced — and the three
+councils still wrong at that point were all in that branch.
 
-| quota | divisor | 2026 councils reproduced | 2021 fixtures |
+**4. The quota divisor and the independent-vote question are UNRESOLVED,
+and they are the ones that matter.** With 1–3 fixed, against 171 councils:
+
+| quota | independents' votes in A | 2026 reproduced | 2021 fixtures |
 |---|---|---|---|
-| Droop (shipped) | `A / (seats + 1)` | 106 of 171 (62%) | both pass |
-| Hare | `A / seats` | **151 of 171 (88%)** | both FAIL |
+| Droop `A/(seats+1)` | in *(shipped)* | 109 of 171 — 64% | both pass |
+| Droop | out | 105 of 171 — 61% | — |
+| Hare `A/seats` | in | 152 of 171 — 89% | — |
+| **Hare** | **out** | **169 of 171 — 98.8%** | both **fail** |
 
-Both cannot be right. Either Schedule 1's quota changed between the two
-elections — Act 3 of 2021 amended it — or one of the fixture sets is wrong.
-The difference moves the last seat in roughly a quarter of councils.
+Both ends cannot be right. The shipped combination reproduces the two 2021
+results known to be correct; the opposite combination reproduces 2026 almost
+perfectly. The most likely reading is that Schedule 1 changed between the
+two elections — Act 3 of 2021 amended it, and both differences concern
+exactly how independents and the quota interact — but that is a hypothesis
+from the data, not from the statute, and nobody has read the statute yet.
 
-**Do:** the default stays `droop`, the shipped behaviour that reproduces the
-two results known to be correct. Switching to Hare on the strength of a
-better score would be fitting the rule to the data, which is how a plausible
-wrong answer gets locked in. Resolve it by reading Schedule 1 as amended
-against these cases, then set the default deliberately. Compare any time
-with `npm run seats:verify-2026 -- --quota hare`.
+**Do:** defaults stay on the shipped combination. Flipping them on the
+strength of a better score is fitting the rule to the data, which is how a
+plausible wrong answer gets locked in — and a 98.8% fit is persuasive enough
+to be dangerous. Resolve it by reading Schedule 1 as amended, then set the
+defaults deliberately and move the 2021 fixtures to whichever rule the text
+says applied in 2021. Compare any time with:
+`npm run seats:verify-2026 -- --quota hare --ind-votes out`
 
-**A retracted claim, kept on purpose.** An earlier pass at this reported
-that the implied quota denominator "sits consistently above `total_seats +
-1`", which pointed away from Hare. That was an artifact of the search: it
-returned the *smallest* quota that fitted each council, so it was biased low
-by construction. The lesson is not about quotas — it is that a fitting
-procedure will hand you a confident number about its own search order and
-let you read it as a fact about the world.
+**A retracted claim, kept on purpose.** An earlier pass reported the implied
+quota denominator "sits consistently above `total_seats + 1`", pointing away
+from Hare. That was an artifact of a search returning the *smallest* quota
+fitting each council — biased low by construction. The lesson is not about
+quotas: a fitting procedure will hand you a confident number about its own
+search order and let you read it as a fact about the world.
 
-**And the general one, which is why this entry exists:** a validation suite
-small enough to be convenient is small enough to be wrong, and the number of
-cases it passes is not evidence until the cases were not chosen for passing.
+**And the general one:** a validation suite small enough to be convenient is
+small enough to be wrong, and the number of cases it passes is not evidence
+until the cases were not chosen for passing.
 
-**Treat seat projections as unvalidated until the quota is settled.**
-`seats:verify-2026` is the real test now; the ~170 are the fixture set and no
+**Seat projections stay unvalidated until the quota question is settled.**
+`seats:verify-2026` is the real test; the ~170 are the fixture set and no
 more hand-picked ones should be added.

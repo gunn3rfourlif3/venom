@@ -73,6 +73,22 @@ export interface AllocationInput {
    * Compare with: npm run seats:verify-2026 -- --quota hare
    */
   quotaRule?: 'droop' | 'hare';
+  /**
+   * Whether independents' ward votes count in the quota's numerator.
+   * UNRESOLVED, same shape of conflict as quotaRule, and the default is
+   * again the shipped behaviour.
+   *
+   * true  (default) A includes them — reproduces Sol Plaatje 2021, where
+   *                 excluding them gave quota 1,840 instead of 1,865, won
+   *                 the ANC a seat it did not take and cost the FF+ one.
+   * false           A excludes them — fits the IEC's 2026 results markedly
+   *                 better, and almost all of the remaining 2026
+   *                 disagreements are councils where independents stood.
+   *
+   * Measure before changing anything:
+   *   npm run seats:verify-2026 -- --quota hare --ind-votes out
+   */
+  independentVotesInQuota?: boolean;
 }
 
 export interface PartyAllocation {
@@ -106,8 +122,11 @@ function distributeSurplus(
   entitlement: Map<string, number>,
   remainder: Map<string, number>,
   seatsLeft: number,
+  /** Parties with no list: ineligible for a seat filled from one. */
+  ineligible: Set<string> = new Set(),
 ): void {
   const order = [...remainder.entries()]
+    .filter(([party]) => !ineligible.has(party))
     .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]));
   for (let i = 0; i < seatsLeft && i < order.length; i++) {
     const party = order[i]![0];
@@ -131,7 +150,9 @@ export function allocate(input: AllocationInput): Allocation {
      Plaatje 2021 and produced the wrong answer for two parties: the quota
      came out 1,840 instead of 1,865, the ANC gained a seat it did not win
      and the FF+ lost one it did. */
-  const A = [...votesOf.values()].reduce((s, v) => s + v, 0) + independentWardVotes;
+  const independentVotesInQuota = input.independentVotesInQuota ?? true;
+  const A = [...votesOf.values()].reduce((s, v) => s + v, 0)
+    + (independentVotesInQuota ? independentWardVotes : 0);
 
   // Base quota: fractions disregarded. See quotaRule on AllocationInput —
   // which divisor is correct is an open question, not a settled one.
@@ -140,18 +161,56 @@ export function allocate(input: AllocationInput): Allocation {
     A, totalSeats - independentSeats + (quotaRule === 'droop' ? 1 : 0));
   if (quota <= 0) throw new Error('quota computed as zero - check the vote totals');
 
+  /* A PARTY WITH NO LIST CANNOT TAKE A LIST SEAT.
+   *
+   * PR seats are filled from a party's submitted list. A party that
+   * contested wards only has nothing to fill them from, so whatever its
+   * ward votes contribute to the quota, it can hold no more seats than the
+   * wards it actually won.
+   *
+   * No list is inferred from zero votes on the PR ballot, which is the only
+   * signal the IEC's published results carry. The evidence is unambiguous:
+   * across the 2026 results, 147 party rows have zero PR votes and NOT ONE
+   * of them was awarded a PR seat. Four of the five councils this engine
+   * still got wrong were exactly this - MKP and the UDM being handed list
+   * seats they are not eligible for, pushing out the party that should have
+   * had them.
+   *
+   * Unlike the quota question this is not a judgement call, so it is the
+   * default rather than an option: awarding a list seat to a party with no
+   * list is wrong under any reading. The one way it could misfire is a
+   * party that submitted a list and drew literally zero votes on that
+   * ballot, which would then be capped at its ward seats - and a party with
+   * zero list votes is owed no list seat under any quota anyway. */
+  const hasList = new Map(parties.map((p) => [p.party, p.prVotes > 0]));
+
   const entitlement = new Map<string, number>();
   const remainder = new Map<string, number>();
   for (const p of parties) {
     const v = votesOf.get(p.party)!;
-    entitlement.set(p.party, floorDiv(v, quota));
-    remainder.set(p.party, v - floorDiv(v, quota) * quota);
+    const floor = floorDiv(v, quota);
+    /* Capped here rather than after the surplus round, so the seats the cap
+       frees are redistributed to parties that can actually use them. */
+    const capped = hasList.get(p.party) ? floor : Math.min(floor, p.wardSeats);
+    if (capped < floor) {
+      notes.push(
+        `${p.party} drew no votes on the list ballot, so it holds no list and `
+        + `cannot take PR seats. Capped at its ${p.wardSeats} ward seat(s).`);
+    }
+    entitlement.set(p.party, capped);
+    /* A listless party takes no part in the surplus round either. Setting
+       the remainder to -1 keeps it out without a special case in the
+       distributor, which sorts on remainder. */
+    remainder.set(p.party, hasList.get(p.party) ? v - floor * quota : -1);
   }
 
   const seatsForParties = totalSeats - independentSeats;
   const allocatedByFloor = [...entitlement.values()].reduce((s, v) => s + v, 0);
   const surplusSeats = seatsForParties - allocatedByFloor;
-  if (surplusSeats > 0) distributeSurplus(entitlement, remainder, surplusSeats);
+  if (surplusSeats > 0) {
+    distributeSurplus(entitlement, remainder, surplusSeats,
+      new Set([...hasList].filter(([, v]) => !v).map(([k]) => k)));
+  }
 
   /* THE EXCESS-SEAT CASE (Act 3 of 2021, Schedule 1 item 16). A party can
      win more wards than its proportional entitlement. It keeps the wards -
@@ -195,11 +254,22 @@ export function allocate(input: AllocationInput): Allocation {
         const rem2 = new Map<string, number>();
         for (const p of rest) {
           const v = votesOf.get(p.party)!;
-          ent2.set(p.party, floorDiv(v, newQuota));
-          rem2.set(p.party, v - floorDiv(v, newQuota) * newQuota);
+          const floor2 = floorDiv(v, newQuota);
+          /* The no-list cap applies on the recomputed quota too. It was
+             missed here at first, and the three councils the engine still
+             got wrong were all in this branch: the base pass correctly
+             refused a list seat to a party with no list, and then this one
+             handed it back. A rule enforced in one path and not the other
+             is not enforced. */
+          const capped2 = hasList.get(p.party) ? floor2 : Math.min(floor2, p.wardSeats);
+          ent2.set(p.party, capped2);
+          rem2.set(p.party, hasList.get(p.party) ? v - floor2 * newQuota : -1);
         }
         const left = denominator - [...ent2.values()].reduce((s, v) => s + v, 0);
-        if (left > 0) distributeSurplus(ent2, rem2, left);
+        if (left > 0) {
+          distributeSurplus(ent2, rem2, left,
+            new Set([...hasList].filter(([, v]) => !v).map(([k]) => k)));
+        }
 
         for (const p of excessParties) entitlement.set(p.party, p.wardSeats);
         for (const p of rest) entitlement.set(p.party, ent2.get(p.party) ?? 0);
