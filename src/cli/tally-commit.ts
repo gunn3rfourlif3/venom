@@ -71,11 +71,75 @@ const main = async () => {
       ORDER BY party`, params);
 
   if (counts.rows.length === 0) {
-    console.error(
-      `No counted votes for ${scope}${key ? ` ${key}` : ''}.\n`
-      + 'Nothing is sealed. A commitment over an empty tally would be a\n'
-      + 'valid digest of nothing, which is worse than no digest at all -\n'
-      + 'it would later look like a snapshot that had been taken.');
+    /* Refusing is right - a digest over an empty tally is a valid digest of
+       nothing, and would later read as a snapshot that had been taken. But
+       "no counted votes" has four quite different causes and they need
+       quite different responses at 21:00. Saying only that nothing was
+       counted leaves someone running psql by hand to find out which, which
+       is not a thing to be doing on the night. So it diagnoses. */
+    const d = await pool.query<{
+      slips: number; transcribed: number; disputed: number;
+      rejected: number; superseded: number; other: number; in_scope: number;
+    }>(
+      `SELECT
+         count(*)::int                                            AS slips,
+         count(*) FILTER (WHERE rs.status IN ('VERIFIED','TRANSCRIBED')
+                            AND rs.rejected IS NULL
+                            AND rs.superseded IS NOT TRUE)::int    AS transcribed,
+         count(*) FILTER (WHERE rs.status = 'DISPUTED')::int       AS disputed,
+         count(*) FILTER (WHERE rs.rejected IS NOT NULL)::int      AS rejected,
+         count(*) FILTER (WHERE rs.superseded IS TRUE)::int        AS superseded,
+         count(*) FILTER (WHERE rs.status IS NULL
+                            OR rs.status NOT IN ('VERIFIED','TRANSCRIBED','DISPUTED')
+                           )::int                                  AS other,
+         count(*) FILTER (WHERE ${WHERE === 'TRUE' ? 'TRUE' : WHERE.replace(/^/, 'w.')})::int AS in_scope
+       FROM result_slip rs
+       JOIN station st ON st.station_id = rs.station_id
+       JOIN ward w     ON w.ward_id = st.ward_id`, params);
+    const c = d.rows[0]!;
+
+    const where = `${scope}${key ? ` ${key}` : ''}`;
+    const lines = [`Nothing sealed: no counted votes for ${where}.`, ''];
+
+    if (c.slips === 0) {
+      lines.push('No result slips have been captured anywhere yet. Nothing is',
+        'wrong — this is what the command says until capture starts.');
+    } else if (scope !== 'NATIONAL' && c.in_scope === 0) {
+      lines.push(`${c.slips.toLocaleString('en-ZA')} slips are captured, but none `
+        + `are in ${where}.`,
+        'Check the spelling of --key: a province wants its name ("Gauteng"),',
+        'a municipality its demarcation code ("NW372").');
+    } else if (c.transcribed === 0) {
+      lines.push(`${c.slips.toLocaleString('en-ZA')} slips are captured, but none `
+        + 'are counted. Reasons:', '');
+      if (c.disputed > 0) {
+        lines.push(`  ${c.disputed.toLocaleString('en-ZA')} DISPUTED — the two passes `
+          + 'disagree. These are',
+          '     excluded by design, never averaged or resolved by taking the',
+          '     first. They need a human to look at the slip.');
+      }
+      if (c.rejected > 0) {
+        lines.push(`  ${c.rejected.toLocaleString('en-ZA')} rejected.`);
+      }
+      if (c.superseded > 0) {
+        lines.push(`  ${c.superseded.toLocaleString('en-ZA')} superseded by a later capture.`);
+      }
+      if (c.other > 0) {
+        lines.push(`  ${c.other.toLocaleString('en-ZA')} captured but not transcribed yet `
+          + '— images are arriving,',
+          '     nobody is entering them. This is the usual one early on.');
+      }
+    } else {
+      /* Slips are counted somewhere but produced no party rows here. Means
+         transcriptions exist with no result_vote rows behind them, which
+         should not happen and is worth saying rather than glossing. */
+      lines.push(`${c.transcribed.toLocaleString('en-ZA')} slips are counted but carry `
+        + 'no party votes.',
+        'That should not be possible — a transcription writes its vote rows in',
+        'the same transaction. Worth looking at before trusting any total.');
+    }
+
+    console.error(lines.join('\n'));
     process.exit(1);
   }
 
