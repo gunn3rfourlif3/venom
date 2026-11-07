@@ -540,7 +540,7 @@ function renderHeatmap(area) {
     const x = left + col * cw, y = top + row * ch;
     // The figure sits on its own cell, so the ink has to beat the cell it
     // sits on, not the page. Which ink wins is a property of the ramp AND of
-    // the theme - on the MK gold ramp the dark theme crosses over at step 4
+    // the theme - on the violet ramp both themes cross over at step 3
     // and the light theme not until step 6 - so a single threshold in here
     // would smudge one theme or the other. The step is published as a class
     // and each theme states its own crossover in CSS, where it is measured.
@@ -879,10 +879,11 @@ const VIEWS = ['logistics', 'slips', 'overview', 'wards', 'sentiment', 'decision
  * are not dimmed, they are absent, because a gap map that still shows
  * everything else invites the eye to read the dense areas as progress.
  * ------------------------------------------------------------------ */
-/* Xnith brand palette, from the brand sheet: status green #00E676 reads
-   as covered, signal yellow #FFD600 as needing attention - the same way
-   the rest of the dashboard already uses the accent. */
-const MK = { green: '#00E676', greenPale: '#7FEFB4', gold: '#FFD600' };
+/* Coverage states for the readiness map. Status semantics, not identity:
+   amber is "nobody assigned", green is "assigned". Renamed from MK and
+   revalued when the party palette came out - the old values were the MK
+   Party gold and green, and the name invited them back. */
+const COVER = { green: '#22E39A', greenPale: '#8FE9C4', amber: '#FBBF24' };
 
 const RD = {
   data: null,
@@ -891,11 +892,11 @@ const RD = {
   layer: null,
   L: null,
   colours: {
-    0: { fill: MK.gold,      label: 'No one assigned' },
+    0: { fill: COVER.amber,  label: 'No one assigned' },
     1: { fill: 'transparent', stroke: '#6b6b6b',
          label: 'Not from the IEC register (not counted)' },
-    2: { fill: MK.greenPale, label: 'People, no named marshal' },
-    3: { fill: MK.green,     label: 'Marshal assigned' },
+    2: { fill: COVER.greenPale, label: 'People, no named marshal' },
+    3: { fill: COVER.green,  label: 'Marshal assigned' },
   },
 };
 
@@ -1329,7 +1330,7 @@ function bfDrawMap(m) {
   const sc = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY);
   const offX = (w - spanX * sc) / 2, offY = (h - spanY * sc) / 2;
 
-  g.fillStyle = MK.gold; g.globalAlpha = 0.75;
+  g.fillStyle = COVER.amber; g.globalAlpha = 0.75;
   g.beginPath();
   for (let i = 0; i < m.x.length; i++) {
     const px = offX + (m.x[i] - minX) * kx * sc;
@@ -2643,7 +2644,7 @@ function heatRamp() {
   for (let i = 2; i <= 7; i++) steps.push(heatCss(`--seq-${i}`));
   if (steps.some((c) => !c)) {
     console.warn('issue heat: --seq-* ramp did not resolve; check .viz scope');
-    return ['#3d2f00', '#5c4700', '#806200', '#a88000', '#cc9d00', '#FFD600'];
+    return ['#6733c9', '#7a4ae4', '#8c6de8', '#9f8bec', '#b4a7f1', '#cac2f5'];
   }
   return steps;
 }
@@ -3006,15 +3007,25 @@ function hemicycleSeats(total, rows = null) {
    so filtering does not repaint the survivors. Past the eighth party every
    remaining one is grey rather than a generated hue - at that point colour
    has stopped carrying identity and the legend is doing the work. */
-const SEAT_PALETTE = ['--ours', '--st-info', '--st-good', '--st-warn',
-                      '--st-bad', '--seq-3', '--st-unknown', '--theirs'];
+/* Parties take the CATEGORICAL ramp, never the status tokens. The old list
+   was ['--ours','--st-info','--st-good','--st-warn','--st-bad', ...], which
+   painted the fifth-largest party in alarm red and the fourth in warning
+   amber - colours the rest of the dashboard uses to mean something is
+   wrong. Status colours are reserved; a party is not a state.
+
+   Six slots, because six is what clears colour-blind separation across all
+   pairs (see the palette block in app.css). The seventh party onward folds
+   into the overflow grey rather than taking an invented hue that merges
+   with another for one reader in twelve. */
+const SEAT_PALETTE = ['--cat-1', '--cat-2', '--cat-3',
+                      '--cat-4', '--cat-5', '--cat-6'];
 const SEAT_OVERFLOW = '--ink-3';
 
 function seatColour(i, host) {
   const token = i < SEAT_PALETTE.length ? SEAT_PALETTE[i] : SEAT_OVERFLOW;
   const v = getComputedStyle(host ?? document.documentElement)
     .getPropertyValue(token).trim();
-  return v || '#FFD600';
+  return v || '#A78BFA';
 }
 
 /* Draws one hemicycle. `parties` is [{party, total, ward, pr}] already in

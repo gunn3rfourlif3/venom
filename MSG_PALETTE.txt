@@ -1,0 +1,61 @@
+Replace the MK-derived palette with a party-neutral one
+
+The scheme was signal yellow #FFD600 and status green #00E676, sampled
+from the MK Party logo on 23 October and carried forward under the Xnith
+name. An instrument that publishes tally commitments cannot wear one
+party's colours: the argument of the commitment chain is that the numbers
+can be checked by someone who does not trust the people presenting them,
+and a reader who recognises the livery discounts the evidence before
+reading it.
+
+VIOLET IS THE IDENTITY because it is the one vivid hue no significant
+South African party claims - green reads ANC or MK, blue DA, red EFF,
+orange VF Plus, and gold is where this started. Neutrality here is a
+question of what a colour is not already taken to mean.
+
+The --mk-gold and --mk-green tokens are DELETED rather than re-pointed, so
+nothing can quietly resolve back to them. Every use was then repointed by
+meaning rather than by hue: a live state to --st-good, an incomplete bar
+to --st-warn, an active toggle to --ours. Left unrepointed they would have
+resolved to nothing and those rules would have died silently, which is a
+failure this stylesheet has already had once.
+
+Status colours stay green/amber/red. That is UI semantics, not livery -
+green means staffed, not a party - and they are deliberately brighter and
+more saturated than any series colour so a status cannot read as a
+category.
+
+EVERY VALUE WAS MEASURED, NOT PICKED. Generated in OKLCH and run through
+the dataviz validator: lightness band, chroma floor, CVD separation under
+protan/deutan/tritan simulation, normal-vision floor, and contrast against
+the real surface. The categorical sets clear every check on ALL pairs, not
+just adjacent ones, because a hemicycle shows every party at once. Worst
+case ΔE 9.3 CVD and 17.4 normal on dark, 9.6 and 15.8 on light, all six at
+or above 3:1.
+
+SIX CATEGORICAL SLOTS, NOT EIGHT. Eight vivid hues could not clear CVD
+separation at any lightness assignment - simulation collapses the
+red-green axis and the extra hues land on each other. A seventh party
+folds into the overflow grey, which is honest; inventing two more hues
+that look distinct to us and merge for one reader in twelve is not.
+
+PARTIES NO LONGER TAKE STATUS COLOURS. SEAT_PALETTE was
+['--ours','--st-info','--st-good','--st-warn','--st-bad', ...], so the
+fifth-largest party rendered in alarm red and the fourth in warning amber
+- colours the rest of the dashboard uses to mean something is wrong. It
+now uses --cat-1..6.
+
+The sequential ramp is re-derived from the violet and re-validated as an
+ordinal scale. Its ink crossover moved from step 4 to step 3 and now lands
+on the same step in both themes, so the light theme's separate s4/s5
+exception is gone - with this ramp those steps are dark violet and needed
+light ink, the opposite of what that rule did. Worst case 4.86:1 dark,
+5.29:1 light.
+
+Favicon, lockup SVGs and the mask-icon colour follow.
+
+Checked in both themes across all 14 views: every token resolves, no
+--mk-* remains, no console errors.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BDAH2UQX8dEjrQGB7CcQZb

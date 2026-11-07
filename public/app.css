@@ -57,9 +57,9 @@
   --ink-3:      #6e6e7c;   /*  4.2 : 1 — still real text, not decoration */
   --rule:       #26262f;
   --rule-hair:  #1b1b22;
-  --ours:       #FFD600;   /* signal yellow — identity only, never a status */
+  --ours:       #A78BFA;   /* identity only, never a status */
   --theirs:     #8b8b99;
-  --flag:       #FFD600;
+  --flag:       #A78BFA;
   --focus:      #60a5fa;
 
   /* The status ramp. Four states, each shipped with its word. */
@@ -1948,7 +1948,7 @@ body:has(.ticker:not([hidden])) .stage { padding-bottom: var(--ticker-h); }
   .rc-state { grid-column: 1 / -1; }
 }
 
-/* ---- Readiness map: MK palette over a dark road basemap --------- */
+/* ---- Readiness map: status palette over a dark road basemap ----- */
 
 .rd-map-wrap {
   border: 1px solid var(--line, #2a2a2a); border-radius: 8px;
@@ -1963,17 +1963,17 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
   background: rgba(11,13,11,.82); color: #8a8f8a; font-size: 10px;
   border-top-left-radius: 4px;
 }
-#rd-map .leaflet-control-attribution a { color: var(--mk-green); }
+#rd-map .leaflet-control-attribution a { color: var(--ours); }
 #rd-map .leaflet-bar a {
   background: #151815; color: #e8e8e8; border-bottom-color: #2a2a2a;
 }
 #rd-map .leaflet-bar a:hover { background: #1f241f; }
 #rd-map .leaflet-bar a.leaflet-disabled { background: #111311; color: #4a4a4a; }
 
-.rd-mode.is-on { background: var(--mk-gold); color: #16161a; border-color: var(--mk-gold); }
-.rc-bar i { background: var(--mk-green); }
-.rc-incomplete .rc-bar i { background: var(--mk-gold); }
-.rc-incomplete .rc-state { color: var(--mk-gold); }
+.rd-mode.is-on { background: var(--ours); color: var(--paper); border-color: var(--ours); }
+.rc-bar i { background: var(--st-good); }
+.rc-incomplete .rc-bar i { background: var(--st-warn); }
+.rc-incomplete .rc-state { color: var(--st-warn); }
 
 @media (max-width: 680px) { #rd-map { height: 380px; } }
 
@@ -2024,25 +2024,22 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
   --s-step: 20px;   /* between blocks inside a section */
   --s-sect: 28px;   /* between sections */
 
-  /* MK Party, sampled from the party logo rather than approximated.
-     Gold carries identity and attention; green carries completeness.
-     They are not interchangeable and neither is a status on its own. */
-  /* Brand colours moved to the 28 October block below. */
+  /* Brand and status colours live in the party-neutral palette block
+     below, which replaced the MK-derived scheme on 7 November. */
 }
 
-/* The sequential ramp, in MK gold. One hue, seven steps, low nearest the
-   surface. Re-measured after the hue change: dark theme carries light ink
-   to step 3 (5.0:1) and surface ink from step 4 (4.8:1); light theme
-   carries dark ink to step 5 (5.4:1) and surface ink from step 6 (5.4:1).
-   Worst case on either side is 4.8:1, better than the blue ramp's 3.8:1. */
-.viz {
-  /* Ramp re-derived from signal yellow in the 28 October block below. */
-}
+/* The sequential ramp is defined in the palette block below, derived from
+   the violet and validated as an ordinal scale. */
+/* Which ink a heat cell carries, re-measured for the violet ramp. The
+   crossover moved from step 4 to step 3, and it now lands on the same step
+   in both themes - the light theme's separate s4/s5 exception is gone,
+   because with this ramp those steps are dark violet and need light ink,
+   the opposite of what that rule did. Worst case is 4.86:1 on dark and
+   5.29:1 on light, both at the crossover step itself, which is where it
+   always is. */
 .viz .cell-ink { fill: var(--ink); }
-.viz .cell-ink.s4, .viz .cell-ink.s5,
+.viz .cell-ink.s3, .viz .cell-ink.s4, .viz .cell-ink.s5,
 .viz .cell-ink.s6, .viz .cell-ink.s7 { fill: var(--surface); }
-:root[data-theme="light"] .viz .cell-ink.s4,
-:root[data-theme="light"] .viz .cell-ink.s5 { fill: var(--ink); }
 
 /* Pressure bars are a measure of attention, so they wear the attention
    colour rather than the grey they had been overridden to. */
@@ -2089,7 +2086,7 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
 .rd-map-wrap { border: 1px solid var(--rule); border-radius: var(--r-panel); background: var(--paper); }
 #rd-map { background: var(--paper); }
 #rd-map .leaflet-control-attribution { background: rgba(10,10,13,.82); color: var(--ink-3); }
-#rd-map .leaflet-control-attribution a { color: var(--mk-green); }
+#rd-map .leaflet-control-attribution a { color: var(--ours); }
 #rd-map .leaflet-bar a { background: var(--surface-2); color: var(--ink); border-bottom-color: var(--rule); }
 #rd-map .leaflet-bar a:hover { background: var(--surface); }
 .rd-legend { gap: var(--s-near) var(--s-step); margin: var(--s-wide) 0 var(--s-snug); }
@@ -2101,7 +2098,7 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
 .rc-row { gap: var(--s-wide); font-size: var(--step--1); }
 .rc-prov { color: var(--ink); }
 .rc-bar { background: var(--rule-hair); }
-.rc-bar i { background: var(--mk-green); }
+.rc-bar i { background: var(--st-good); }
 .rc-num, .rc-rate, .rc-state { color: var(--ink-2); }
 .rc-incomplete .rc-bar i, .rc-incomplete .rc-state { color: var(--ours); background: none; }
 .rc-incomplete .rc-bar i { background: var(--ours); }
@@ -2199,7 +2196,7 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
   padding: var(--s-snug) var(--s-wide); font-size: var(--step-0); color: var(--ink-2);
 }
 .bf-src b { color: var(--ink); font-variant-numeric: tabular-nums; }
-.bf-src.is-live { border-color: var(--mk-green); }
+.bf-src.is-live { border-color: var(--st-good); }
 .bf-src.is-dark { border-color: var(--rule); }
 
 @media (max-width: 680px) {
@@ -2221,8 +2218,8 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
 .bf-rung-what { font-size: var(--step-0); color: var(--ink-2); line-height: 1.45; }
 .bf-rung-state { font-size: var(--step--1); color: var(--ink-2); text-align: right; }
 
-.bf-live  { border-left-color: var(--mk-green); }
-.bf-live  .bf-rung-state { color: var(--mk-green); }
+.bf-live  { border-left-color: var(--st-good); }
+.bf-live  .bf-rung-state { color: var(--st-good); }
 .bf-built { border-left-color: var(--ours); }
 .bf-built .bf-rung-state { color: var(--ours); }
 .bf-ready { border-left-color: var(--ours); }
@@ -2239,22 +2236,42 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
 }
 
 /* ================================================================== *
- * Xnith brand, 28 October.
+ * Xnith palette — party neutral, 7 November.
  *
- * The palette is the brand sheet's, sampled from it rather than
- * approximated: near black #0B0B0F, graphite #1E1E24, warm white
- * #F4F4F5, signal yellow #FFD600, status green #00E676.
+ * WHAT THIS REPLACES AND WHY. The previous scheme was signal yellow
+ * #FFD600 with status green #00E676, sampled from the MK Party logo on
+ * 23 October and carried forward under the Xnith name. Gold-and-green is
+ * that party's identity, and an instrument that publishes tally
+ * commitments cannot wear one party's colours: the whole argument of the
+ * commitment chain is that the numbers can be checked by someone who does
+ * not trust the people presenting them, and a reader who recognises the
+ * livery discounts the evidence before reading it. The `--mk-*` tokens are
+ * deleted rather than re-pointed, so nothing can quietly resolve back.
  *
- * THIS REPLACES THE MK PARTY COLOURS applied on 23 October. They are
- * different identities for different things - MK is the party, Xnith
- * is the instrument - and the brand sheet governs the instrument. The
- * two are close enough in hue that nothing else needed moving.
+ * VIOLET IS THE IDENTITY because it is the one vivid hue no significant
+ * South African party claims — green reads ANC or MK, blue DA, red EFF,
+ * orange VF Plus, and gold is where this started. Neutrality here is a
+ * question of what the colour is NOT already taken to mean.
  *
- * The sequential ramp is re-derived from signal yellow and re-measured,
- * not re-eyeballed. The crossover lands on the same steps as before -
- * dark theme at 4, light at 6 - so the rules in the design-system block
- * above still hold and the JS is untouched. Worst case on either side
- * is 4.5:1.
+ * Status colours stay green/amber/red. That is UI semantics rather than
+ * livery: green means staffed, not a party. They are deliberately brighter
+ * and more saturated than any series colour so a status can never be read
+ * as a category.
+ *
+ * EVERY VALUE BELOW WAS MEASURED, NOT PICKED. Generated in OKLCH and run
+ * through the dataviz validator — lightness band, chroma floor, CVD
+ * separation under protan/deutan/tritan simulation, normal-vision floor
+ * and contrast against the real surface. The categorical sets clear every
+ * check on ALL pairs, not merely adjacent ones, because a hemicycle shows
+ * every party at once. Worst case: ΔE 9.3 CVD and 17.4 normal on dark,
+ * 9.6 and 15.8 on light, all six at or above 3:1 contrast.
+ *
+ * Six categorical slots, not eight. Eight vivid hues could not clear CVD
+ * separation at any lightness assignment — colour-blind simulation
+ * collapses the red-green axis and the extra hues land on top of each
+ * other. A seventh party folds into the overflow slot instead, which is
+ * honest; inventing two more hues that look distinct to us and merge for
+ * one reader in twelve is not.
  * ================================================================== */
 
 :root {
@@ -2262,20 +2279,55 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
   --surface-2: #1E1E24;
   --ink:       #F4F4F5;
 
-  --mk-gold:   #FFD600;   /* signal yellow */
-  --mk-green:  #00E676;   /* status green */
-  --ours:      #FFD600;
-  --flag:      #FFD600;
-  --st-good:   #00E676;
+  /* Identity. Light enough to carry dark text when it is a button fill
+     (7.2:1 against --paper) and to read as an icon or accent on either
+     dark surface. */
+  --ours:      #A78BFA;
+  --flag:      #A78BFA;
+
+  /* Status. Brighter than any series colour, on purpose. */
+  --st-good:    #22E39A;
+  --st-warn:    #FBBF24;
+  --st-bad:     #FB7185;
+  --st-info:    #38BDF8;
+  --st-unknown: #94A3B8;
 }
 
+:root[data-theme="light"] {
+  --ours:      #6D28D9;
+  --flag:      #6D28D9;
+
+  --st-good:    #047857;
+  --st-warn:    #B45309;
+  --st-bad:     #BE123C;
+  --st-info:    #1D4ED8;
+  --st-unknown: #475569;
+}
+
+/* Categorical series. Assigned in fixed order and never cycled: a party
+   keeps its colour when a filter changes the list, because colour follows
+   the entity and not its rank. Slot 1 is the violet so the leading series
+   reads as the house colour. */
+.viz, :root {
+  --cat-1: #771bf5; --cat-2: #1ea5b1; --cat-3: #ca1886;
+  --cat-4: #116bb5; --cat-5: #117738; --cat-6: #cc7d19;
+}
+:root[data-theme="light"] {
+  --cat-1: #9776fa; --cat-2: #1c9ba6; --cat-3: #b21476;
+  --cat-4: #1068b1; --cat-5: #0d672f; --cat-6: #c07517;
+}
+
+/* Sequential ramp, one hue, light to dark. Re-derived from the violet and
+   re-measured: monotone in lightness, every adjacent step at least 0.06
+   apart in OKLCH L, and the end nearest the surface clears 2:1 so the
+   lightest band is still visibly a band and not the background. */
 .viz {
-  --seq-1: #3d2f00; --seq-2: #5c4700; --seq-3: #806200;
-  --seq-4: #a88000; --seq-5: #cc9d00; --seq-6: #e6b800; --seq-7: #FFD600;
+  --seq-1: #6733c9; --seq-2: #7a4ae4; --seq-3: #8c6de8;
+  --seq-4: #9f8bec; --seq-5: #b4a7f1; --seq-6: #cac2f5; --seq-7: #e1ddfa;
 }
 :root[data-theme="light"] .viz {
-  --seq-1: #fff3cc; --seq-2: #ffe999; --seq-3: #ffdd5c;
-  --seq-4: #f5c500; --seq-5: #c29c00; --seq-6: #8f7300; --seq-7: #5c4a00;
+  --seq-1: #a491ed; --seq-2: #8e71e9; --seq-3: #7b4be4;
+  --seq-4: #6532c6; --seq-5: #4e259b; --seq-6: #381973; --seq-7: #230d4d;
 }
 
 /* The mark is an image rather than a letter in a tile, so the tile,
@@ -2312,7 +2364,7 @@ canvas.rd-overlay { position: absolute; pointer-events: none; z-index: 400; }
 
 /* The station map's dots are brand yellow and green like everything
    else; the readiness canvas reads these from the stylesheet. */
-.rc-bar i { background: var(--mk-green); }
+.rc-bar i { background: var(--st-good); }
 
 /* ---- Full lockup: mark plus wordmark ---------------------------- *
  * The logo is the lockup, not the mark alone. It is inlined as a
