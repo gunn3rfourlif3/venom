@@ -125,7 +125,7 @@
 
   <!-- Overview: the one screen that answers "how are we doing" without
        opening anything else. -->
-  <main id="view-overview">
+  <main class="pane pane-single" id="view-overview">
     <div class="page-head">
       <h1>Overview</h1>
       <p id="ov-sub">Reading the ledger…</p>
@@ -223,7 +223,7 @@
   </main>
 
   <!-- Control panel: the parameters the model runs on. -->
-  <main id="view-settings" hidden>
+  <main class="pane pane-single" id="view-settings" hidden>
     <div class="page-head">
       <h1>Control panel</h1>
       <p>Every number the model runs on. Changing these changes what the
@@ -347,7 +347,7 @@
 
       <!-- The hashtag watchlist. Instagram allows thirty unique tags per
            rolling seven days, so this is a budget, not a search box. -->
-      <section class="panel" id="ht-panel" class="mt-step">
+      <section class="panel" id="ht-panel">
         <div class="panel-head">
           <h2 class="viz-title m-0">Hashtag watchlist</h2>
           <span class="viz-sub m-0" id="ht-quota">&mdash;</span>
@@ -654,14 +654,14 @@
 
     <div class="statline" id="lg-statline" aria-label="Ingest status"></div>
 
-    <div class="tiles" id="lg-tiles" class="mt-far"></div>
+    <div class="tiles" id="lg-tiles"></div>
 
     <!-- Silence, counted rather than listed. Hidden once most stations are
          reporting, because then a silent one is a genuine exception and
          belongs in the table below with everything else. -->
-    <section class="panel" id="lg-silence" class="mt-far" hidden></section>
+    <section class="panel" id="lg-silence" hidden></section>
 
-    <section class="panel mt-far">
+    <section class="panel">
       <div class="panel-head">
         <h2 class="viz-title m-0">Stations needing attention</h2>
         <div class="seg" id="lg-filter" role="group" aria-label="Filter stations">
@@ -687,7 +687,7 @@
       </div>
     </section>
 
-    <section class="panel intake mt-far">
+    <section class="panel intake">
       <div class="panel-head">
         <h2 class="viz-title m-0">Report intake</h2>
         <span class="pill is-unknown" id="lg-intake-mode">fallback</span>
@@ -711,7 +711,7 @@
 
     <!-- Who may file a report. An allowlist, so this screen is what makes
          automated ingest usable at all: an empty roster refuses everybody. -->
-    <section class="panel" id="lg-roster-panel" class="mt-far">
+    <section class="panel" id="lg-roster-panel">
       <div class="panel-head">
         <h2 class="viz-title m-0">Who may report</h2>
         <span class="viz-sub m-0" id="lg-roster-count">&mdash;</span>
@@ -763,7 +763,7 @@
               <thead><tr><th>Party</th><th style="width:34%">Votes</th><th></th></tr></thead>
               <tbody id="sl-rows"></tbody>
             </table>
-            <button type="button" class="btn" id="sl-addrow" class="mt-near">Add a party line</button>
+            <button type="button" class="btn mt-near" id="sl-addrow">Add a party line</button>
 
             <div class="sl-totals">
               <label>Spoilt<input type="number" min="0" id="sl-spoilt" inputmode="numeric"></label>
@@ -775,14 +775,14 @@
             <div class="row row-controls">
               <button type="submit" class="btn btn-primary" id="sl-save">File this pass</button>
               <button type="button" class="btn" id="sl-skip">Skip</button>
-              <span class="viz-sub" id="sl-note" class="m-0"></span>
+              <span class="viz-sub m-0" id="sl-note"></span>
             </div>
           </form>
         </div>
       </div>
     </section>
 
-    <section class="panel" id="sl-disputes" class="mt-far">
+    <section class="panel" id="sl-disputes">
       <div class="panel-head">
         <h2 class="viz-title m-0">Needs a decision</h2>
         <span class="viz-sub m-0" id="sl-dispute-count">&mdash;</span>
@@ -792,7 +792,7 @@
       <div id="sl-dispute-list"></div>
     </section>
 
-    <section class="panel" id="sl-coverage" class="mt-far">
+    <section class="panel" id="sl-coverage">
       <div class="panel-head">
         <h2 class="viz-title m-0">Coverage</h2>
         <span class="viz-sub m-0" id="sl-cov-sub">&mdash;</span>

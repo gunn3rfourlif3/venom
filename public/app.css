@@ -2880,3 +2880,73 @@ body:has(.ticker:not([hidden])) .rail {
   background: var(--surface-2);
 }
 .cm-anchor.is-covered .cm-anchor-label { color: var(--ink-3); }
+
+/* ---------------------------------------------- page rhythm and inset
+ *
+ * Two faults this fixes, both of which made every page look slightly
+ * unkempt without any single element being obviously wrong.
+ *
+ * RHYTHM. Pane-level blocks sat flush against one another — measured gaps
+ * down the Logistics page were 0, 0, 0, 0, 16, 16, 0. The 16s came from
+ * `.mt-far` applied by hand to two sections; the others had the same class
+ * written as a SECOND `class` attribute on the element, which the HTML
+ * parser discards, so it never applied to any of them. Eight elements
+ * across the app were silently losing a class that way.
+ *
+ * The rhythm now belongs to the container rather than to seven hand-placed
+ * utilities, so a new section is spaced correctly by existing, and there is
+ * no second class attribute to get wrong. --s-sect is the scale's own name
+ * for the space between sections; this is what it was defined for.
+ *
+ * row-gap rather than `> * + *` margins: these panes are grids, and a gap
+ * cannot collapse, cannot be overridden by a stray utility, and cannot
+ * compound with one.
+ */
+.pane-single { row-gap: var(--s-sect); }
+
+/* INSET. --gut is the page gutter and `.page-head` and `.panel-body` both
+ * use it, but `.panel` hard-coded 20px and `.statline` cells 12px. The
+ * result was four different left edges on one page — content starting at
+ * 208, 209, 229 and 236 — so nothing lined up vertically and the page read
+ * as drifting slightly right as the eye went down.
+ *
+ * The -1px is the panel's own border: a card is flush to the pane edge, so
+ * its border occupies the first pixel of the gutter and its padding has to
+ * give that pixel back for the TEXT to land on the same line as the page
+ * title. Using the token rather than a literal keeps the alignment through
+ * the narrow-width breakpoint, where --gut drops to 16px.
+ */
+.panel { padding-inline: calc(var(--gut) - 1px); }
+
+/* The statline is a divided strip, so only its leading cell takes the
+   gutter; the inner cells keep their own padding or the dividers would
+   march out of step with the columns above them. */
+.statline > div:first-child { padding-left: calc(var(--gut) - 1px); }
+
+/* Overview had three more inset styles on top of the two above, which is
+ * why it alone showed four different left edges.
+ *
+ * `.clockbar` and `.readybar` float inset — `margin: 0 var(--gut)` plus
+ * 16px of their own padding — so their text sat 17px right of every panel
+ * on the page. They are cards like any other here, so they sit flush to the
+ * pane edge and take the gutter as padding, which puts their text on the
+ * same line as everything else.
+ *
+ * Their `margin-top` goes too. It predates the container owning the
+ * rhythm, and left in place it ADDED to the row-gap — the first two gaps on
+ * Overview measured 38px and 36px against 28px everywhere else, which is
+ * the kind of difference that reads as carelessness without being large
+ * enough to look deliberate.
+ */
+.pane-single > .clockbar,
+.pane-single > .readybar {
+  margin: 0;
+  padding-inline: calc(var(--gut) - 1px);
+}
+
+/* A `.grid` directly in a pane re-applied the gutter that its own cards
+   already carry, pushing their content to 264. Nested grids inside a panel
+   still need their padding, so this is scoped to pane children only. The
+   bottom padding goes for the same reason as the margins above: the gap
+   between blocks is the container's job now. */
+.pane-single > .grid { padding-inline: 0; padding-bottom: 0; }

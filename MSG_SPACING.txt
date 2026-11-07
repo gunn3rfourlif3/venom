@@ -1,0 +1,51 @@
+Fix page rhythm and content alignment on Logistics, Overview and Slips
+
+Three faults, all of which made pages look unkempt without any single
+element being obviously wrong.
+
+1. EIGHT ELEMENTS CARRIED TWO class ATTRIBUTES. The HTML parser keeps the
+   first and silently discards the second, so the utility class in the
+   second attribute never applied to any of them:
+
+     <div class="tiles" id="lg-tiles" class="mt-far">
+
+   Measured gaps down the Logistics page were 0, 0, 0, 0, 16, 16, 0 - the
+   16s being the only two sections that happened to write the class as
+   part of the first attribute. Confirmed in the DOM: classList on all
+   five of those elements lacked mt-far entirely.
+
+2. NO SPACING RHYTHM. Pane-level blocks sat flush against each other, with
+   spacing patched by hand per element. The rhythm now belongs to the
+   container - .pane-single gets row-gap: var(--s-sect), which is what the
+   scale defines that token for - so a new section is spaced correctly by
+   existing and there is no second class attribute to get wrong. All seven
+   hand-placed mt-far are gone.
+
+3. FOUR DIFFERENT LEFT EDGES ON ONE PAGE. --gut is the page gutter and
+   .page-head and .panel-body both use it, but .panel hard-coded 20px,
+   .statline cells 12px, .clockbar/.readybar floated inset with their own
+   margin plus 16px padding, and a .grid directly in a pane re-applied the
+   gutter its cards already carry. Content started at 208, 209, 229 and
+   236, so the page read as drifting right as the eye went down.
+
+   Everything now resolves from --gut, so it holds at the narrow
+   breakpoint where the gutter drops to 16px. Text on every pane-level
+   block lands on one edge; verified across all 14 views.
+
+Also: <main id="view-overview"> and <main id="view-settings"> carried NO
+class at all - not .pane, not .pane-single - so they laid out as plain
+blocks and missed every pane rule. That is why Overview alone showed a
+fourth set of offsets.
+
+Verified by measurement, not by eye: every pane-level text edge is now 236
+at 1440px (tiles excepted - they are centre-aligned cards), every gap is
+28px, no horizontal overflow at 430px, no console errors, and both themes
+checked.
+
+Left alone deliberately: .pulse-spark keeps margin-top: auto, which bottom-
+aligns the sparkline with the map. It leaves ~89px under the headline
+figures, but it is a deliberate alignment rather than a defect and
+changing it would trade one judgement for another.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BDAH2UQX8dEjrQGB7CcQZb
